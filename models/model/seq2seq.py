@@ -8,6 +8,7 @@ import numpy as np
 from torch import nn
 from tensorboardX import SummaryWriter
 from tqdm import trange
+from sys import platform
 
 class Module(nn.Module):
 
@@ -27,6 +28,9 @@ class Module(nn.Module):
 
         # emb modules
         self.emb_word = nn.Embedding(len(vocab['word']), args.demb)
+        # self.vocab['action_low'].index2word(list(range(0, 15)))
+        # self.vocab['action_high'].index2word(list(range(0, 93)))
+        # self.vocab['word'].index2word(list(range(0, 15)))
         self.emb_action_low = nn.Embedding(len(vocab['action_low']), args.demb)
 
         # end tokens
@@ -274,7 +278,10 @@ class Module(nn.Module):
         '''
         returns the folder path of a trajectory
         '''
-        return os.path.join(self.args.data, ex['split'], *(ex['root'].split('/')[-2:]))
+        if platform == "win32":
+            return os.path.join(self.args.data, ex['split'], ex['root'].split('\\')[-1])
+        else:
+            return os.path.join(self.args.data, ex['split'], *(ex['root'].split('/')[-2:]))
 
     def iterate(self, data, batch_size):
         '''

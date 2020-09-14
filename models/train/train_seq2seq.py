@@ -11,7 +11,7 @@ from data.preprocess import Dataset
 from importlib import import_module
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 from models.utils.helper_utils import optimizer_to
-
+# SET ALFRED_ROOT=D:\alfred
 
 if __name__ == '__main__':
     # parser
@@ -19,14 +19,14 @@ if __name__ == '__main__':
 
     # settings
     parser.add_argument('--seed', help='random seed', default=123, type=int)
-    parser.add_argument('--data', help='dataset folder', default='data/json_feat_2.1.0')
+    parser.add_argument('--data', help='dataset folder data/json_feat_2.1.0, data/full_2.1.0', default='data/json_feat_2.1.0')
     parser.add_argument('--splits', help='json file containing train/dev/test splits', default='splits/oct21.json')
     parser.add_argument('--preprocess', help='store preprocessed data to json files', action='store_true')
     parser.add_argument('--pp_folder', help='folder name for preprocessed data', default='pp')
     parser.add_argument('--save_every_epoch', help='save model after every epoch (warning: consumes a lot of space)', action='store_true')
-    parser.add_argument('--model', help='model to use', default='seq2seq_im')
+    parser.add_argument('--model', help='model to use seq2seq_im/gcn_im', default='seq2seq_im')
     parser.add_argument('--gpu', help='use gpu', action='store_true')
-    parser.add_argument('--dout', help='where to save model', default='exp/model:{model}')
+    parser.add_argument('--dout', help='where to save model', default='exp/model,{model}')
     parser.add_argument('--resume', help='load a checkpoint')
 
     # hyper parameters
@@ -37,6 +37,7 @@ if __name__ == '__main__':
     parser.add_argument('--dhid', help='hidden layer size', default=512, type=int)
     parser.add_argument('--dframe', help='image feature vec size', default=2500, type=int)
     parser.add_argument('--demb', help='language embedding size', default=100, type=int)
+    parser.add_argument('--dgcnout', help='gcn embedding size', default=512, type=int)
     parser.add_argument('--pframe', help='image pixel size (assuming square shape eg: 300x300)', default=300, type=int)
     parser.add_argument('--mask_loss_wt', help='weight of mask loss', default=1., type=float)
     parser.add_argument('--action_loss_wt', help='weight of action loss', default=1., type=float)

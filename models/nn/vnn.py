@@ -104,7 +104,7 @@ class ConvFrameMaskDecoder(nn.Module):
     action decoder
     '''
 
-    def __init__(self, emb, dframe, dhid, pframe=300,
+    def __init__(self, emb, dframe, dhid, dgcn, pframe=300,
                  attn_dropout=0., hstate_dropout=0., actor_dropout=0., input_dropout=0.,
                  teacher_forcing=False):
         super().__init__()
@@ -114,21 +114,21 @@ class ConvFrameMaskDecoder(nn.Module):
         self.pframe = pframe
         self.dhid = dhid
         self.vis_encoder = ResnetVisualEncoder(dframe=dframe)
-        self.cell = nn.LSTMCell(dhid+dframe+demb, dhid)
+        self.cell = nn.LSTMCell(dhid+dframe+demb+dgcn, dhid)
         self.attn = DotAttn()
         self.input_dropout = nn.Dropout(input_dropout)
         self.attn_dropout = nn.Dropout(attn_dropout)
         self.hstate_dropout = nn.Dropout(hstate_dropout)
         self.actor_dropout = nn.Dropout(actor_dropout)
         self.go = nn.Parameter(torch.Tensor(demb))
-        self.actor = nn.Linear(dhid+dhid+dframe+demb, demb)
-        self.mask_dec = MaskDecoder(dhid=dhid+dhid+dframe+demb, pframe=self.pframe)
+        self.actor = nn.Linear(dhid+dhid+dframe+demb+dgcn, demb)
+        self.mask_dec = MaskDecoder(dhid=dhid+dhid+dframe+demb+dgcn, pframe=self.pframe)
         self.teacher_forcing = teacher_forcing
         self.h_tm1_fc = nn.Linear(dhid, dhid)
 
         nn.init.uniform_(self.go, -0.1, 0.1)
 
-    def step(self, enc, frame, e_t, state_tm1):
+    def step(self, enc, frame, e_t, state_tm1, gcn_embedding):
         # previous decoder hidden state
         h_tm1 = state_tm1[0]
 
@@ -140,7 +140,7 @@ class ConvFrameMaskDecoder(nn.Module):
         weighted_lang_t, lang_attn_t = self.attn(self.attn_dropout(lang_feat_t), self.h_tm1_fc(h_tm1))
 
         # concat visual feats, weight lang, and previous action embedding
-        inp_t = torch.cat([vis_feat_t, weighted_lang_t, e_t], dim=1)
+        inp_t = torch.cat([vis_feat_t, weighted_lang_t, e_t, gcn_embedding], dim=1)
         inp_t = self.input_dropout(inp_t)
 
         # update hidden state
@@ -156,7 +156,7 @@ class ConvFrameMaskDecoder(nn.Module):
 
         return action_t, mask_t, state_t, lang_attn_t
 
-    def forward(self, enc, frames, gold=None, max_decode=150, state_0=None):
+    def forward(self, enc, frames, gcn_embedding, gold=None, max_decode=150, state_0=None):
         max_t = gold.size(1) if self.training else min(max_decode, frames.shape[1])
         batch = enc.size(0)
         e_t = self.go.repeat(batch, 1)
@@ -166,7 +166,7 @@ class ConvFrameMaskDecoder(nn.Module):
         masks = []
         attn_scores = []
         for t in range(max_t):
-            action_t, mask_t, state_t, attn_score_t = self.step(enc, frames[:, t], e_t, state_t)
+            action_t, mask_t, state_t, attn_score_t = self.step(enc, frames[:, t], e_t, state_t, gcn_embedding)
             masks.append(mask_t)
             actions.append(action_t)
             attn_scores.append(attn_score_t)
@@ -190,7 +190,7 @@ class ConvFrameMaskDecoderProgressMonitor(nn.Module):
     action decoder with subgoal and progress monitoring
     '''
 
-    def __init__(self, emb, dframe, dhid, pframe=300,
+    def __init__(self, emb, dframe, dhid, dgcn, pframe=300,
                  attn_dropout=0., hstate_dropout=0., actor_dropout=0., input_dropout=0.,
                  teacher_forcing=False):
         super().__init__()
@@ -200,24 +200,24 @@ class ConvFrameMaskDecoderProgressMonitor(nn.Module):
         self.pframe = pframe
         self.dhid = dhid
         self.vis_encoder = ResnetVisualEncoder(dframe=dframe)
-        self.cell = nn.LSTMCell(dhid+dframe+demb, dhid)
+        self.cell = nn.LSTMCell(dhid+dframe+demb+dgcn, dhid)
         self.attn = DotAttn()
         self.input_dropout = nn.Dropout(input_dropout)
         self.attn_dropout = nn.Dropout(attn_dropout)
         self.hstate_dropout = nn.Dropout(hstate_dropout)
         self.actor_dropout = nn.Dropout(actor_dropout)
         self.go = nn.Parameter(torch.Tensor(demb))
-        self.actor = nn.Linear(dhid+dhid+dframe+demb, demb)
-        self.mask_dec = MaskDecoder(dhid=dhid+dhid+dframe+demb, pframe=self.pframe)
+        self.actor = nn.Linear(dhid+dhid+dframe+demb+dgcn, demb)
+        self.mask_dec = MaskDecoder(dhid=dhid+dhid+dframe+demb+dgcn, pframe=self.pframe)
         self.teacher_forcing = teacher_forcing
         self.h_tm1_fc = nn.Linear(dhid, dhid)
 
-        self.subgoal = nn.Linear(dhid+dhid+dframe+demb, 1)
-        self.progress = nn.Linear(dhid+dhid+dframe+demb, 1)
+        self.subgoal = nn.Linear(dhid+dhid+dframe+demb+dgcn, 1)
+        self.progress = nn.Linear(dhid+dhid+dframe+demb+dgcn, 1)
 
         nn.init.uniform_(self.go, -0.1, 0.1)
 
-    def step(self, enc, frame, e_t, state_tm1):
+    def step(self, enc, frame, e_t, state_tm1, gcn_embedding):
         # previous decoder hidden state
         h_tm1 = state_tm1[0]
 
@@ -229,7 +229,7 @@ class ConvFrameMaskDecoderProgressMonitor(nn.Module):
         weighted_lang_t, lang_attn_t = self.attn(self.attn_dropout(lang_feat_t), self.h_tm1_fc(h_tm1))
 
         # concat visual feats, weight lang, and previous action embedding
-        inp_t = torch.cat([vis_feat_t, weighted_lang_t, e_t], dim=1)
+        inp_t = torch.cat([vis_feat_t, weighted_lang_t, e_t, gcn_embedding], dim=1)
         inp_t = self.input_dropout(inp_t)
 
         # update hidden state
@@ -241,6 +241,7 @@ class ConvFrameMaskDecoderProgressMonitor(nn.Module):
         cont_t = torch.cat([h_t, inp_t], dim=1)
         action_emb_t = self.actor(self.actor_dropout(cont_t))
         action_t = action_emb_t.mm(self.emb.weight.t())
+
         mask_t = self.mask_dec(cont_t)
 
         # predict subgoals completed and task progress
@@ -249,7 +250,7 @@ class ConvFrameMaskDecoderProgressMonitor(nn.Module):
 
         return action_t, mask_t, state_t, lang_attn_t, subgoal_t, progress_t
 
-    def forward(self, enc, frames, gold=None, max_decode=150, state_0=None):
+    def forward(self, enc, frames, gcn_embedding, gold=None, max_decode=150, state_0=None):
         max_t = gold.size(1) if self.training else min(max_decode, frames.shape[1])
         batch = enc.size(0)
         e_t = self.go.repeat(batch, 1)
@@ -261,7 +262,7 @@ class ConvFrameMaskDecoderProgressMonitor(nn.Module):
         subgoals = []
         progresses = []
         for t in range(max_t):
-            action_t, mask_t, state_t, attn_score_t, subgoal_t, progress_t = self.step(enc, frames[:, t], e_t, state_t)
+            action_t, mask_t, state_t, attn_score_t, subgoal_t, progress_t = self.step(enc, frames[:, t], e_t, state_t, gcn_embedding)
             masks.append(mask_t)
             actions.append(action_t)
             attn_scores.append(attn_score_t)
@@ -274,6 +275,7 @@ class ConvFrameMaskDecoderProgressMonitor(nn.Module):
             else:
                 w_t = action_t.max(1)[1]
             e_t = self.emb(w_t)
+        # import pdb; pdb.set_trace()
 
         results = {
             'out_action_low': torch.stack(actions, dim=1),
