@@ -7,7 +7,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
 from model.seq2seq import Module as Base
-from model.gcn import GCN
+from model.gcn import GCN, GCNVisual
 from models.utils.metric import compute_f1, compute_exact
 from gen.utils.image_util import decompress_mask
 
@@ -31,7 +31,7 @@ class Module(Base):
                                    0 or self.args.subgoal_aux_loss_wt > 0)
 
         # gcn
-        self.gcn = GCN(args.dgcnout)
+        self.gcn = GCNVisual(args.dgcnout) if args.gcn_cat_visaul else GCN(args.dgcnout)
         # if torch.cuda.device_count() > 1:
         #     print("Let's use", torch.cuda.device_count(), "GPUs!")
         #     self.gcn = torch.nn.DataParallel(self.gcn)

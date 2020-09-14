@@ -47,15 +47,36 @@ class GCN(nn.Module):
         self.all_glove = nn.Parameter(all_glove.unsqueeze(0))
         self.all_glove.requires_grad = False
 
-        # vis_encoder
-        dframe = 128
-        self.vis_encoder = vnn.ResnetVisualEncoder(dframe=dframe)
         # GCN layer
         self.gc1 = GraphConvolution(self.all_glove.shape[2], nhid)
-        self.gc2 = GraphConvolution(nhid+dframe, 1)
+        self.gc2 = GraphConvolution(nhid, 1)
         self.dropout = dropout
 
         self.final_mapping = nn.Linear(self.n, noutfeat)
+
+    def forward(self, frames):
+        batch_size = frames.shape[0] * frames.shape[1]
+        batch_ex_size = frames.shape[0]
+        word_embed = self.all_glove.detach()
+        x = F.relu(self.gc1(word_embed, self.A))
+        x = F.dropout(x, self.dropout, training=self.training)
+
+        # [1, 83, 1024] -> [122, 83, 1024]
+        x = x.repeat(batch_size, 1, 1)
+        x = F.relu(self.gc2(x, self.A))
+        x = x.view(batch_ex_size, -1, self.n)
+        x = self.final_mapping(x)
+        # import pdb; pdb.set_trace()
+        return x
+
+
+class GCNVisual(GCN):
+    def __init__(self, noutfeat, nhid=1024, dropout=0.5):
+        super(GCNVisual, self).__init__(noutfeat, nhid, dropout)
+        # vis_encoder
+        dframe = 128
+        self.vis_encoder = vnn.ResnetVisualEncoder(dframe=dframe)
+        self.gc2 = GraphConvolution(nhid+dframe, 1)
 
     def forward(self, frames):
         batch_size = frames.shape[0]
@@ -69,7 +90,7 @@ class GCN(nn.Module):
         # [122, 1, 128], [122, 83, 128]
         encode_frames = encode_frames.unsqueeze(1).repeat(1, x.shape[1], 1)
 
-        # [1, 83, 1024], [122, 83, 1024]
+        # [1, 83, 1024] -> [122, 83, 1024]
         x = x.repeat(encode_frames.shape[0], 1, 1)
         x = torch.cat((encode_frames, x), dim=-1)
         # gc2

@@ -13,9 +13,6 @@ from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 from models.utils.helper_utils import optimizer_to
 # SET ALFRED_ROOT=D:\alfred
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-if torch.cuda.is_available():
-    torch.cuda.set_device(device)
 if __name__ == '__main__':
     # parser
     parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
@@ -29,6 +26,7 @@ if __name__ == '__main__':
     parser.add_argument('--save_every_epoch', help='save model after every epoch (warning: consumes a lot of space)', action='store_true')
     parser.add_argument('--model', help='model to use seq2seq_im/gcn_im', default='seq2seq_im')
     parser.add_argument('--gpu', help='use gpu', action='store_true')
+    parser.add_argument('--gpu_id', help='use gpu 0/1', default=0, type=int)
     parser.add_argument('--dout', help='where to save model', default='exp/model,{model}')
     parser.add_argument('--resume', help='load a checkpoint')
 
@@ -41,6 +39,7 @@ if __name__ == '__main__':
     parser.add_argument('--dframe', help='image feature vec size', default=2500, type=int)
     parser.add_argument('--demb', help='language embedding size', default=100, type=int)
     parser.add_argument('--dgcnout', help='gcn embedding size', default=512, type=int)
+    parser.add_argument('--gcn_cat_visaul', help='use visual embedding to gcn', action='store_true')
     parser.add_argument('--pframe', help='image pixel size (assuming square shape eg: 300x300)', default=300, type=int)
     parser.add_argument('--mask_loss_wt', help='weight of mask loss', default=1., type=float)
     parser.add_argument('--action_loss_wt', help='weight of action loss', default=1., type=float)
@@ -68,7 +67,12 @@ if __name__ == '__main__':
     # args and init
     args = parser.parse_args()
     args.dout = args.dout.format(**vars(args))
+
     torch.manual_seed(args.seed)
+
+    device = torch.device("cuda:%d" % args.gpu_id if torch.cuda.is_available() else "cpu")
+    if torch.cuda.is_available():
+        torch.cuda.set_device(device)
 
     # check if dataset has been preprocessed
     if not os.path.exists(os.path.join(args.data, "%s.vocab" % args.pp_folder)) and not args.preprocess:
