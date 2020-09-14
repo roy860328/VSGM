@@ -13,6 +13,9 @@ from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 from models.utils.helper_utils import optimizer_to
 # SET ALFRED_ROOT=D:\alfred
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+if torch.cuda.is_available():
+    torch.cuda.set_device(device)
 if __name__ == '__main__':
     # parser
     parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)

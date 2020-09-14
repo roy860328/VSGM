@@ -207,7 +207,7 @@ class Module(Base):
         cont_lang, enc_lang = self.encode_lang(feat)
         state_0 = cont_lang, torch.zeros_like(cont_lang)
         frames = self.vis_dropout(feat['frames'])
-        gcn_embedding = self.gcn(enc_lang.shape[0])
+        gcn_embedding = self.gcn(frames)
         res = self.dec(enc_lang, frames, gcn_embedding, max_decode=max_decode,
                        gold=feat['action_low'], state_0=state_0)
         feat.update(res)

@@ -262,7 +262,7 @@ class ConvFrameMaskDecoderProgressMonitor(nn.Module):
         subgoals = []
         progresses = []
         for t in range(max_t):
-            action_t, mask_t, state_t, attn_score_t, subgoal_t, progress_t = self.step(enc, frames[:, t], e_t, state_t, gcn_embedding)
+            action_t, mask_t, state_t, attn_score_t, subgoal_t, progress_t = self.step(enc, frames[:, t], e_t, state_t, gcn_embedding[:, t])
             masks.append(mask_t)
             actions.append(action_t)
             attn_scores.append(attn_score_t)
