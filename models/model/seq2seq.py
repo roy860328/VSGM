@@ -28,9 +28,9 @@ class Module(nn.Module):
 
         # emb modules
         self.emb_word = nn.Embedding(len(vocab['word']), args.demb)
-        # self.vocab['action_low'].index2word(list(range(0, 15)))
-        # self.vocab['action_high'].index2word(list(range(0, 93)))
-        # self.vocab['word'].index2word(list(range(0, 15)))
+        # self.vocab['action_low'].index2word(list(range(0, len(vocab['action_low']))))
+        # self.vocab['action_high'].index2word(list(range(0, len(vocab['action_high']))))
+        # self.vocab['word'].index2word(list(range(0, len(vocab['word']))))
         self.emb_action_low = nn.Embedding(len(vocab['action_low']), args.demb)
 
         # end tokens
@@ -318,11 +318,11 @@ class Module(nn.Module):
             param_group['lr'] = lr
 
     @classmethod
-    def load(cls, fsave):
+    def load(cls, fsave, device=None):
         '''
         load pth model from disk
         '''
-        save = torch.load(fsave)
+        save = torch.load(fsave, map_location=device)
         model = cls(save['args'], save['vocab'])
         model.load_state_dict(save['model'])
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)

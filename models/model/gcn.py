@@ -44,6 +44,7 @@ class GCN(nn.Module):
         all_glove = torch.zeros(n, 300)
         for i in range(n):
             all_glove[i, :] = torch.Tensor(glove.glove_embeddings[objects[i]][:])
+        x = glove.glove_embeddings.keys()
         self.all_glove = nn.Parameter(all_glove.unsqueeze(0))
         self.all_glove.requires_grad = False
 

@@ -8,6 +8,7 @@ from models.nn.resnet import Resnet
 from data.preprocess import Dataset
 from importlib import import_module
 
+
 class Eval(object):
 
     # tokens
@@ -28,8 +29,13 @@ class Eval(object):
         # load model
         print("Loading: ", self.args.model_path)
         M = import_module(self.args.model)
-        self.model, optimizer = M.Module.load(self.args.model_path)
-        self.model.share_memory()
+        device = torch.device("cuda:{}".format(self.args.gpu_id) if torch.cuda.is_available() and self.args.gpu else "cpu")
+        if torch.cuda.is_available():
+            torch.cuda.set_device(device)
+        share_memory = False
+        self.model, optimizer = M.Module.load(self.args.model_path, device)
+        if share_memory:
+            self.model.share_memory()
         self.model.eval()
         self.model.test_mode = True
 
@@ -46,7 +52,7 @@ class Eval(object):
 
         # load resnet
         args.visual_model = 'resnet18'
-        self.resnet = Resnet(args, eval=True, share_memory=True, use_conv_feat=True)
+        self.resnet = Resnet(args, eval=True, share_memory=share_memory, use_conv_feat=True)
 
         # gpu
         if self.args.gpu:
@@ -84,14 +90,16 @@ class Eval(object):
         # start threads
         threads = []
         lock = self.manager.Lock()
-        for n in range(self.args.num_threads):
-            thread = mp.Process(target=self.run, args=(self.model, self.resnet, task_queue, self.args, lock,
-                                                       self.successes, self.failures, self.results))
-            thread.start()
-            threads.append(thread)
+        self.run(self.model, self.resnet, task_queue, self.args, lock, self.successes, self.failures, self.results)
 
-        for t in threads:
-            t.join()
+        # for n in range(self.args.num_threads):
+        #     thread = mp.Process(target=self.run, args=(self.model, self.resnet, task_queue, self.args, lock,
+        #                                                self.successes, self.failures, self.results))
+        #     thread.start()
+        #     threads.append(thread)
+
+        # for t in threads:
+        #     t.join()
 
         # save
         self.save_results()

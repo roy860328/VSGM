@@ -28,6 +28,7 @@ if __name__ == '__main__':
     parser.add_argument('--preprocess', dest='preprocess', action='store_true')
     parser.add_argument('--shuffle', dest='shuffle', action='store_true')
     parser.add_argument('--gpu', dest='gpu', action='store_true')
+    parser.add_argument('--gpu_id', help='use gpu 0/1', default=1, type=int)
     parser.add_argument('--num_threads', type=int, default=1)
 
     # eval params
