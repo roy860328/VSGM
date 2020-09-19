@@ -140,7 +140,10 @@ class ConvFrameMaskDecoder(nn.Module):
         weighted_lang_t, lang_attn_t = self.attn(self.attn_dropout(lang_feat_t), self.h_tm1_fc(h_tm1))
 
         # concat visual feats, weight lang, and previous action embedding
-        inp_t = torch.cat([vis_feat_t, weighted_lang_t, e_t, gcn_embedding], dim=1)
+        if gcn_embedding is not None:
+            inp_t = torch.cat([vis_feat_t, weighted_lang_t, e_t, gcn_embedding], dim=1)
+        else:
+            inp_t = torch.cat([vis_feat_t, weighted_lang_t, e_t], dim=1)
         inp_t = self.input_dropout(inp_t)
 
         # update hidden state
@@ -229,7 +232,10 @@ class ConvFrameMaskDecoderProgressMonitor(nn.Module):
         weighted_lang_t, lang_attn_t = self.attn(self.attn_dropout(lang_feat_t), self.h_tm1_fc(h_tm1))
 
         # concat visual feats, weight lang, and previous action embedding
-        inp_t = torch.cat([vis_feat_t, weighted_lang_t, e_t, gcn_embedding], dim=1)
+        if gcn_embedding is not None:
+            inp_t = torch.cat([vis_feat_t, weighted_lang_t, e_t, gcn_embedding], dim=1)
+        else:
+            inp_t = torch.cat([vis_feat_t, weighted_lang_t, e_t], dim=1)
         inp_t = self.input_dropout(inp_t)
 
         # update hidden state

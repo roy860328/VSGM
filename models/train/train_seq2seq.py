@@ -7,6 +7,7 @@ import os
 import torch
 import pprint
 import json
+import time
 from data.preprocess import Dataset
 from importlib import import_module
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
@@ -63,10 +64,10 @@ if __name__ == '__main__':
     # debugging
     parser.add_argument('--fast_epoch', help='fast epoch during debugging', action='store_true')
     parser.add_argument('--dataset_fraction', help='use fraction of the dataset for debugging (0 indicates full size)', default=0, type=int)
-    
+
     # args and init
     args = parser.parse_args()
-    args.dout = args.dout.format(**vars(args))
+    args.dout = args.dout.format(**vars(args)) + "_" + time.strftime("%d-%m-%Y_%H-%M-%S")
 
     torch.manual_seed(args.seed)
 

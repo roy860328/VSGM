@@ -82,6 +82,7 @@ def startx(display):
         fd, path = tempfile.mkstemp()
         with open(path, "w") as f:
             f.write(generate_xorg_conf(devices))
+        import pdb; pdb.set_trace()
         command = shlex.split("Xorg -noreset +extension GLX +extension RANDR +extension RENDER -config %s :%s" % (path, display))
         subprocess.call(command)
     finally:
@@ -94,4 +95,5 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         display = int(sys.argv[1])
     print("Starting X on DISPLAY=:%s" % display)
+    import pdb; pdb.set_trace()
     startx(display)

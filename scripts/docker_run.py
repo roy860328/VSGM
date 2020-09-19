@@ -9,10 +9,9 @@ import argparse
 import os
 import socket
 import getpass
-import yaml
 
 if __name__=="__main__":
-    user_name = getpass.getuser()
+    user_name = "roy1"
     default_image_name = user_name + '-alfred'
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--image", type=str,
@@ -53,7 +52,7 @@ if __name__=="__main__":
     cmd += " -v %s:/data " %(os.path.join(source_dir, args.data))
 
     # expose UDP ports
-    cmd += " -p 8888:8888 "
+    cmd += " -p 39906:22 "
     cmd += " --ipc=host "
 
     # share host machine network

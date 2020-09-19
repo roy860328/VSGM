@@ -13,7 +13,7 @@ import getpass
 if __name__=="__main__":
 
     print("building docker container . . . ")
-    user_name = getpass.getuser()
+    user_name = "roy1"
     default_image_name = user_name + "-alfred"
 
 
