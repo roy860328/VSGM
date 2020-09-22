@@ -2,8 +2,9 @@
 
 ## ALFRED_ROOT
 ```
-export ALFRED_ROOT=/home/host/alfred/
-SET ALFRED_ROOT=D:\alfred
+cd gcn/alfred
+export ALFRED_ROOT=/home/host/gcn/alfred/
+SET ALFRED_ROOT=D:\gcn\alfred
 ```
 
 ## Prerequire
@@ -13,15 +14,20 @@ conda install -c menpo opencv
 
 ## Seq2Seq
 ```
+cd alfred
 python models/train/train_seq2seq.py --data data/full_2.1.0/ --model seq2seq_im_mask --dout exp/model,{model},name,pm_and_subgoals_01 --splits data/splits/oct21.json --gpu --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1
 ```
 
 ## GCN
 ```
+cd alfred
 python models/train/train_seq2seq.py --data data/full_2.1.0/ --model gcn_im --dout exp/model,{model},name,pm_and_subgoals_01,gcn_vial_{gcn_cat_visaul} --splits data/splits/oct21.json --gpu --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 
 ```
+--data/json_feat_2.1.0/
+
 gcn visaul embedding
 ```
+cd alfred
 python models/train/train_seq2seq.py --data data/full_2.1.0/ --model gcn_im --dout exp/model,{model},name,pm_and_subgoals_01,gcn_vial_{gcn_cat_visaul} --splits data/splits/oct21.json --gpu --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --gcn_cat_visaul --gpu_id 1
 ```
 
@@ -31,8 +37,26 @@ python models/train/train_seq2seq.py --data data/full_2.1.0/ --model gcn_im --do
 ### Download model
 https://fasttext.cc/docs/en/english-vectors.html
 
+### Create Alfred Objects Embedding (GCN Node feature)
+You can get "./data/fastText_300d_108.json" & "./data/fastText_300d_108.h5"
+```
+cd graph_analysis
+# download fastText English model & unzip data move to ./data/
+./download_model.py en
+# use fastText English model get word embedding
+python alfred_dataset_vocab_analysis.py
+```
+
+## Visaul Genome dataset(GCN Edge Adjacency matrix)
+https://visualgenome.org/
+You have to download "scene graphs" data first from https://visualgenome.org/api/v0/api_home.html
+You can get "relationship_matrics.csv" (Alfred objects relationship).
+```
+cd graph_analysis/genome
+python visual_genome_scene_graphs_analysis.py 
+```
 ## Eval
-### Run THOR method 1
+### Build AI2-THOR method
 1. install https://github.com/allenai/ai2thor-docker
 2. sudo Xorg -noreset -sharevts -novtswitch -isolateDevice "PCI:1:0:0" :0 vt1 & sleep 1 sudo Xorg -noreset -sharevts -novtswitch -isolateDevice "PCI:2:0:0" :1 vt1 &
 
@@ -41,31 +65,17 @@ XSERVTransSocketUNIXCreateListener: ...SocketCreateListener() failed
 XSERVTransMakeAllCOTSServerListeners: server already running
 (have running in docker)
 
-### Run THOR method 2
-https://github.com/askforalfred/alfred/tree/master/scripts
-1. 
+### eval for train/valid_seen/valid_unseen
 ```
-docker_build: user_name= "new_user_name"
-sudo python3 scripts/docker_build.py -uid 1004 -gid 1004
-```
-
-2. 
-```
-docker_run: user_name= "new_user_name"
-sudo python3 scripts/docker_run.py
-```
-
-#### result
-Logging to /home/roy1/.config/unity3d/Allen Institute for Artificial Intelligence/AI2-Thor/Player.log
-No protocol specified
-
-### eval
-```
+cd alfred
 python models/eval/eval_seq2seq.py --model_path exp/json_feat_2/best_seen.pth --model models.model.seq2seq_im_mask --data data/json_feat_2.1.0 --gpu
 ```
+--eval_split ['train', 'valid_seen', 'valid_unseen', ]
+--subgoals ['all', 'GotoLocation', 'PickupObject', ...]
 
 ### Leaderboard
 ```
+cd alfred
 python models/eval/leaderboard.py --model_path <model_path>/model.pth --model models.model.seq2seq_im_mask --data data/json_feat_2.1.0 --gpu --num_threads 5
 ```
 
