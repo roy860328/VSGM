@@ -36,8 +36,16 @@ class GenomeProcess(object):
     """docstring for GenomeProcess"""
 
     def __init__(self):
+        """
+        relationship_matrics : For GCN Adjacency matrix
+        """
         super(GenomeProcess, self).__init__()
+        self.alfred_objects = load_alfred_object()
+        self.alfred_objects_index = {name: index for index, name in enumerate(self.alfred_objects)}
+        self.relationship_matrics = numpy.zeros(
+            (len(self.alfred_objects), len(self.alfred_objects)), dtype=int)
 
+    # For test to watch scene graph objects
     def get_scene_graph_existance_objects(self):
         def _get_all_objects(self, data):
             objects = set()
@@ -58,13 +66,6 @@ class GenomeProcess(object):
         _get_all_objects(data)
 
     def count_alfred_object_relationships_by_VG_scene_graphs(self):
-        """
-        relationship_matrics : For GCN Adjacency matrix
-        """
-        alfred_objects = load_alfred_object()
-        alfred_objects_index = {name: index for index, name in enumerate(alfred_objects)}
-        scene_graphs_data = read_json(SceneGraphsJsonFile)
-        relationship_matrics = numpy.zeros((len(alfred_objects), len(alfred_objects)), dtype=int)
         def count_objects(relationship_matrics, alfred_objects, alfred_objects_index, scene_graphs_data):
             """
             intersection_objects : Objects appear at the same image
@@ -73,7 +74,7 @@ class GenomeProcess(object):
                 graph_objects = scene_graphs_data[i]["objects"]
                 intersection_objects = find_graph_objects_in_alfred_objects(
                     graph_objects, alfred_objects)
-                # if scene_graphs_data 
+                # if scene_graphs_data
                 for i_object in intersection_objects:
                     for j_object in intersection_objects:
                         relationship_matrics[alfred_objects_index[i_object],
@@ -87,20 +88,30 @@ class GenomeProcess(object):
                     objects.update(graph_object["names"])
             intersection = list(objects.intersection(alfred_objects))
             return intersection
-        relationship_matrics = count_objects(
-            relationship_matrics, alfred_objects, alfred_objects_index, scene_graphs_data)
-        relationship_matrics = numpy.asarray(relationship_matrics, dtype=int)
+        self.scene_graphs_data = read_json(SceneGraphsJsonFile)
+        self.relationship_matrics = count_objects(
+            self.relationship_matrics, self.alfred_objects, self.alfred_objects_index, self.scene_graphs_data)
+        self.relationship_matrics = numpy.asarray(self.relationship_matrics, dtype=int)
         print("\n=== The word doesn't exist at Visual Genome=== ")
-        for i in range(relationship_matrics.shape[0]):
-            if relationship_matrics[i, i] == 0:
-                print(alfred_objects[i])
-        with open("relationship_matrics_double_check.csv", "w") as csv:
-            numpy.savetxt(csv, relationship_matrics, fmt='%i', delimiter=",")
+        for i in range(self.relationship_matrics.shape[0]):
+            if self.relationship_matrics[i, i] == 0:
+                print(self.alfred_objects[i])
         with open("relationship_matrics.csv", "w") as csv:
-            csv.write("," + ",".join(alfred_objects) + "\n")
-            for ind, row in enumerate(relationship_matrics):
-                csv.write(alfred_objects[ind] + ", ")
+            numpy.savetxt(csv, self.relationship_matrics, fmt='%i', delimiter=",")
+        with open("relationship_matrics_with_word.csv", "w") as csv:
+            csv.write("," + ",".join(self.alfred_objects) + "\n")
+            for ind, row in enumerate(self.relationship_matrics):
+                csv.write(self.alfred_objects[ind] + ", ")
                 csv.write(','.join(str(n) for n in row) + "\n")
+
+    def get_adjacency_matrix(self):
+        relationship_matrics = numpy.genfromtxt('relationship_matrics.csv', delimiter=',')
+        relationship_matrics = numpy.asarray(relationship_matrics, dtype=int)
+        for i in range(relationship_matrics.shape[0]):
+            for j in range(relationship_matrics.shape[1]):
+                relationship_matrics[i, j] = 1 if relationship_matrics[i, j] > 0 else 0
+        with open("A.csv", "w") as csv:
+            numpy.savetxt(csv, relationship_matrics, fmt='%i', delimiter=",")
 
 
 def read_json(path):
@@ -109,7 +120,8 @@ def read_json(path):
         data = json.load(json_file)
         return data
 
-
+# for match visual genome format
+# otherwise it would be "The word doesn't exist at Visual Genome"
 def load_alfred_object(file=AlfredObjectsFile):
     import re
     objects = open(file).readlines()
@@ -126,6 +138,7 @@ if __name__ == '__main__':
     start = time.time()
     gp = GenomeProcess()
     gp.count_alfred_object_relationships_by_VG_scene_graphs()
+    gp.get_adjacency_matrix()
 
     end = time.time()
     print(end - start)

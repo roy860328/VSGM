@@ -1,4 +1,13 @@
-# Command
+# Prerequire
+```
+conda install -c menpo opencv
+# https://github.com/dmlc/dgl/tree/master
+conda install -c dglteam dgl-cuda9.0
+pip install rdflib==4.2.2
+pip install fasttext
+```
+
+# Run Model
 
 ## ALFRED_ROOT
 ```
@@ -7,10 +16,6 @@ export ALFRED_ROOT=/home/host/gcn/alfred/
 SET ALFRED_ROOT=D:\gcn\alfred
 ```
 
-## Prerequire
-```
-conda install -c menpo opencv
-```
 
 ## Seq2Seq
 ```
@@ -21,7 +26,8 @@ python models/train/train_seq2seq.py --data data/full_2.1.0/ --model seq2seq_im_
 ## GCN
 ```
 cd alfred
-python models/train/train_seq2seq.py --data data/full_2.1.0/ --model gcn_im --dout exp/model,{model},name,pm_and_subgoals_01,gcn_vial_{gcn_cat_visaul} --splits data/splits/oct21.json --gpu --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 
+python models/train/train_seq2seq.py --data data/full_2.1.0/ --model gcn_im --dout exp/model,{model},name,pm_and_subgoals_01,gcn_vial_{gcn_cat_visaul} --splits data/splits/oct21.json --gpu --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1
+python models/train/train_seq2seq.py --data data/json_feat_2.1.0/ --model gcn_im --dout exp/model,{model},name,pm_and_subgoals_01,gcn_vial_{gcn_cat_visaul} --splits data/splits/oct21.json --gpu --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 
 ```
 --data/json_feat_2.1.0/
 
@@ -30,6 +36,36 @@ gcn visaul embedding
 cd alfred
 python models/train/train_seq2seq.py --data data/full_2.1.0/ --model gcn_im --dout exp/model,{model},name,pm_and_subgoals_01,gcn_vial_{gcn_cat_visaul} --splits data/splits/oct21.json --gpu --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --gcn_cat_visaul --gpu_id 1
 ```
+
+## Eval
+### Build AI2-THOR method
+1. install https://github.com/allenai/ai2thor-docker
+2. sudo Xorg -noreset -sharevts -novtswitch -isolateDevice "PCI:1:0:0" :0 vt1 & sleep 1 sudo Xorg -noreset -sharevts -novtswitch -isolateDevice "PCI:2:0:0" :1 vt1 &
+
+#### result
+XSERVTransSocketUNIXCreateListener: ...SocketCreateListener() failed
+XSERVTransMakeAllCOTSServerListeners: server already running
+(have running in docker)
+
+### eval for train/valid_seen/valid_unseen
+```
+cd alfred
+python models/eval/eval_seq2seq.py --model_path exp/json_feat_2/best_seen.pth --model models.model.seq2seq_im_mask --data data/json_feat_2.1.0 --gpu --gpu_id 0
+python models/eval/eval_seq2seq.py --model_path exp/model,gcn_im,name,pm_and_subgoals_01,gcn_vial_False_19-09-2020_03-57-55/best_seen.pth --model models.model.gcn_im --data data/json_feat_2.1.0/ --gpu --gpu_id 0 --subgoals all
+```
+--eval_split ['train', 'valid_seen', 'valid_unseen', ]
+--subgoals ['all', 'GotoLocation', 'PickupObject', ...]
+
+### Leaderboard
+```
+cd alfred
+python models/eval/leaderboard.py --model_path <model_path>/model.pth --model models.model.seq2seq_im_mask --data data/json_feat_2.1.0 --gpu --num_threads 5
+```
+
+---
+---
+
+# Build Heterogeneous Graph
 
 ## fastText Word Embedding
 - https://github.com/facebookresearch/fastText
@@ -50,34 +86,21 @@ python alfred_dataset_vocab_analysis.py
 ## Visaul Genome dataset(GCN Edge Adjacency matrix)
 https://visualgenome.org/
 You have to download "scene graphs" data first from https://visualgenome.org/api/v0/api_home.html
-You can get "relationship_matrics.csv" (Alfred objects relationship).
+You can get "relationship_matrics.csv" (Alfred objects relationship) & "A.csv" (Adjacency matrix)
 ```
-cd graph_analysis/genome
+cd graph_analysis/visual_genome
 python visual_genome_scene_graphs_analysis.py 
 ```
-## Eval
-### Build AI2-THOR method
-1. install https://github.com/allenai/ai2thor-docker
-2. sudo Xorg -noreset -sharevts -novtswitch -isolateDevice "PCI:1:0:0" :0 vt1 & sleep 1 sudo Xorg -noreset -sharevts -novtswitch -isolateDevice "PCI:2:0:0" :1 vt1 &
 
-#### result
-XSERVTransSocketUNIXCreateListener: ...SocketCreateListener() failed
-XSERVTransMakeAllCOTSServerListeners: server already running
-(have running in docker)
+## Create node & edge
+You can get node & edge data at "./data_dgl"
+```
+cd graph_analysis
+python create_dgl_data.py
+```
 
-### eval for train/valid_seen/valid_unseen
-```
-cd alfred
-python models/eval/eval_seq2seq.py --model_path exp/json_feat_2/best_seen.pth --model models.model.seq2seq_im_mask --data data/json_feat_2.1.0 --gpu
-```
---eval_split ['train', 'valid_seen', 'valid_unseen', ]
---subgoals ['all', 'GotoLocation', 'PickupObject', ...]
-
-### Leaderboard
-```
-cd alfred
-python models/eval/leaderboard.py --model_path <model_path>/model.pth --model models.model.seq2seq_im_mask --data data/json_feat_2.1.0 --gpu --num_threads 5
-```
+---
+---
 
 # ALFRED
 

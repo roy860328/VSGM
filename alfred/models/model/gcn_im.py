@@ -256,6 +256,7 @@ class Module(Base):
         e_t = self.embed_action(prev_action) if prev_action is not None else self.r_state['e_t']
 
         gcn_embedding = self.gcn(feat['frames'])
+        gcn_embedding = gcn_embedding.squeeze(0)
         # decode and save embedding and hidden states
         out_action_low, out_action_low_mask, state_t, * \
             _ = self.dec.step(self.r_state['enc_lang'], feat['frames']

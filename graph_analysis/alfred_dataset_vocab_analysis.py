@@ -5,10 +5,9 @@ import numpy as np
 import h5py
 import json
 import re
-from fastText_embedding import load_model
+from fastText_embedding import load_model, get_faxtText_embedding
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 path = os.path.dirname(os.path.abspath(__file__))
-ft_model = load_model("./data/cc.en.300.bin", is_debug=False)
 
 
 def get_alfred_dataset_used_vocab():
@@ -29,16 +28,10 @@ def load_object(File):
     return objects
 
 
-def _get_faxtText_embedding(text):
-    text = text.lower()
-    print(text)
-    return ft_model.get_word_vector(text)
-
-
-def create_graph_word_embedding(objects):
+def create_graph_word_embedding(ft_model, objects):
     word_embedding = {}
     for o in objects:
-        vector = _get_faxtText_embedding(o)
+        vector = get_faxtText_embedding(ft_model, o)
         word_embedding[o] = vector.tolist()
     # import pdb; pdb.set_trace()
     file_path = 'data/fastText_300d_{}'.format(len(list(word_embedding.values())))
@@ -49,7 +42,7 @@ def create_graph_word_embedding(objects):
 
 # save h5  & cantf json
 def _save_h5py_file(data, path):
-    with h5py.File(path + ".h5", 'w') as hf:
+    with h5py.File(path + ".hdf5", 'w') as hf:
         for k, v in data.items():
             hf.create_dataset(k, data=v)
 
@@ -63,4 +56,5 @@ if __name__ == '__main__':
     objects = load_object("./data/objects.txt")
     print(objects)
     # action_low_word, action_high_word, word_word = get_alfred_dataset_used_vocab()
-    create_graph_word_embedding(objects)
+    ft_model = load_model("./data/cc.en.300.bin", is_debug=False)
+    create_graph_word_embedding(ft_model, objects)

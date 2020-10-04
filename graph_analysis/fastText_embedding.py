@@ -1,6 +1,5 @@
 # https://pypi.org/project/fasttext/
 # https://github.com/facebookresearch/fastText
-from glove_embedding import load_object
 import io
 import fasttext
 import fasttext.util
@@ -43,6 +42,11 @@ def load_model(fname="./data/cc.en.300.bin", is_debug=False):
         import pdb; pdb.set_trace()
     print("=== Load fastText model ===")
     return model
+
+def get_faxtText_embedding(ft_model, text):
+    text = text.lower()
+    print(text)
+    return ft_model.get_word_vector(text)
 
 is_debug=False
 if __name__ == '__main__':

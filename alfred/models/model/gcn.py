@@ -9,19 +9,9 @@ import scipy.sparse as sp
 import numpy as np
 import h5py
 
-# array([[1.        , 0.        , 0.        , ..., 0.        , 0.        ,
-#         0.        ],
-#        [0.        , 0.1       , 0.31622776, ..., 0.        , 0.        ,
-#         0.        ],
-#        [0.        , 0.31622776, 0.        , ..., 0.        , 0.        ,
-#         0.        ],
-#        ...,
-#        [0.        , 0.        , 0.        , ..., 1.        , 0.        ,
-#         0.        ],
-#        [0.        , 0.        , 0.        , ..., 0.        , 0.        ,
-#         0.        ],
-#        [0.        , 0.        , 0.        , ..., 0.        , 0.        ,
-#         0.16666667]], dtype=float32)
+
+# SEMI-SUPERVISED CLASSIFICATION WITH GRAPH CONVOLUTIONAL NETWORKS
+# A^ = D^{-1/2} * A * D^{-1/2}
 def normalize_adj(adj):
     adj = sp.coo_matrix(adj)
     rowsum = np.array(adj.sum(1))
@@ -31,26 +21,18 @@ def normalize_adj(adj):
     return adj.dot(d_mat_inv_sqrt).transpose().dot(d_mat_inv_sqrt).tocoo()
 
 
-class Glove:
-    def __init__(self, glove_file):
-        self.glove_embeddings = h5py.File(glove_file, "r")
+class WordEmbeddingLoad:
+    def __init__(self, h5py_file):
+        self.word_embeddings = h5py.File(h5py_file, "r")
 
 
-# tensor([[1., 0., 0.,  ..., 0., 0., 0.],
-#         [0., 1., 1.,  ..., 0., 0., 0.],
-#         [0., 1., 0.,  ..., 0., 0., 0.],
-#         ...,
-#         [0., 0., 0.,  ..., 1., 0., 0.],
-#         [0., 0., 0.,  ..., 0., 0., 0.],
-#         [0., 0., 0.,  ..., 0., 0., 1.]])
-A_raw = torch.load("./data/gcn/adjmat.dat")
-with open("A.csv", "w") as csv:
-    csv.write("," + ",".join(alfred_objects) + "\n")
-    for ind, row in enumerate(relationship_matrics):
-        csv.write(alfred_objects[ind] + ", ")
-        csv.write(','.join(str(n) for n in row) + "\n")
-import pdb; pdb.set_trace()
-glove = Glove("./data/gcn/glove_map300d.hdf5")
+# 83 objects
+A_raw = torch.load("./data/gcn/adjmat_83.dat")
+# 108 objects
+A_raw = np.asarray(np.genfromtxt("./data/gcn/A_108.csv", delimiter=','))
+A_raw = torch.tensor(A_raw)
+WEh5 = WordEmbeddingLoad("./data/gcn/glove_map300d_83.hdf5")
+WEh5 = WordEmbeddingLoad("./data/gcn/fastText_300d_108.h5")
 
 
 class GCN(nn.Module):
@@ -61,20 +43,19 @@ class GCN(nn.Module):
         A = normalize_adj(A_raw).tocsr().toarray()
         self.A = torch.nn.Parameter(torch.Tensor(A)).unsqueeze(0).cuda()
 
-        # glove embeddings for all the objs.
-        objects = open("./data/gcn/objects.txt").readlines()
+        # word embed for all the objs.
+        objects = open("./data/gcn/objects_108.txt").readlines()
         objects = [o.strip() for o in objects]
-        n = 83
-        self.n = n
-        all_glove = torch.zeros(n, 300)
-        for i in range(n):
-            all_glove[i, :] = torch.Tensor(glove.glove_embeddings[objects[i]][:])
-        x = glove.glove_embeddings.keys()
-        self.all_glove = nn.Parameter(all_glove.unsqueeze(0))
-        self.all_glove.requires_grad = False
+        self.n = len(objects)
+        word_embeddings = torch.zeros(self.n, 300)
+        for i in range(self.n):
+            word_embeddings[i, :] = torch.Tensor(WEh5.word_embeddings[objects[i]][:])
+        x = WEh5.word_embeddings.keys()
+        self.word_embeddings = nn.Parameter(word_embeddings.unsqueeze(0))
+        self.word_embeddings.requires_grad = False
 
         # GCN layer
-        self.gc1 = GraphConvolution(self.all_glove.shape[2], nhid)
+        self.gc1 = GraphConvolution(self.word_embeddings.shape[2], nhid)
         self.gc2 = GraphConvolution(nhid, 1)
         self.dropout = dropout
 
@@ -83,7 +64,7 @@ class GCN(nn.Module):
     def forward(self, frames):
         batch_size = frames.shape[0] * frames.shape[1]
         batch_ex_size = frames.shape[0]
-        word_embed = self.all_glove.detach()
+        word_embed = self.word_embeddings.detach()
         x = F.relu(self.gc1(word_embed, self.A))
         x = F.dropout(x, self.dropout, training=self.training)
 
@@ -106,7 +87,7 @@ class GCNVisual(GCN):
 
     def forward(self, frames):
         batch_size = frames.shape[0]
-        word_embed = self.all_glove.detach()
+        word_embed = self.word_embeddings.detach()
         # gc1
         x = F.relu(self.gc1(word_embed, self.A))
         x = F.dropout(x, self.dropout, training=self.training)
