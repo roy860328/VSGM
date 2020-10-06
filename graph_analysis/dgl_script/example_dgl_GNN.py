@@ -70,9 +70,11 @@ class GCNLayer(nn.Module):
         # Creating a local scope so that all the stored ndata and edata
         # (such as the `'h'` ndata below) are automatically popped out
         # when the scope exits.
+        def message_func(edges):
+            return {'m': edges.src['h']}
         with g.local_scope():
             g.ndata['h'] = feature
-            g.update_all(gcn_msg, gcn_reduce)
+            g.update_all(message_func, gcn_reduce)
             h = g.ndata['h']
             return self.linear(h)
 
@@ -133,7 +135,7 @@ def evaluate(model, g, features, labels, mask):
 
 
 g, features, labels, train_mask, test_mask = load_cora_data()
-import pdb; pdb.set_trace()
+# import pdb; pdb.set_trace()
 # Add edges between each node and itself to preserve old node representations
 g.add_edges(g.nodes(), g.nodes())
 optimizer = th.optim.Adam(net.parameters(), lr=1e-2)

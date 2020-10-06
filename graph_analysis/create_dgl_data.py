@@ -147,7 +147,7 @@ def create_relation_attribute_object():
         string_csv += ','.join([str(src), str(dst)]) + ","
         string_csv += "\n"
     # csv
-    attribute_object_relation = open(save_path + "attribute-interact-object.csv", "w")
+    attribute_object_relation = open(save_path + "attribute-behave-object.csv", "w")
     attribute_object_relation.write(string_csv)
 
 
@@ -201,17 +201,17 @@ def create_relation_object_room():
         string_csv += ','.join([str(src), str(dst)]) + ","
         string_csv += "\n"
     # csv
-    object_room_relation = open(save_path + "object-interact-room.csv", "w")
+    object_room_relation = open(save_path + "room-interact-object.csv", "w")
     object_room_relation.write(string_csv)
 
 
 if __name__ == '__main__':
     # create node
-    create_node_object()
-    create_node_attribute()
-    create_node_room()
+    # create_node_object()
+    # create_node_attribute()
+    # create_node_room()
 
-    # create relation
-    create_relation_object_object_by_visual_genome()
-    create_relation_attribute_object()
+    # # create relation
+    # create_relation_object_object_by_visual_genome()
+    # create_relation_attribute_object()
     create_relation_object_room()

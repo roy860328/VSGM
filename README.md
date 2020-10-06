@@ -12,7 +12,9 @@ pip install fasttext
 ## ALFRED_ROOT
 ```
 cd gcn/alfred
+# linux
 export ALFRED_ROOT=/home/host/gcn/alfred/
+# windows
 SET ALFRED_ROOT=D:\gcn\alfred
 ```
 
@@ -37,6 +39,11 @@ cd alfred
 python models/train/train_seq2seq.py --data data/full_2.1.0/ --model gcn_im --dout exp/model,{model},name,pm_and_subgoals_01,gcn_vial_{gcn_cat_visaul} --splits data/splits/oct21.json --gpu --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --gcn_cat_visaul --gpu_id 1
 ```
 
+## Heterograph GCN
+```
+python models/train/train_graph.py --data data/full_2.1.0/ --model gcn_im --dout exp/model,heterograph_{model},name,pm_and_subgoals_01,gcn_vial_{gcn_cat_visaul} --splits data/splits/oct21.json --gpu --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph
+python models/train/train_graph.py --data data/json_feat_2.1.0/ --model gcn_im --dout exp/model,heterograph_{model},name,pm_and_subgoals_01,gcn_vial_{gcn_cat_visaul} --splits data/splits/oct21.json --gpu --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph
+```
 ## Eval
 ### Build AI2-THOR method
 1. install https://github.com/allenai/ai2thor-docker

@@ -75,8 +75,8 @@ class RGCNLayer(nn.Module):
             if self.activation:
                 h = self.activation(h)
             return {'h': h}
-
-        g.update_all(message_func, fn.sum(msg='msg', out='h'), apply_func)
+        reduce_func = fn.sum(msg='msg', out='h')
+        g.update_all(message_func, reduce_func, apply_func)
 
 
 class Model(nn.Module):
