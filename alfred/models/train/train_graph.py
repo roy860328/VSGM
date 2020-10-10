@@ -38,6 +38,7 @@ if __name__ == '__main__':
     parser.add_argument('--decay_epoch', help='num epoch to adjust learning rate', default=10, type=int)
     parser.add_argument('--dhid', help='hidden layer size', default=512, type=int)
     parser.add_argument('--dframe', help='image feature vec size', default=2500, type=int)
+    parser.add_argument('--dframedepth', help='image feature vec size', default=2500, type=int)
     parser.add_argument('--demb', help='language embedding size', default=100, type=int)
     parser.add_argument('--dgcnout', help='gcn embedding size', default=512, type=int)
     parser.add_argument('--gcn_cat_visaul', help='use visual embedding to gcn', action='store_true')
@@ -112,9 +113,9 @@ if __name__ == '__main__':
 
     # to gpu
     if args.gpu:
-        model = model.to(torch.device('cuda'))
+        model = model.to(torch.device("cuda:%d" % args.gpu_id))
         if not optimizer is None:
-            optimizer_to(optimizer, torch.device('cuda'))
+            optimizer_to(optimizer, torch.device("cuda:%d" % args.gpu_id))
 
     # start train loop
     model.run_train(splits, optimizer=optimizer)

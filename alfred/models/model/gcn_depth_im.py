@@ -11,6 +11,7 @@ from model.gcn import GCN, GCNVisual
 from model.dgl_gcn_hete import NetGCN
 from models.utils.metric import compute_f1, compute_exact
 from gen.utils.image_util import decompress_mask
+import cv2
 
 
 class Module(Base):
@@ -33,20 +34,20 @@ class Module(Base):
                                    0 or self.args.subgoal_aux_loss_wt > 0)
 
         # gcn
-        # import pdb; pdb.set_trace()
         if "model_hete_graph" in args and args.model_hete_graph:
-            self.gcn = NetGCN(args.dgcnout) if args.gcn_cat_visaul else NetGCN(args.dgcnout)
+            self.gcn = NetGCN(args.dgcnout, args.gpu_id) if args.gcn_cat_visaul else NetGCN(args.dgcnout, args.gpu_id)
         else:
             self.gcn = GCNVisual(args.dgcnout) if args.gcn_cat_visaul else GCN(args.dgcnout)
         device = torch.device("cuda:%d" % args.gpu_id if torch.cuda.is_available() else "cpu")
-        self.gcn.to(device)
-        # if torch.cuda.device_count() > 1:
-        #     print("Let's use", torch.cuda.device_count(), "GPUs!")
-        #     self.gcn = torch.nn.DataParallel(self.gcn)
+        # self.gcn = self.gcn.to(device)
+        self.enc_depth = vnn.VisualEncoder(args.dframe)
+        # self.enc_depth = self.enc_depth.to(device)
 
         # frame mask decoder
-        decoder = vnn.ConvFrameMaskDecoderProgressMonitor if self.subgoal_monitoring else vnn.ConvFrameMaskDecoder
+        # decoder = vnn.ConvFrameMaskDecoderProgressMonitor if self.subgoal_monitoring else vnn.ConvFrameMaskDecoder
+        decoder = vnn.DepthConvFrameMaskDecoderProgressMonitor
         self.dec = decoder(self.emb_action_low, args.dframe, 2*args.dhid, args.dgcnout,
+                           args.dframedepth,
                            pframe=args.pframe,
                            attn_dropout=args.attn_dropout,
                            hstate_dropout=args.hstate_dropout,
@@ -73,6 +74,7 @@ class Module(Base):
         # paths
         self.root_path = os.getcwd()
         self.feat_pt = 'feat_conv.pt'
+        self.feat_depth = 'depth_images'
 
         # params
         self.max_subgoals = 25
@@ -84,7 +86,7 @@ class Module(Base):
         '''
         tensorize and pad batch input
         '''
-        device = torch.device('cuda') if self.args.gpu else torch.device('cpu')
+        device = torch.device("cuda:%d" % self.args.gpu_id) if self.args.gpu else torch.device('cpu')
         feat = collections.defaultdict(list)
 
         for ex in batch:
@@ -125,6 +127,9 @@ class Module(Base):
             if load_frames and not self.test_mode:
                 root = self.get_task_root(ex)
                 im = torch.load(os.path.join(root, self.feat_pt))
+                # depth
+                path_img_depth = os.path.join(root, self.feat_depth)
+                self._load_img(feat, path_img_depth, "frames_depth", ex["images"])
 
                 num_low_actions = len(ex['plan']['low_actions'])
                 num_feat_frames = im.shape[0]
@@ -140,6 +145,7 @@ class Module(Base):
                 else:
                     feat['frames'].append(
                         torch.cat([im, im[-1].unsqueeze(0)], dim=0))  # add stop frame
+                # import pdb; pdb.set_trace()
 
             #########
             # outputs
@@ -215,12 +221,46 @@ class Module(Base):
     def forward(self, feat, max_decode=300):
         cont_lang, enc_lang = self.encode_lang(feat)
         state_0 = cont_lang, torch.zeros_like(cont_lang)
+        # import pdb; pdb.set_trace()
         frames = self.vis_dropout(feat['frames'])
+        frames_depth = self.enc_depth(feat['frames_depth'])
         gcn_embedding = self.gcn(frames)
-        res = self.dec(enc_lang, frames, gcn_embedding, max_decode=max_decode,
+        res = self.dec(enc_lang, frames, gcn_embedding, frames_depth, max_decode=max_decode,
                        gold=feat['action_low'], state_0=state_0)
         feat.update(res)
         return feat
+
+    def _load_img(self, feat, root, key_name, list_img_traj):
+        """
+        feat: for save image feature
+        root: image path
+        key_name: "frames_depth" or other
+        list_img_traj: traj_data["images"]. To chose feat[key_name] file
+        """
+        import glob
+        path = os.path.join(os.getcwd(), root)
+        frames_depth = None
+        low_idx = -1
+        for i, dict_frame in enumerate(list_img_traj):
+            # 60 actions need 61 frames
+            if low_idx != dict_frame["low_idx"] or i == 1:
+                low_idx = dict_frame["low_idx"]
+            else:
+                continue
+            name_frame = dict_frame["image_name"].split(".")[0]
+            frame_path = os.path.join(path, name_frame + ".png")
+            if not os.path.isfile(frame_path):
+                print("file is not exist: {}".format(frame_path))
+            img_depth = cv2.imread(frame_path, 0)
+            img_depth = torch.tensor(img_depth).unsqueeze(0)
+            if frames_depth is None:
+                frames_depth = img_depth
+            else:
+                frames_depth = torch.cat([frames_depth, img_depth], dim=0)
+        # import pdb; pdb.set_trace()
+        # feat["frames_depth"]
+        feat[key_name].append(frames_depth)
+
 
     def encode_lang(self, feat):
         '''
@@ -320,7 +360,7 @@ class Module(Base):
         '''
         embed low-level action
         '''
-        device = torch.device('cuda') if self.args.gpu else torch.device('cpu')
+        device = torch.device("cuda:%d" % self.args.gpu_id) if self.args.gpu else torch.device('cpu')
         action_num = torch.tensor(self.vocab['action_low'].word2index(action), device=device)
         action_emb = self.dec.emb(action_num).unsqueeze(0)
         return action_emb
@@ -349,7 +389,6 @@ class Module(Base):
         valid_idxs = valid.view(-1).nonzero().view(-1)
         flat_p_alow_mask = p_alow_mask.view(
             p_alow_mask.shape[0]*p_alow_mask.shape[1], *p_alow_mask.shape[2:])[valid_idxs]
-        # import pdb; pdb.set_trace()
         flat_alow_mask = torch.cat(feat['action_low_mask'], dim=0)
         alow_mask_loss = self.weighted_mask_loss(flat_p_alow_mask, flat_alow_mask)
         losses['action_low_mask'] = alow_mask_loss * self.args.mask_loss_wt

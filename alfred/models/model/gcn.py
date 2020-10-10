@@ -74,7 +74,7 @@ class GCN(nn.Module):
         x = x.view(batch_ex_size, -1, self.n)
         # [2, 61, 512]
         x = self.final_mapping(x)
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         return x
 
 

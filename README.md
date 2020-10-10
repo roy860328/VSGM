@@ -38,6 +38,11 @@ gcn visaul embedding
 cd alfred
 python models/train/train_seq2seq.py --data data/full_2.1.0/ --model gcn_im --dout exp/model,{model},name,pm_and_subgoals_01,gcn_vial_{gcn_cat_visaul} --splits data/splits/oct21.json --gpu --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --gcn_cat_visaul --gpu_id 1
 ```
+### depth image
+```
+cd alfred
+python models/train/train_graph.py --data data/full_2.1.0/ --model gcn_depth_im --dout exp/model,{model},name,pm_and_subgoals_01,gcn_depth_{gcn_cat_visaul} --splits data/splits/oct21.json --gpu --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --gpu_id 1
+```
 
 ## Heterograph GCN
 ```
@@ -48,6 +53,7 @@ python models/train/train_graph.py --data data/json_feat_2.1.0/ --model gcn_im -
 ### Build AI2-THOR method
 1. install https://github.com/allenai/ai2thor-docker
 2. sudo Xorg -noreset -sharevts -novtswitch -isolateDevice "PCI:1:0:0" :0 vt1 & sleep 1 sudo Xorg -noreset -sharevts -novtswitch -isolateDevice "PCI:2:0:0" :1 vt1 &
+(alfred: https://medium.com/@etendue2013/how-to-run-ai2-thor-simulation-fast-with-google-cloud-platform-gcp-c9fcde213a4a)
 
 #### result
 XSERVTransSocketUNIXCreateListener: ...SocketCreateListener() failed
@@ -63,6 +69,10 @@ python models/eval/eval_seq2seq.py --model_path exp/model,gcn_im,name,pm_and_sub
 --eval_split ['train', 'valid_seen', 'valid_unseen', ]
 --subgoals ['all', 'GotoLocation', 'PickupObject', ...]
 
+### eval hete graph
+```
+python models/eval/eval_graph.py --model_path exp/model,heterograph_gcn_im,name,pm_and_subgoals_01,gcn_vial_False_06-10-2020_14-04-55/best_seen.pth --model models.model.gcn_im --data data/json_feat_2.1.0 --gpu --gpu_id 0 --model_hete_graph
+```
 ### Leaderboard
 ```
 cd alfred
@@ -104,6 +114,15 @@ You can get node & edge data at "./data_dgl"
 ```
 cd graph_analysis
 python create_dgl_data.py
+```
+
+---
+---
+
+# Gen depth image
+```
+cd alfred/gen
+python scripts/augment_trajectories.py --data_path ../data/full_2.1.0/ --num_threads 4 --smooth_nav --time_delays
 ```
 
 ---

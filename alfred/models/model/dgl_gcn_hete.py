@@ -32,13 +32,13 @@ def load_heterograph():
     csv_nodes_object = pd.read_csv('../graph_analysis/data_dgl/object.csv')
     csv_nodes_attribute = pd.read_csv('../graph_analysis/data_dgl/attribute.csv')
     csv_nodes_room = pd.read_csv('../graph_analysis/data_dgl/room.csv')
-    g.nodes['object'].data['feature'] = get_feature(csv_nodes_object)
-    g.nodes['attribute'].data['feature'] = get_feature(csv_nodes_attribute)
-    g.nodes['room'].data['feature'] = get_feature(csv_nodes_room)
+    g.nodes['object'].data['feature'] = _get_feature(csv_nodes_object)
+    g.nodes['attribute'].data['feature'] = _get_feature(csv_nodes_attribute)
+    g.nodes['room'].data['feature'] = _get_feature(csv_nodes_room)
     return g
 
 
-def get_feature(csv_nodes_data):
+def _get_feature(csv_nodes_data):
     feature = [csv_nodes_data['feature'].to_list()]
     for i in range(1, 300):
         feature.extend([csv_nodes_data['feature.{}'.format(i)].to_list()])
@@ -49,9 +49,9 @@ def get_feature(csv_nodes_data):
 # https://docs.dgl.ai/en/latest/api/python/nn.pytorch.html#dgl.nn.pytorch.HeteroGraphConv
 # https://docs.dgl.ai/en/latest/guide/nn-heterograph.html
 class NetGCN(nn.Module):
-    def __init__(self, o_feats_dgcn):
+    def __init__(self, o_feats_dgcn, device=0):
         super(NetGCN, self).__init__()
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda:%d" % device if torch.cuda.is_available() else "cpu")
         self.g = load_heterograph()
         self.g = self.g.to(device)
         in_feats = self.g.nodes['object'].data['feature'].shape[1]
@@ -60,11 +60,11 @@ class NetGCN(nn.Module):
         self.conv1 = dglnn.HeteroGraphConv({
             'interacts': dglnn.GraphConv(in_feats, h_feats, activation=nn.ReLU()),
             'behave': dglnn.GraphConv(in_feats, h_feats, activation=nn.ReLU())},
-            aggregate='sum'
+            aggregate='mean'
         )
         self.conv2 = dglnn.HeteroGraphConv({
             'interacts': dglnn.GraphConv(h_feats, h_feats)},
-            aggregate='sum'
+            aggregate='mean'
         )
         self.final_mapping = nn.Linear(num_object*h_feats, o_feats_dgcn)
 

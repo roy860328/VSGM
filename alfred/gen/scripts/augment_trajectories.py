@@ -28,8 +28,8 @@ HIGH_RES_IMAGES_FOLDER = "high_res_images"
 DEPTH_IMAGES_FOLDER = "depth_images"
 INSTANCE_MASKS_FOLDER = "instance_masks"
 
-IMAGE_WIDTH = 600
-IMAGE_HEIGHT = 600
+IMAGE_WIDTH = 300
+IMAGE_HEIGHT = 300
 
 render_settings = dict()
 render_settings['renderImage'] = True
@@ -39,9 +39,12 @@ render_settings['renderClassImage'] = True
 
 video_saver = VideoSaver()
 
+fail_log = open("fail_log.txt", "w")
+
 
 def get_image_index(save_path):
-    return len(glob.glob(save_path + '/*.png'))
+    max_img = max(len(glob.glob(save_path + '/*.png')), len(glob.glob(save_path + '/*.jpg')))
+    return max_img
 
 
 def save_image_with_delays(env, action,
@@ -83,6 +86,13 @@ def save_images_in_events(events, root_dir):
         save_image(event, root_dir)
 
 
+def check_dir(path):
+    if os.path.exists(path):
+        return True
+    os.mkdir(path)
+    return False
+
+
 def clear_and_create_dir(path):
     if os.path.exists(path):
         shutil.rmtree(path)
@@ -106,6 +116,12 @@ def augment_traj(env, json_file):
     # fresh images list
     traj_data['images'] = list()
 
+    if get_image_index(orig_images_dir) == get_image_index(high_res_images_dir) \
+       and get_image_index(high_res_images_dir) == get_image_index(depth_images_dir) \
+       and get_image_index(depth_images_dir) == get_image_index(instance_masks_dir):
+        print("already create: " + orig_images_dir + "\n")
+        fail_log.write("already create: " + orig_images_dir + "\n")
+        return
     clear_and_create_dir(high_res_images_dir)
     clear_and_create_dir(depth_images_dir)
     clear_and_create_dir(instance_masks_dir)
@@ -121,8 +137,9 @@ def augment_traj(env, json_file):
     env.reset(scene_name)
     env.restore_scene(object_poses, object_toggles, dirty_and_empty)
 
+    print(high_res_images_dir)
     env.step(dict(traj_data['scene']['init_action']))
-    print("Task: %s" % (traj_data['template']['task_desc']))
+    # print("Task: %s" % (traj_data['template']['task_desc']))
 
     # setup task
     env.set_task(traj_data, args, reward_type='dense')
@@ -203,6 +220,8 @@ def augment_traj(env, json_file):
             })
 
         if not event.metadata['lastActionSuccess']:
+            print("Replay Failed: %s" % (env.last_event.metadata['errorMessage']))
+            fail_log.write("Replay Failed: %s \n" % (env.last_event.metadata['errorMessage']))
             raise Exception("Replay Failed: %s" % (env.last_event.metadata['errorMessage']))
 
         reward, _ = env.get_transition_reward()
@@ -237,10 +256,13 @@ def augment_traj(env, json_file):
 
     # check if number of new images is the same as the number of original images
     if args.smooth_nav and args.time_delays:
-        orig_img_count = get_image_index(high_res_images_dir)
-        new_img_count = get_image_index(orig_images_dir)
+        orig_img_count = get_image_index(orig_images_dir)
+        new_img_count = get_image_index(high_res_images_dir)
         print ("Original Image Count %d, New Image Count %d" % (orig_img_count, new_img_count))
         if orig_img_count != new_img_count:
+            print("sequence length doesn't match\n" + high_res_images_dir + "\n")
+            fail_log.write("sequence length doesn't match\n" + high_res_images_dir + "\n")
+            fail_log.write("Original Image Count %d, New Image Count %d" % (orig_img_count, new_img_count))
             raise Exception("WARNING: the augmented sequence length doesn't match the original")
 
 
@@ -268,6 +290,8 @@ def run():
             print ("Error: " + repr(e))
             print ("Skipping " + json_file)
             skipped_files.append(json_file)
+            fail_log.write(repr(e) + "\n")
+            fail_log.write(json_file + "\n")
 
     env.stop()
     print("Finished.")
@@ -284,6 +308,7 @@ lock = threading.Lock()
 # parse arguments
 parser = argparse.ArgumentParser()
 parser.add_argument('--data_path', type=str, default="data/2.1.0")
+parser.add_argument('--split', type=str, default='valid_seen', choices=['train', 'valid_seen', 'valid_unseen'])
 parser.add_argument('--smooth_nav', dest='smooth_nav', action='store_true')
 parser.add_argument('--time_delays', dest='time_delays', action='store_true')
 parser.add_argument('--shuffle', dest='shuffle', action='store_true')
@@ -292,18 +317,20 @@ parser.add_argument('--reward_config', type=str, default='../models/config/rewar
 args = parser.parse_args()
 
 # make a list of all the traj_data json files
-for dir_name, subdir_list, file_list in walklevel(args.data_path, level=2):
-    if "trial_" in dir_name:
-        json_file = os.path.join(dir_name, TRAJ_DATA_JSON_FILENAME)
-        if not os.path.isfile(json_file):
-            continue
-        traj_list.append(json_file)
-
+for split in ['train/', 'valid_seen/', 'valid_unseen/']:
+    for dir_name, subdir_list, file_list in walklevel(args.data_path + split, level=2):
+        if "trial_" in dir_name:
+            json_file = os.path.join(dir_name, TRAJ_DATA_JSON_FILENAME)
+            # import pdb; pdb.set_trace()
+            if not os.path.isfile(json_file):
+                continue
+            traj_list.append(json_file)
 # random shuffle
 if args.shuffle:
     random.shuffle(traj_list)
 
 # start threads
+# run()
 threads = []
 for n in range(args.num_threads):
     thread = threading.Thread(target=run)
