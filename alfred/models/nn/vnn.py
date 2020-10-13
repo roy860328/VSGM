@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-
+import cv2
 
 class SelfAttn(nn.Module):
     '''
@@ -143,6 +143,13 @@ class MaskDecoder(nn.Module):
         # [2, 1, 300, 300]
         x = self.dconv1(x)
         x = F.interpolate(x, size=(self.pframe, self.pframe), mode='bilinear')
+        
+        # watch gray
+        # import pdb; pdb.set_trace()
+        nx = x[0,0].to(device="cpu").detach().numpy()
+        nx = cv2.cvtColor(nx, cv2.COLOR_GRAY2RGB)
+        cv2.imshow("mask", nx)
+        key = cv2.waitKey(1)
         return x
 
 
@@ -292,8 +299,12 @@ class ConvFrameMaskDecoderProgressMonitor(nn.Module):
         h_t, c_t = state_t[0], state_t[1]
 
         # decode action and mask
+        # [4, 5160]
         cont_t = torch.cat([h_t, inp_t], dim=1)
+        # import pdb; pdb.set_trace()
+        # [4, 100]
         action_emb_t = self.actor(self.actor_dropout(cont_t))
+        # [4, 15]
         action_t = action_emb_t.mm(self.emb.weight.t())
 
         mask_t = self.mask_dec(cont_t)

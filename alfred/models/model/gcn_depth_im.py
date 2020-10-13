@@ -241,6 +241,7 @@ class Module(Base):
         path = os.path.join(os.getcwd(), root)
         frames_depth = None
         low_idx = -1
+        # temp = list_img_traj[0]["image_name"].split(".")[0]
         for i, dict_frame in enumerate(list_img_traj):
             # 60 actions need 61 frames
             if low_idx != dict_frame["low_idx"] or i == 1:
@@ -248,11 +249,15 @@ class Module(Base):
             else:
                 continue
             name_frame = dict_frame["image_name"].split(".")[0]
+            # print("be care temp")
+            # name_frame = temp
             frame_path = os.path.join(path, name_frame + ".png")
-            if not os.path.isfile(frame_path):
+            if os.path.isfile(frame_path):
+                img_depth = cv2.imread(frame_path, 0)
+            else:
                 print("file is not exist: {}".format(frame_path))
-            img_depth = cv2.imread(frame_path, 0)
-            img_depth = torch.tensor(img_depth).unsqueeze(0)
+                img_depth = np.zeros(img_depth.shape[1:])
+            img_depth = torch.tensor(img_depth, dtype=torch.int8).unsqueeze(0)
             if frames_depth is None:
                 frames_depth = img_depth
             else:

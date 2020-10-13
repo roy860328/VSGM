@@ -21,12 +21,12 @@ class Module(Base):
         '''
         super().__init__(args, vocab)
 
+        device = torch.device("cuda:%d" % args.gpu_id if torch.cuda.is_available() else "cpu")
         # encoder and self-attention
         # [batch, sentance, out_feat]
         self.enc = nn.LSTM(args.demb, args.dhid, bidirectional=True, batch_first=True)
         self.enc_att = vnn.SelfAttn(args.dhid*2)
-        if torch.cuda.device_count() > 1:
-            self.enc = self.enc.to("cuda:1")
+        self.enc = self.enc.to(device)
 
         # subgoal monitoring
         self.subgoal_monitoring = (self.args.pm_aux_loss_wt >
@@ -38,8 +38,7 @@ class Module(Base):
             self.gcn = NetGCN(args.dgcnout) if args.gcn_cat_visaul else NetGCN(args.dgcnout)
         else:
             self.gcn = GCNVisual(args.dgcnout) if args.gcn_cat_visaul else GCN(args.dgcnout)
-        device = torch.device("cuda:%d" % args.gpu_id if torch.cuda.is_available() else "cpu")
-        self.gcn.to(device)
+        self.gcn = self.gcn.to(device)
         # if torch.cuda.device_count() > 1:
         #     print("Let's use", torch.cuda.device_count(), "GPUs!")
         #     self.gcn = torch.nn.DataParallel(self.gcn)
@@ -53,8 +52,7 @@ class Module(Base):
                            actor_dropout=args.actor_dropout,
                            input_dropout=args.input_dropout,
                            teacher_forcing=args.dec_teacher_forcing)
-        if torch.cuda.device_count() > 1:
-            self.dec = self.dec.to("cuda:1")
+        self.dec = self.dec.to(device)
 
         # dropouts
         self.vis_dropout = nn.Dropout(args.vis_dropout)
@@ -84,7 +82,7 @@ class Module(Base):
         '''
         tensorize and pad batch input
         '''
-        device = torch.device('cuda') if self.args.gpu else torch.device('cpu')
+        device = torch.device("cuda:{}".format(self.args.gpu_id) if torch.cuda.is_available() and self.args.gpu else "cpu")
         feat = collections.defaultdict(list)
 
         for ex in batch:

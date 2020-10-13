@@ -1,13 +1,24 @@
-from bs4 import BeautifulSoup
+import argparse
 import urllib.request
 import re
-from alfred_dataset_vocab_analysis import load_object
 import fastText_embedding
+import json
+from bs4 import BeautifulSoup
+from alfred_dataset_vocab_analysis import load_object
+from count_subgoal_action_distribution import get_subgoal_lowaction_define
+# save path
 save_path = "./data_dgl/"
+# object relation
 objects_txt = "./data/objects.txt"
 url_object_object = "https://ai2thor.allenai.org/ithor/documentation/objects/actionable-properties/"
 url_object_room = "https://ai2thor.allenai.org/ithor/documentation/objects/object-locations/"
-# import pdb; pdb.set_trace()
+# verb relation
+SUB_GOAL_DISTRIBUTION = "data_dgl/subgoal_distribution.json"
+SUB_GOAL, LOW_ACT_NAMES = get_subgoal_lowaction_define()
+NODE_PATH_SUBGOAL = save_path + "subgoal.csv"
+NODE_PATH_LOWACTION = save_path + "lowaction.csv"
+EDGE_PATH_LOWACTION_BEHAVE_SUBGOAL = save_path + "lowaction-behave-subgoal.csv"
+
 
 def create_node_object():
     # load
@@ -34,7 +45,7 @@ def create_node_attribute():
     # {'UsedUp', 'Breakable', 'Openable', 'Fillable', 'Pickupable', 'Sliceable', 'Moveable', 'Cookable', 'Toggleable', 'Receptacle', 'Dirty'}
     attribute_name = set()
     for i, td in enumerate(tablelist[0].find_all('td')):
-        if (i+1)%3 == 0:
+        if (i+1) % 3 == 0:
             td = re.findall('[^-,\ *]*', td.text)
             attribute_name.update(td)
     attribute_name.remove("")
@@ -69,6 +80,36 @@ def create_node_room():
     nodes.write(string_csv)
 
 
+def create_node_subgoal():
+    # load
+    ft_model = fastText_embedding.load_model()
+    # process
+    string_csv = "Id,name,feature" + ",feature" * 299 + ",\n"
+    for i, sg_name in enumerate(SUB_GOAL):
+        string_csv += ','.join([str(i), sg_name]) + ","
+        vectors = fastText_embedding.get_faxtText_embedding(ft_model, sg_name)
+        string_csv += ','.join(str(vector) for vector in vectors)
+        string_csv += "\n"
+    # csv
+    csv_nodes = open(NODE_PATH_SUBGOAL, "w")
+    csv_nodes.write(string_csv)
+
+
+def create_node_low_action():
+    # load
+    ft_model = fastText_embedding.load_model()
+    # process
+    string_csv = "Id,name,feature" + ",feature" * 299 + ",\n"
+    for i, act_name in enumerate(LOW_ACT_NAMES):
+        string_csv += ','.join([str(i), act_name]) + ","
+        vectors = fastText_embedding.get_faxtText_embedding(ft_model, act_name)
+        string_csv += ','.join(str(vector) for vector in vectors)
+        string_csv += "\n"
+    # csv
+    csv_nodes = open(NODE_PATH_LOWACTION, "w")
+    csv_nodes.write(string_csv)
+
+
 # relation from visual_genome
 def create_relation_object_object_by_visual_genome():
     """
@@ -77,7 +118,8 @@ def create_relation_object_object_by_visual_genome():
     import numpy
     Src = []
     Dst = []
-    relationship_matrics = numpy.genfromtxt('./visual_genome/relationship_matrics.csv', delimiter=',')
+    relationship_matrics = numpy.genfromtxt(
+        './visual_genome/relationship_matrics.csv', delimiter=',')
     relationship_matrics = numpy.asarray(relationship_matrics, dtype=int)
     for i in range(relationship_matrics.shape[0]):
         for j in range(relationship_matrics.shape[1]):
@@ -140,7 +182,8 @@ def create_relation_attribute_object():
             if attribute in dict_attribute and objects in dict_objects:
                 Src.append(dict_attribute[attribute])
                 Dst.append(dict_objects[objects])
-                print("object: {}, Id: {}, attribute: {}, Id: {}".format(objects, dict_objects[objects], attribute, dict_attribute[attribute]))
+                print("object: {}, Id: {}, attribute: {}, Id: {}".format(
+                    objects, dict_objects[objects], attribute, dict_attribute[attribute]))
     # process
     string_csv = "Src,Dst" + ",\n"
     for src, dst in zip(Src, Dst):
@@ -191,7 +234,8 @@ def create_relation_object_room():
                 Src.append(dict_room[room])
                 Dst.append(dict_objects[objects][0])
                 dict_objects[objects][1] += 1
-                print("object: {}, Id: {}, room: {}, Id: {}".format(objects, dict_objects[objects], room, dict_room[room]))
+                print("object: {}, Id: {}, room: {}, Id: {}".format(
+                    objects, dict_objects[objects], room, dict_room[room]))
     for k, i in dict_objects.items():
         if i[1] < 1:
             print("=== Can't find === object: {}, Id: {}, count: {}".format(k, i[0], i[1]))
@@ -205,13 +249,72 @@ def create_relation_object_room():
     object_room_relation.write(string_csv)
 
 
-if __name__ == '__main__':
-    # create node
-    # create_node_object()
-    # create_node_attribute()
-    # create_node_room()
+def create_relation_lowaction_subgoal():
+    # load json data
+    with open(SUB_GOAL_DISTRIBUTION) as f:
+        json_subgoal = json.load(f)
+    row_lowaction = open(NODE_PATH_LOWACTION, "r").readlines()
+    row_subgoal = open(NODE_PATH_SUBGOAL, "r").readlines()
+    dict_lowaction = {}
+    dict_subgoal = {}
+    for rows in row_lowaction:
+        # row_list = [0, LookDown, ...]
+        row_list = [row.strip() for row in rows.split(",")]
+        dict_lowaction[row_list[1]] = row_list[0]
+    for rows in row_subgoal:
+        row_list = [row.strip() for row in rows.split(",")]
+        dict_subgoal[row_list[1]] = row_list[0]
+    # {'name': 'Id', 'LookDown': '0', 'MoveAhead': '1', 'RotateLeft': '2', 'LookUp': '3', 'RotateRight': '4', 'PickupObject': '5', 'SliceObject': '6', 'OpenObject': '7', 'PutObject': '8', 'CloseObject': '9', 'ToggleObjectOn': '10', 'ToggleObjectOff': '11'}
+    # {'name': 'Id', 'GotoLocation': '0', 'PickupObject': '1', 'PutObject': '2', 'CoolObject': '3', 'HeatObject': '4', 'CleanObject': '5', 'SliceObject': '6', 'ToggleObject': '7'}
+    print(dict_lowaction)
+    print(dict_subgoal)
+    # load url dataframe
+    Src = []
+    Dst = []
+    for sg_name, json_dict_lowact in json_subgoal.items():
+        # import pdb; pdb.set_trace()
+        # json_dict_lowact = {'total_num': 1001, 'LookDown': 0, 'MoveAhead': 0, 'RotateLeft': 0, 'LookUp': 0, 'RotateRight': 0, 'PickupObject': 0, 'SliceObject': 1001, 'OpenObject': 117, 'PutObject': 0, 'CloseObject': 106, 'ToggleObjectOn': 0, 'ToggleObjectOff': 0}
+        print(json_dict_lowact)
+        for str_lowaction, value in json_dict_lowact.items():
+            if str_lowaction in dict_lowaction and value > 0:
+                Src.append(dict_lowaction[str_lowaction])
+                Dst.append(dict_subgoal[sg_name])
+                print("lowaction: {}, Id: {}, subgoal: {}, Id: {}"
+                      .format(str_lowaction, dict_lowaction[str_lowaction], sg_name, dict_subgoal[sg_name]))
+    # process
+    string_csv = "Src,Dst" + ",\n"
+    for src, dst in zip(Src, Dst):
+        string_csv += ','.join([str(src), str(dst)]) + ","
+        string_csv += "\n"
+    # csv
+    csv_edges = open(EDGE_PATH_LOWACTION_BEHAVE_SUBGOAL, "w")
+    csv_edges.write(string_csv)
 
-    # # create relation
-    # create_relation_object_object_by_visual_genome()
-    # create_relation_attribute_object()
-    create_relation_object_room()
+
+if __name__ == '__main__':
+    # parse arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--object', action='store_true')
+    parser.add_argument('--verb', action='store_true')
+    args = parser.parse_args()
+
+    '''
+    object relation
+    '''
+    if args.object:
+        # create node
+        create_node_object()
+        create_node_attribute()
+        create_node_room()
+
+        # # create relation
+        create_relation_object_object_by_visual_genome()
+        create_relation_attribute_object()
+        create_relation_object_room()
+    '''
+    verb relation: alfred sub-goal & low action relation
+    '''
+    if args.verb:
+        # create_node_subgoal()
+        # create_node_low_action()
+        create_relation_lowaction_subgoal()

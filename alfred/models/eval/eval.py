@@ -30,8 +30,6 @@ class Eval(object):
         print("Loading: ", self.args.model_path)
         M = import_module(self.args.model)
         device = torch.device("cuda:{}".format(self.args.gpu_id) if torch.cuda.is_available() and self.args.gpu else "cpu")
-        if torch.cuda.is_available():
-            torch.cuda.set_device(device)
         share_memory = False
         self.model, optimizer = M.Module.load(self.args.model_path, device)
         if share_memory:
