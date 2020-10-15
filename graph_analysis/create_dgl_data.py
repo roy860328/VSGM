@@ -17,7 +17,8 @@ SUB_GOAL_DISTRIBUTION = "data_dgl/subgoal_distribution.json"
 SUB_GOAL, LOW_ACT_NAMES = get_subgoal_lowaction_define()
 NODE_PATH_SUBGOAL = save_path + "subgoal.csv"
 NODE_PATH_LOWACTION = save_path + "lowaction.csv"
-EDGE_PATH_LOWACTION_BEHAVE_SUBGOAL = save_path + "lowaction-behave-subgoal.csv"
+EDGE_PATH_LOWACTION_BEHAVE_SUBGOAL = save_path + "lowaction-interact-subgoal.csv"
+EDGE_PATH_SUBGOAL_BEHAVE_LOWACTION = save_path + "subgoal-interact-lowaction.csv"
 
 
 def create_node_object():
@@ -271,6 +272,8 @@ def create_relation_lowaction_subgoal():
     # load url dataframe
     Src = []
     Dst = []
+    t_Src = []
+    t_Dst = []
     for sg_name, json_dict_lowact in json_subgoal.items():
         # import pdb; pdb.set_trace()
         # json_dict_lowact = {'total_num': 1001, 'LookDown': 0, 'MoveAhead': 0, 'RotateLeft': 0, 'LookUp': 0, 'RotateRight': 0, 'PickupObject': 0, 'SliceObject': 1001, 'OpenObject': 117, 'PutObject': 0, 'CloseObject': 106, 'ToggleObjectOn': 0, 'ToggleObjectOff': 0}
@@ -279,16 +282,24 @@ def create_relation_lowaction_subgoal():
             if str_lowaction in dict_lowaction and value > 0:
                 Src.append(dict_lowaction[str_lowaction])
                 Dst.append(dict_subgoal[sg_name])
+                t_Src.append(dict_subgoal[sg_name])
+                t_Dst.append(dict_lowaction[str_lowaction])
                 print("lowaction: {}, Id: {}, subgoal: {}, Id: {}"
                       .format(str_lowaction, dict_lowaction[str_lowaction], sg_name, dict_subgoal[sg_name]))
     # process
     string_csv = "Src,Dst" + ",\n"
-    for src, dst in zip(Src, Dst):
+    string_csv_r = "Src,Dst" + ",\n"
+    for src, dst, t_src, t_dst in zip(Src, Dst, t_Src, t_Dst):
         string_csv += ','.join([str(src), str(dst)]) + ","
         string_csv += "\n"
+        string_csv_r += ','.join([str(t_src), str(t_dst)]) + ","
+        string_csv_r += "\n"
     # csv
     csv_edges = open(EDGE_PATH_LOWACTION_BEHAVE_SUBGOAL, "w")
     csv_edges.write(string_csv)
+    # csv
+    csv_edges = open(EDGE_PATH_SUBGOAL_BEHAVE_LOWACTION, "w")
+    csv_edges.write(string_csv_r)
 
 
 if __name__ == '__main__':
@@ -315,6 +326,6 @@ if __name__ == '__main__':
     verb relation: alfred sub-goal & low action relation
     '''
     if args.verb:
-        # create_node_subgoal()
-        # create_node_low_action()
+        create_node_subgoal()
+        create_node_low_action()
         create_relation_lowaction_subgoal()

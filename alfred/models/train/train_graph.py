@@ -68,6 +68,8 @@ if __name__ == '__main__':
 
     # graph model
     parser.add_argument('--model_hete_graph', help='use gpu', action='store_true')
+    parser.add_argument('--HETAttention', help='use attention', action='store_true')
+    parser.add_argument('--HetLowSg', help='use attention', action='store_true')
 
     # args and init
     args = parser.parse_args()
@@ -82,6 +84,9 @@ if __name__ == '__main__':
     # check if dataset has been preprocessed
     if not os.path.exists(os.path.join(args.data, "%s.vocab" % args.pp_folder)) and not args.preprocess:
         raise Exception("Dataset not processed; run with --preprocess")
+
+    if args.HETAttention:
+        assert args.dgcnout == args.dhid*2, "dgcnout size must be same with self.enc dhid size *2 (*2 because bidirectional)"
 
     # make output dir
     pprint.pprint(args)

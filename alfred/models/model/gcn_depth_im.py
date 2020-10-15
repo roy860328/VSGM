@@ -1,4 +1,5 @@
 import os
+from sys import platform
 import torch
 import numpy as np
 import nn.vnn as vnn
@@ -8,7 +9,7 @@ from torch.nn import functional as F
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
 from model.seq2seq import Module as Base
 from model.gcn import GCN, GCNVisual
-from model.dgl_gcn_hete import NetGCN
+from model.dgl_gcn_hete import NetGCN, HETLOWSG
 from models.utils.metric import compute_f1, compute_exact
 from gen.utils.image_util import decompress_mask
 import cv2
@@ -35,7 +36,7 @@ class Module(Base):
 
         # gcn
         if "model_hete_graph" in args and args.model_hete_graph:
-            self.gcn = NetGCN(args.dgcnout, args.gpu_id) if args.gcn_cat_visaul else NetGCN(args.dgcnout, args.gpu_id)
+            self.gcn = HETLOWSG(self.args.HETAttention, args.dgcnout, args.gpu_id) if args.HetLowSg else NetGCN(self.args.HETAttention, args.dgcnout, args.gpu_id)
         else:
             self.gcn = GCNVisual(args.dgcnout) if args.gcn_cat_visaul else GCN(args.dgcnout)
         device = torch.device("cuda:%d" % args.gpu_id if torch.cuda.is_available() else "cpu")
@@ -45,7 +46,7 @@ class Module(Base):
 
         # frame mask decoder
         # decoder = vnn.ConvFrameMaskDecoderProgressMonitor if self.subgoal_monitoring else vnn.ConvFrameMaskDecoder
-        decoder = vnn.DepthConvFrameMaskDecoderProgressMonitor
+        decoder = vnn.DepthConvFrameMaskAttentionDecoderProgressMonitor if args.HETAttention else vnn.DepthConvFrameMaskDecoderProgressMonitor
         self.dec = decoder(self.emb_action_low, args.dframe, 2*args.dhid, args.dgcnout,
                            args.dframedepth,
                            pframe=args.pframe,
@@ -218,6 +219,42 @@ class Module(Base):
         mask = np.expand_dims(mask, axis=0)
         return mask
 
+    # according to traj.json to load depth image
+    def _load_img(self, feat, root, key_name, list_img_traj):
+        """
+        feat: for save image feature
+        root: image path
+        key_name: "frames_depth" or other
+        list_img_traj: traj_data["images"]. To chose feat[key_name] file
+        """
+        path = os.path.join(os.getcwd(), root)
+        frames_depth = None
+        low_idx = -1
+        for i, dict_frame in enumerate(list_img_traj):
+            # 60 actions need 61 frames
+            if low_idx != dict_frame["low_idx"] or i == 1:
+                low_idx = dict_frame["low_idx"]
+            else:
+                continue
+            name_frame = dict_frame["image_name"].split(".")[0]
+            frame_path = os.path.join(path, name_frame + ".png")
+            # for debug
+            if platform == "win32":
+                frame_path = "D:\\AI2\\homealfreddatafull_2.1.0trainpick_clean_then_place_in_recep-Lettuc\\000000160.jpg"
+            if os.path.isfile(frame_path):
+                img_depth = cv2.imread(frame_path, 0)
+            else:
+                # print("file is not exist: {}".format(frame_path))
+                img_depth = np.zeros(img_depth.shape[1:])
+            img_depth = torch.tensor(img_depth, dtype=torch.int8).unsqueeze(0)
+            if frames_depth is None:
+                frames_depth = img_depth
+            else:
+                frames_depth = torch.cat([frames_depth, img_depth], dim=0)
+        # import pdb; pdb.set_trace()
+        # feat["frames_depth"]
+        feat[key_name].append(frames_depth)
+
     def forward(self, feat, max_decode=300):
         cont_lang, enc_lang = self.encode_lang(feat)
         state_0 = cont_lang, torch.zeros_like(cont_lang)
@@ -230,50 +267,12 @@ class Module(Base):
         feat.update(res)
         return feat
 
-    def _load_img(self, feat, root, key_name, list_img_traj):
-        """
-        feat: for save image feature
-        root: image path
-        key_name: "frames_depth" or other
-        list_img_traj: traj_data["images"]. To chose feat[key_name] file
-        """
-        import glob
-        path = os.path.join(os.getcwd(), root)
-        frames_depth = None
-        low_idx = -1
-        # temp = list_img_traj[0]["image_name"].split(".")[0]
-        for i, dict_frame in enumerate(list_img_traj):
-            # 60 actions need 61 frames
-            if low_idx != dict_frame["low_idx"] or i == 1:
-                low_idx = dict_frame["low_idx"]
-            else:
-                continue
-            name_frame = dict_frame["image_name"].split(".")[0]
-            # print("be care temp")
-            # name_frame = temp
-            frame_path = os.path.join(path, name_frame + ".png")
-            if os.path.isfile(frame_path):
-                img_depth = cv2.imread(frame_path, 0)
-            else:
-                print("file is not exist: {}".format(frame_path))
-                img_depth = np.zeros(img_depth.shape[1:])
-            img_depth = torch.tensor(img_depth, dtype=torch.int8).unsqueeze(0)
-            if frames_depth is None:
-                frames_depth = img_depth
-            else:
-                frames_depth = torch.cat([frames_depth, img_depth], dim=0)
-        # import pdb; pdb.set_trace()
-        # feat["frames_depth"]
-        feat[key_name].append(frames_depth)
-
-
     def encode_lang(self, feat):
         '''
         encode goal+instr language
         '''
         emb_lang_goal_instr = feat['lang_goal_instr']
         self.lang_dropout(emb_lang_goal_instr.data)
-        # import pdb; pdb.set_trace()
         enc_lang_goal_instr, _ = self.enc(emb_lang_goal_instr)
         enc_lang_goal_instr, _ = pad_packed_sequence(enc_lang_goal_instr, batch_first=True)
         self.lang_dropout(enc_lang_goal_instr)

@@ -38,17 +38,23 @@ gcn visaul embedding
 cd alfred
 python models/train/train_seq2seq.py --data data/full_2.1.0/ --model gcn_im --dout exp/model,{model},name,pm_and_subgoals_01,gcn_vial_{gcn_cat_visaul} --splits data/splits/oct21.json --gpu --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --gcn_cat_visaul --gpu_id 1
 ```
-### depth image
-```
-cd alfred
-python models/train/train_graph.py --data data/full_2.1.0/ --model gcn_depth_im --dout exp/model,heterograph_depth_{model},name,pm_and_subgoals_01 --splits data/splits/oct21.json --gpu --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --gpu_id 1
-```
 
 ## Heterograph GCN
 ```
 python models/train/train_graph.py --data data/full_2.1.0/ --model gcn_im --dout exp/model,heterograph_{model},name,pm_and_subgoals_01,gcn_vial_{gcn_cat_visaul} --splits data/splits/oct21.json --gpu --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph
 python models/train/train_graph.py --data data/json_feat_2.1.0/ --model gcn_im --dout exp/model,heterograph_{model},name,pm_and_subgoals_01,gcn_vial_{gcn_cat_visaul} --splits data/splits/oct21.json --gpu --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph
 ```
+
+### depth image
+```
+cd alfred
+python models/train/train_graph.py --data data/full_2.1.0/ --model gcn_depth_im --dout exp/model,heterograph_depth_{model},name,pm_and_subgoals_01 --splits data/splits/oct21.json --gpu --batch 4 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --gpu_id 1
+```
+### HetG + depth + graph attention
+```
+python models/train/train_graph.py --data data/full_2.1.0/ --model gcn_depth_im --dout exp/model,heterograph_depth_attention_{model},name,pm_and_subgoals_01 --splits data/splits/oct21.json --gpu --batch 4 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --HETAttention --dgcnout 1024 --HetLowSg
+```
+
 ## Eval
 ### Build AI2-THOR method
 1. install https://github.com/allenai/ai2thor-docker
@@ -115,7 +121,9 @@ python visual_genome_scene_graphs_analysis.py
 You can get node & edge data at "./data_dgl"
 ```
 cd graph_analysis
-python create_dgl_data.py
+python create_dgl_data.py 
+--object 
+--verb
 ```
 
 ---
