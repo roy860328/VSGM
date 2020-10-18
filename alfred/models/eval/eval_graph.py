@@ -47,14 +47,16 @@ if __name__ == '__main__':
     parser.add_argument('--fast_epoch', dest='fast_epoch', action='store_true')
 
     # graph model
-    parser.add_argument('--model_hete_graph', help='use gpu', action='store_true')
+    parser.add_argument('--model_hete_graph', help='', action='store_true')
+    parser.add_argument('--HETAttention', help='', action='store_true')
+    parser.add_argument('--HetLowSg', help='', action='store_true')
 
     # parse arguments
     args = parser.parse_args()
 
     import torch
-    device = torch.device("cuda:%d" % args.gpu_id if torch.cuda.is_available() else "cpu")
-    if torch.cuda.is_available():
+    device = torch.device("cuda:%d" % args.gpu_id if args.gpu else "cpu")
+    if args.gpu and torch.cuda.is_available():
         torch.cuda.set_device(device)
     # eval mode
     if args.subgoals:

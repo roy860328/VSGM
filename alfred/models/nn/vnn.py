@@ -522,7 +522,6 @@ class DepthConvFrameMaskAttentionDecoderProgressMonitor(nn.Module):
         weighted_lang_t, lang_attn_t = self.attn(self.attn_dropout(lang_feat_t), self.h_tm1_fc(h_tm1))
         # concat visual feats, weight lang, and previous action embedding
         if gcn_embedding is not None:
-            # import pdb; pdb.set_trace()
             gcn_embedding, graph_attn_t = self.attn_graph(self.attn_dropout(gcn_embedding), self.h_tm1_fc_graph(h_tm1))
             inp_t = torch.cat([vis_feat_t, weighted_lang_t, e_t, gcn_embedding, frames_depth], dim=1)
         else:

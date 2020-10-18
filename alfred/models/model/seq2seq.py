@@ -53,6 +53,8 @@ class Module(nn.Module):
 
         # splits
         train = splits['train']
+        # import pdb; pdb.set_trace()
+        # print(train)
         valid_seen = splits['valid_seen']
         valid_unseen = splits['valid_unseen']
 
@@ -318,13 +320,15 @@ class Module(nn.Module):
             param_group['lr'] = lr
 
     @classmethod
-    def load(cls, fsave, device=None):
+    def load(cls, fsave, device=None, use_gpu=None):
         '''
         load pth model from disk
         '''
         save = torch.load(fsave, map_location=device)
+        save['args'].gpu = use_gpu if use_gpu == False else save['args'].gpu
         model = cls(save['args'], save['vocab'])
         model.load_state_dict(save['model'])
+        model = model.to(device=device)
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
         optimizer.load_state_dict(save['optim'])
         return model, optimizer

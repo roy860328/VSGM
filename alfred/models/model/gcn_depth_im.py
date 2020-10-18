@@ -26,9 +26,9 @@ class Module(Base):
         # encoder and self-attention
         # [batch, sentance, out_feat]
         self.enc = nn.LSTM(args.demb, args.dhid, bidirectional=True, batch_first=True)
+        self.device = torch.device("cuda:%d" % args.gpu_id if torch.cuda.is_available() and args.gpu else "cpu")
         self.enc_att = vnn.SelfAttn(args.dhid*2)
-        if torch.cuda.device_count() > 1:
-            self.enc = self.enc.to("cuda:1")
+        self.enc = self.enc.to(device=self.device)
 
         # subgoal monitoring
         self.subgoal_monitoring = (self.args.pm_aux_loss_wt >
@@ -36,10 +36,11 @@ class Module(Base):
 
         # gcn
         if "model_hete_graph" in args and args.model_hete_graph:
-            self.gcn = HETLOWSG(self.args.HETAttention, args.dgcnout, args.gpu_id) if args.HetLowSg else NetGCN(self.args.HETAttention, args.dgcnout, args.gpu_id)
+            if "HETAttention" not in self.args:
+                self.args.HETAttention = False
+            self.gcn = HETLOWSG(self.args.HETAttention, args.dgcnout, self.device) if "HetLowSg" in args and args.HetLowSg else NetGCN(self.args.HETAttention, args.dgcnout, self.device)
         else:
             self.gcn = GCNVisual(args.dgcnout) if args.gcn_cat_visaul else GCN(args.dgcnout)
-        device = torch.device("cuda:%d" % args.gpu_id if torch.cuda.is_available() else "cpu")
         # self.gcn = self.gcn.to(device)
         self.enc_depth = vnn.VisualEncoder(args.dframe)
         # self.enc_depth = self.enc_depth.to(device)
@@ -55,8 +56,7 @@ class Module(Base):
                            actor_dropout=args.actor_dropout,
                            input_dropout=args.input_dropout,
                            teacher_forcing=args.dec_teacher_forcing)
-        if torch.cuda.device_count() > 1:
-            self.dec = self.dec.to("cuda:1")
+        self.dec = self.dec.to(device=self.device)
 
         # dropouts
         self.vis_dropout = nn.Dropout(args.vis_dropout)
@@ -75,6 +75,7 @@ class Module(Base):
         # paths
         self.root_path = os.getcwd()
         self.feat_pt = 'feat_conv.pt'
+        self.feat_depth_pt = 'feat_depth.pt'
         self.feat_depth = 'depth_images'
 
         # params
@@ -227,32 +228,44 @@ class Module(Base):
         key_name: "frames_depth" or other
         list_img_traj: traj_data["images"]. To chose feat[key_name] file
         """
+        def _load_with_path():
+            frames_depth = None
+            low_idx = -1
+            for i, dict_frame in enumerate(list_img_traj):
+                # 60 actions need 61 frames
+                if low_idx != dict_frame["low_idx"] or i == 1:
+                    low_idx = dict_frame["low_idx"]
+                else:
+                    continue
+                name_frame = dict_frame["image_name"].split(".")[0]
+                frame_path = os.path.join(path, name_frame + ".png")
+                # for debug
+                if platform == "win32":
+                    frame_path = "D:\\AI2\\homealfreddatafull_2.1.0trainpick_clean_then_place_in_recep-Lettuc\\000000160.jpg"
+                if os.path.isfile(frame_path):
+                    img_depth = cv2.imread(frame_path, 0)
+                else:
+                    # print("file is not exist: {}".format(frame_path))
+                    img_depth = np.zeros(img_depth.shape[1:])
+                img_depth = torch.tensor(img_depth, dtype=torch.int).unsqueeze(0)
+                if frames_depth is None:
+                    frames_depth = img_depth
+                else:
+                    frames_depth = torch.cat([frames_depth, img_depth], dim=0)
+            torch.save(frames_depth, os.path.join(root, self.feat_depth_pt))
+            return frames_depth
+        def _load_with_pt():
+            frames_depth = torch.load(os.path.join(root, self.feat_depth_pt))
+            return frames_depth
         path = os.path.join(os.getcwd(), root)
-        frames_depth = None
-        low_idx = -1
-        for i, dict_frame in enumerate(list_img_traj):
-            # 60 actions need 61 frames
-            if low_idx != dict_frame["low_idx"] or i == 1:
-                low_idx = dict_frame["low_idx"]
-            else:
-                continue
-            name_frame = dict_frame["image_name"].split(".")[0]
-            frame_path = os.path.join(path, name_frame + ".png")
-            # for debug
-            if platform == "win32":
-                frame_path = "D:\\AI2\\homealfreddatafull_2.1.0trainpick_clean_then_place_in_recep-Lettuc\\000000160.jpg"
-            if os.path.isfile(frame_path):
-                img_depth = cv2.imread(frame_path, 0)
-            else:
-                # print("file is not exist: {}".format(frame_path))
-                img_depth = np.zeros(img_depth.shape[1:])
-            img_depth = torch.tensor(img_depth, dtype=torch.int8).unsqueeze(0)
-            if frames_depth is None:
-                frames_depth = img_depth
-            else:
-                frames_depth = torch.cat([frames_depth, img_depth], dim=0)
-        # import pdb; pdb.set_trace()
+        path_feat_depth = os.path.join(path, "feat_depth.pt")
+        if os.path.isfile(path_feat_depth) and False:
+            frames_depth = _load_with_pt()
+        else:
+            print("feat_depth.pt doesn't exist: {}".format(path_feat_depth))
+            frames_depth = _load_with_path()
         # feat["frames_depth"]
+        # import pdb; pdb.set_trace()
         feat[key_name].append(frames_depth)
 
     def forward(self, feat, max_decode=300):
@@ -309,12 +322,14 @@ class Module(Base):
         # previous action embedding
         e_t = self.embed_action(prev_action) if prev_action is not None else self.r_state['e_t']
 
+        frames_depth = torch.tensor(feat['frames_depth'], dtype=torch.float, device=self.device)
+        frames_depth = frames_depth.unsqueeze(0).unsqueeze(0)
+        frames_depth = self.enc_depth(frames_depth)
         gcn_embedding = self.gcn(feat['frames'])
-        gcn_embedding = gcn_embedding.squeeze(0)
         # decode and save embedding and hidden states
         out_action_low, out_action_low_mask, state_t, * \
             _ = self.dec.step(self.r_state['enc_lang'], feat['frames']
-                              [:, 0], e_t=e_t, state_tm1=self.r_state['state_t'], gcn_embedding=gcn_embedding)
+                              [:, 0], e_t=e_t, state_tm1=self.r_state['state_t'], gcn_embedding=gcn_embedding, frames_depth=frames_depth[:, 0])
 
         # save states
         self.r_state['state_t'] = state_t

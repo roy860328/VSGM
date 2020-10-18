@@ -35,7 +35,7 @@ def load_heterograph_data(LowSg=False):
     if LowSg:
         graph_data[('lowaction', 'belone', 'subgoal')] = read_edge(PATH_LOWACTION_SUBGOAL)
         graph_data[('subgoal', 'belone', 'lowaction')] = read_edge(PATH_SUBGOAL_LOWACTION)
-    # graph
+    # graph_data
     g = dgl.heterograph(graph_data)
     # nodes
     g.nodes['object'].data['feature'] = read_node_data(PATH_OBJECT)
@@ -78,11 +78,10 @@ class NetGCN(nn.Module):
         o_feats_dgcn : int
         '''
         super(NetGCN, self).__init__()
-        self.device = torch.device("cuda:%d" % device if torch.cuda.is_available() else "cpu")
         self.HETAttention = HETAttention
         # graph data
         self.g = load_heterograph_data()
-        self.g = self.g.to(self.device)
+        self.device = device
         # para define
         in_feats = self.g.nodes['object'].data['feature'].shape[1]
         if self.HETAttention:
@@ -134,7 +133,7 @@ class HETLOWSG(nn.Module):
         o_feats_dgcn : int
         '''
         super(HETLOWSG, self).__init__()
-        self.device = torch.device("cuda:%d" % device if torch.cuda.is_available() else "cpu")
+        self.device = device
         self.HETAttention = HETAttention
         # graph data
         self.g = load_heterograph_data(LowSg=True)

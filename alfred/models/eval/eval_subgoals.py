@@ -92,6 +92,8 @@ class EvalSubgoals(Eval):
             # extract visual feats
             curr_image = Image.fromarray(np.uint8(env.last_event.frame))
             feat['frames'] = resnet.featurize([curr_image], batch=1).unsqueeze(0)
+            curr_depth_image = np.uint8(env.last_event.depth_frame)
+            feat['frames_depth'] = curr_depth_image
 
             # expert teacher-forcing upto subgoal
             if t < len(expert_init_actions):

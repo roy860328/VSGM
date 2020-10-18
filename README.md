@@ -77,14 +77,14 @@ python models/eval/eval_seq2seq.py --model_path exp/model,gcn_im,name,pm_and_sub
 
 ### eval hete graph
 ```
-python models/eval/eval_graph.py --model_path exp/{model_path}}/best_seen.pth --model models.model.gcn_im --data data/json_feat_2.1.0 --gpu --gpu_id 0 --model_hete_graph
+python models/eval/eval_graph.py --model_path exp/{model_path}}/best_seen.pth --model models.model.gcn_im --data data/full_2.1.0/ --gpu --gpu_id 0 --model_hete_graph
 ```
 --eval_split ['train', 'valid_seen', 'valid_unseen', ]
 --subgoals ['all', 'GotoLocation', 'PickupObject', ...]
 ### Leaderboard
 ```
 cd alfred
-python models/eval/leaderboard.py --model_path <model_path>/model.pth --model models.model.seq2seq_im_mask --data data/json_feat_2.1.0 --gpu --num_threads 5
+python models/eval/leaderboard.py --model_path <model_path>/model.pth --model models.model.seq2seq_im_mask --data data/full_2.1.0/ --gpu --num_threads 5
 ```
 
 ---
@@ -125,6 +125,14 @@ python create_dgl_data.py
 --object 
 --verb
 ```
+
+## analize verb in ALFRED
+Prerequire
+```
+seaborn
+scipy
+```
+
 
 ---
 ---

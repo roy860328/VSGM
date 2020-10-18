@@ -71,7 +71,9 @@ class EvalTask(Eval):
             # env.last_event: dict_keys(['metadata', 'screen_width', 'screen_height', 'frame', 'depth_frame', 'normals_frame', 'flow_frame', 'color_to_object_id', 'object_id_to_color', 'instance_detections2D', 'instance_masks', 'class_masks', 'instance_segmentation_frame', 'class_segmentation_frame', 'class_detections2D', 'third_party_camera_frames', 'third_party_class_segmentation_frames', 'third_party_instance_segmentation_frames', 'third_party_depth_frames', 'third_party_normals_frames', 'third_party_flows_frames', 'events'])
             curr_image = Image.fromarray(np.uint8(env.last_event.frame))
             feat['frames'] = resnet.featurize([curr_image], batch=1).unsqueeze(0)
-
+            curr_depth_image = np.uint8(env.last_event.depth_frame)
+            feat['frames_depth'] = curr_depth_image
+            
             # forward model
             m_out = model.step(feat)
             m_pred = model.extract_preds(m_out, [traj_data], feat, clean_special_tokens=False)

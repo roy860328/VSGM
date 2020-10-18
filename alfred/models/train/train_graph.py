@@ -67,9 +67,9 @@ if __name__ == '__main__':
     parser.add_argument('--dataset_fraction', help='use fraction of the dataset for debugging (0 indicates full size)', default=0, type=int)
 
     # graph model
-    parser.add_argument('--model_hete_graph', help='use gpu', action='store_true')
-    parser.add_argument('--HETAttention', help='use attention', action='store_true')
-    parser.add_argument('--HetLowSg', help='use attention', action='store_true')
+    parser.add_argument('--model_hete_graph', help='', action='store_true')
+    parser.add_argument('--HETAttention', help='', action='store_true')
+    parser.add_argument('--HetLowSg', help='', action='store_true')
 
     # args and init
     args = parser.parse_args()
