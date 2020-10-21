@@ -109,9 +109,9 @@ if __name__ == '__main__':
 
     # to gpu
     if args.gpu:
-        model = model.to(torch.device('cuda'))
+        model = model.to(torch.device('cuda:%d' % args.gpu_id))
         if not optimizer is None:
-            optimizer_to(optimizer, torch.device('cuda'))
+            optimizer_to(optimizer, torch.device('cuda:%d' % args.gpu_id))
 
     # start train loop
     model.run_train(splits, optimizer=optimizer)

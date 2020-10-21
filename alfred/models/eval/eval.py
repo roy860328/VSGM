@@ -31,7 +31,8 @@ class Eval(object):
         M = import_module(self.args.model)
         device = torch.device("cuda:{}".format(self.args.gpu_id) if torch.cuda.is_available() and self.args.gpu else "cpu")
         share_memory = False
-        self.model, optimizer = M.Module.load(self.args.model_path, device, use_gpu=False)
+        # import pdb; pdb.set_trace()
+        self.model, optimizer = M.Module.load(self.args.model_path, device, use_gpu=self.args.gpu, gpu_id=self.args.gpu_id)
         self.model = self.model.to(device)
         if share_memory:
             self.model.share_memory()
@@ -52,10 +53,6 @@ class Eval(object):
         # load resnet
         args.visual_model = 'resnet18'
         self.resnet = Resnet(args, eval=True, share_memory=share_memory, use_conv_feat=True)
-
-        # gpu
-        if self.args.gpu:
-            self.model = self.model.to(torch.device('cuda'))
 
         # success and failure lists
         self.create_stats()

@@ -1,4 +1,5 @@
 import os
+import sys
 import random
 import json
 import torch
@@ -9,6 +10,9 @@ from torch import nn
 from tensorboardX import SummaryWriter
 from tqdm import trange
 from sys import platform
+sys.path.append(os.path.join(os.environ['ALFRED_ROOT'], '..', 'graph_analysis'))
+import fastText_embedding
+from torchnlp.word_to_vector import FastText
 
 class Module(nn.Module):
 
@@ -27,10 +31,11 @@ class Module(nn.Module):
         self.vocab = vocab
 
         # emb modules
+        assert args.demb == 300, "demb dim must be same with fastText model 300 dim"
+        # self.ft_model = fastText_embedding.load_model()
+        self.ft_model = FastText()
+        self.ft_model["test"]
         self.emb_word = nn.Embedding(len(vocab['word']), args.demb)
-        # self.vocab['action_low'].index2word(list(range(0, len(vocab['action_low']))))
-        # self.vocab['action_high'].index2word(list(range(0, len(vocab['action_high']))))
-        # self.vocab['word'].index2word(list(range(0, len(vocab['word']))))
         self.emb_action_low = nn.Embedding(len(vocab['action_low']), args.demb)
 
         # end tokens
@@ -247,6 +252,11 @@ class Module(nn.Module):
     def compute_metric(self, preds, data):
         raise NotImplementedError()
 
+    def get_faxtText_embedding(self, text):
+        text = text.lower()
+        return self.ft_model[text]
+        return self.ft_model.get_word_vector(text)
+
     def get_task_and_ann_id(self, ex):
         '''
         single string for task_id and annotation repeat idx
@@ -321,14 +331,12 @@ class Module(nn.Module):
             param_group['lr'] = lr
 
     @classmethod
-    def load(cls, fsave, device=None, use_gpu=None, gpu_id=1):
+    def load(cls, fsave, device=None, use_gpu=None):
         '''
         load pth model from disk
         '''
         save = torch.load(fsave, map_location=device)
         save['args'].gpu = use_gpu if use_gpu == False else save['args'].gpu
-        save['args'].gpu_id = gpu_id
-        # import pdb; pdb.set_trace()
         model = cls(save['args'], save['vocab'])
         model.load_state_dict(save['model'])
         model = model.to(device=device)

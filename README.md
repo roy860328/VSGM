@@ -5,6 +5,7 @@ conda install -c menpo opencv
 conda install -c dglteam dgl-cuda9.0
 pip install rdflib==4.2.2
 pip install fasttext
+pip install pytorch-nlp
 ```
 
 # Run Model
@@ -15,7 +16,8 @@ cd gcn/alfred
 # linux
 export ALFRED_ROOT=/home/host/gcn/alfred/
 # windows
-SET ALFRED_ROOT=D:\gcn\alfred
+SET ALFRED_ROOT=D:\HetG\alfred
+SET ALFRED_ROOT=D:\alfred\alfred
 ```
 
 
@@ -46,6 +48,18 @@ python models/train/train_graph.py --data data/json_feat_2.1.0/ --model gcn_im -
 ```
 
 ### depth image
+- You must generate depth image first
+
+#### Gen depth image
+```
+cd alfred/gen
+python scripts/augment_trajectories.py --data_path ../data/full_2.1.0/ --num_threads 4 --smooth_nav --time_delays
+```
+#### check current generate state
+```
+python scripts/check_augment_state.py --data_path ../data/full_2.1.0/
+```
+#### Run model
 ```
 cd alfred
 python models/train/train_graph.py --data data/full_2.1.0/ --model gcn_depth_im --dout exp/model,heterograph_depth_{model},name,pm_and_subgoals_01 --splits data/splits/oct21.json --gpu --batch 4 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --gpu_id 1
@@ -60,6 +74,11 @@ python models/train/train_graph.py --data data/full_2.1.0/ --model gcn_depth_im 
 1. install https://github.com/allenai/ai2thor-docker
 2. 		
 (alfred: https://medium.com/@etendue2013/how-to-run-ai2-thor-simulation-fast-with-google-cloud-platform-gcp-c9fcde213a4a)
+	- ...
+	- user console run the X server
+```
+python3 scripts/startx.py
+```
 
 #### result
 XSERVTransSocketUNIXCreateListener: ...SocketCreateListener() failed
@@ -79,6 +98,7 @@ python models/eval/eval_seq2seq.py --model_path exp/model,gcn_im,name,pm_and_sub
 ```
 python models/eval/eval_graph.py --model_path exp/{model_path}}/best_seen.pth --model models.model.gcn_im --data data/full_2.1.0/ --gpu --gpu_id 0 --model_hete_graph
 ```
+--HETAttention --dgcnout 1024 --HetLowSg
 --eval_split ['train', 'valid_seen', 'valid_unseen', ]
 --subgoals ['all', 'GotoLocation', 'PickupObject', ...]
 ### Leaderboard
@@ -134,18 +154,6 @@ scipy
 ```
 
 
----
----
-
-# Gen depth image
-```
-cd alfred/gen
-python scripts/augment_trajectories.py --data_path ../data/full_2.1.0/ --num_threads 4 --smooth_nav --time_delays
-```
-## check current generate state
-```
-python scripts/check_augment_state.py --data_path ../data/full_2.1.0/
-```
 
 ---
 ---

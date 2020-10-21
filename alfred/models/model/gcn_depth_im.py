@@ -248,18 +248,22 @@ class Module(Base):
                     # print("file is not exist: {}".format(frame_path))
                     img_depth = np.zeros(img_depth.shape[1:])
                 img_depth = torch.tensor(img_depth, dtype=torch.int).unsqueeze(0)
+
                 if frames_depth is None:
                     frames_depth = img_depth
                 else:
                     frames_depth = torch.cat([frames_depth, img_depth], dim=0)
-            torch.save(frames_depth, os.path.join(root, self.feat_depth_pt))
+            try:
+                torch.save(frames_depth, os.path.join(root, self.feat_depth_pt))
+            except Exception as e:
+                print("No such path")
             return frames_depth
         def _load_with_pt():
             frames_depth = torch.load(os.path.join(root, self.feat_depth_pt))
             return frames_depth
         path = os.path.join(os.getcwd(), root)
         path_feat_depth = os.path.join(path, "feat_depth.pt")
-        if os.path.isfile(path_feat_depth) and False:
+        if os.path.isfile(path_feat_depth):
             frames_depth = _load_with_pt()
         else:
             print("feat_depth.pt doesn't exist: {}".format(path_feat_depth))

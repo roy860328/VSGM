@@ -6,6 +6,10 @@ import numpy as np
 import pandas as pd
 import dgl.function as fn
 import dgl.nn.pytorch as dglnn
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 # import nn.vnn as vnn
 # nodes
 PATH_OBJECT = '../graph_analysis/data_dgl/object.csv'
@@ -19,9 +23,14 @@ PATH_ROOM_OBJECT = '../graph_analysis/data_dgl/room-interact-object.csv'
 PATH_ATTRIBUTE_OBJECT = '../graph_analysis/data_dgl/attribute-behave-object.csv'
 PATH_LOWACTION_SUBGOAL = '../graph_analysis/data_dgl/lowaction-interact-subgoal.csv'
 PATH_SUBGOAL_LOWACTION = '../graph_analysis/data_dgl/subgoal-interact-lowaction.csv'
-
+# SET LABEL
+SET_OBJECT_LABEL = 0
+SET_LOWACTION_LABEL = 1
+SET_SUBGOAL_LABEL = 2
 
 # import pdb; pdb.set_trace()
+
+
 def load_heterograph_data(LowSg=False):
     # edges
     # src_objectobject, dst_objectobject = read_edge(PATH_OBJECT_OBJECT)
@@ -82,6 +91,7 @@ class NetGCN(nn.Module):
         # graph data
         self.g = load_heterograph_data()
         self.device = device
+        self.g = self.g.to(self.device)
         # para define
         in_feats = self.g.nodes['object'].data['feature'].shape[1]
         if self.HETAttention:
@@ -127,7 +137,7 @@ class NetGCN(nn.Module):
 # https://docs.dgl.ai/en/latest/api/python/nn.pytorch.html#dgl.nn.pytorch.HeteroGraphConv
 # https://docs.dgl.ai/en/latest/guide/nn-heterograph.html
 class HETLOWSG(nn.Module):
-    def __init__(self, HETAttention, o_feats_dgcn, device=0):
+    def __init__(self, HETAttention, o_feats_dgcn, device="cpu"):
         '''
         HETAttention : bool
         o_feats_dgcn : int

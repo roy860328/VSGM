@@ -5,10 +5,12 @@ import torch
 import pprint
 import collections
 import numpy as np
+from model.dgl_pretrain_hete import THETLOWSG
 from torch import nn
 from tensorboardX import SummaryWriter
 from tqdm import trange
 from sys import platform
+
 
 class Module(nn.Module):
 
@@ -26,6 +28,7 @@ class Module(nn.Module):
         self.args = args
         self.vocab = vocab
 
+        self.device = torch.device("cuda:%d" % args.gpu_id if torch.cuda.is_available() and args.gpu else "cpu")
         # emb modules
         self.emb_word = nn.Embedding(len(vocab['word']), args.demb)
         # self.vocab['action_low'].index2word(list(range(0, len(vocab['action_low']))))
@@ -36,6 +39,7 @@ class Module(nn.Module):
         # end tokens
         self.stop_token = self.vocab['action_low'].word2index("<<stop>>", train=False)
         self.seg_token = self.vocab['action_low'].word2index("<<seg>>", train=False)
+        self.gcn = THETLOWSG(args, self.args.HETAttention, args.dgcnout, self.device)
 
         # set random seed (Note: this is not the seed used to initialize THOR object locations)
         random.seed(a=args.seed)
@@ -83,12 +87,16 @@ class Module(nn.Module):
         # optimizer
         optimizer = optimizer or torch.optim.Adam(self.parameters(), lr=args.lr)
 
+        # pretrain graph
+        for i in range(200):
+            self.gcn.train_nodes(optimizer, self.summary_writer)
         # display dout
         print("Saving to: %s" % self.args.dout)
         best_loss = {'train': 1e10, 'valid_seen': 1e10, 'valid_unseen': 1e10}
         train_iter, valid_seen_iter, valid_unseen_iter = 0, 0, 0
         for epoch in trange(0, args.epoch, desc='epoch'):
             m_train = collections.defaultdict(list)
+            self.gcn.train_nodes(self.summary_writer)
             self.train()
             self.adjust_lr(optimizer, args.lr, epoch, decay_epoch=args.decay_epoch)
             # p_train = {}

@@ -50,6 +50,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_hete_graph', help='', action='store_true')
     parser.add_argument('--HETAttention', help='', action='store_true')
     parser.add_argument('--HetLowSg', help='', action='store_true')
+    parser.add_argument('--dgcnout', help='gcn embedding size', default=512, type=int)
 
     # parse arguments
     args = parser.parse_args()

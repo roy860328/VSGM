@@ -24,6 +24,9 @@ def load_object_interact_object():
         feature.extend([nodes_data['feature.{}'.format(i)].to_list()])
     feature = torch.tensor(feature).float().transpose(0, 1)
     g.ndata.update({'Ids': Ids, 'feature': feature})
+
+    import pdb; pdb.set_trace()
+    g.edges()
     return g
 
 

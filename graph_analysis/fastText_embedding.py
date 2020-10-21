@@ -24,6 +24,9 @@ def test_load_vectors(fname):
 
 # can process n'gram
 def load_model(fname="./data/cc.en.300.bin", is_debug=False):
+    if not os.path.isfile(fname):
+        path_file = os.path.dirname(os.path.abspath(__file__))
+        fname = os.path.join(path_file, fname)
     model = fasttext.load_model(fname)
     if is_debug:
         print(model.get_dimension())
