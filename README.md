@@ -79,6 +79,12 @@ python models/train/train_graph.py --data data/full_2.1.0/ --model Het          
 python models/eval/eval_graph.py --model_path exp/model,heterograph_noDepth_attention_HeteG_noDepth_im,name,pm_and_subgoals_01_21-10-2020_05-24-02/latest.pth --model models.model.HeteG_noDepth_im --data data/full_2.1.0/ --model_hete_graph --HETAttention --dgcnout 1024 --HetLowSg --eval_split train
 ```
 
+### HetG + graph attention + fasttext
+```
+python models/train/train_graph.py --data data/full_2.1.0/ --model fast_embedding_im --dout exp/model,heterograph__attention_{model},name,pm_and_subgoals_01 --splits data/splits/oct21.json --gpu --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --HETAttention --dgcnout 1024 --demb 300 --HetLowSg --gpu_id 0
+
+```
+
 ## Eval
 ### Build AI2-THOR method
 1. install https://github.com/allenai/ai2thor-docker

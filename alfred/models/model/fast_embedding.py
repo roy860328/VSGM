@@ -253,9 +253,7 @@ class Module(nn.Module):
         raise NotImplementedError()
 
     def get_faxtText_embedding(self, text):
-        text = text.lower()
         return self.ft_model[text]
-        return self.ft_model.get_word_vector(text)
 
     def get_task_and_ann_id(self, ex):
         '''

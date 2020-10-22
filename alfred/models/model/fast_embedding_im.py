@@ -42,14 +42,11 @@ class Module(Base):
         else:
             self.gcn = GCNVisual(args.dgcnout) if args.gcn_cat_visaul else GCN(args.dgcnout)
         # self.gcn = self.gcn.to(device)
-        self.enc_depth = vnn.VisualEncoder(args.dframe)
-        # self.enc_depth = self.enc_depth.to(device)
 
         # frame mask decoder
         # decoder = vnn.ConvFrameMaskDecoderProgressMonitor if self.subgoal_monitoring else vnn.ConvFrameMaskDecoder
-        decoder = vnn.DepthConvFrameMaskAttentionDecoderProgressMonitor if args.HETAttention else vnn.DepthConvFrameMaskDecoderProgressMonitor
+        decoder = vnn.ConvFrameMaskAttentionDecoderProgressMonitor
         self.dec = decoder(self.emb_action_low, args.dframe, 2*args.dhid, args.dgcnout,
-                           args.dframedepth,
                            pframe=args.pframe,
                            attn_dropout=args.attn_dropout,
                            hstate_dropout=args.hstate_dropout,
@@ -113,16 +110,18 @@ class Module(Base):
             #########
             # serialize segments
             self.serialize_lang_action(ex)
-
             # goal and instr language
             lang_goal, lang_instr = ex['num']['lang_goal'], ex['num']['lang_instr']
-
-            # zero inputs if specified
-            lang_goal = self.zero_input(lang_goal) if self.args.zero_goal else lang_goal
-            lang_instr = self.zero_input(lang_instr) if self.args.zero_instr else lang_instr
+            lang_goal_instr = lang_goal + lang_instr
+            # goal and instr language
+            lang_goal, lang_instr = ex['ann']['goal'], ex['ann']['instr']
 
             # append goal + instr
-            lang_goal_instr = lang_goal + lang_instr
+            lang_goal_instr = []
+            for string in lang_goal:
+                lang_goal_instr.append(string.strip())
+            for list_string in lang_instr:
+                lang_goal_instr.extend([string.strip() for string in list_string])
             feat['lang_goal_instr'].append(lang_goal_instr)
 
             # load Resnet features from disk
@@ -130,8 +129,8 @@ class Module(Base):
                 root = self.get_task_root(ex)
                 im = torch.load(os.path.join(root, self.feat_pt))
                 # depth
-                path_img_depth = os.path.join(root, self.feat_depth)
-                self._load_img(feat, path_img_depth, "frames_depth", ex["images"])
+                # path_img_depth = os.path.join(root, self.feat_depth)
+                # self._load_img(feat, path_img_depth, "frames_depth", ex["images"])
 
                 num_low_actions = len(ex['plan']['low_actions'])
                 num_feat_frames = im.shape[0]
@@ -170,14 +169,11 @@ class Module(Base):
         for k, v in feat.items():
             if k in {'lang_goal_instr'}:
                 # language embedding and padding
-                # import pdb; pdb.set_trace()
-                seqs = [torch.tensor(vv, device=device) for vv in v]
+                seqs = [self.get_faxtText_embedding(vv).to(device=device) for vv in v]
                 pad_seq = pad_sequence(seqs, batch_first=True, padding_value=self.pad)
                 seq_lengths = np.array(list(map(len, v)))
-                embed_seq = self.emb_word(pad_seq)
-                # embed_seq = self.ft_model.get_faxtText_embedding(pad_seq)
                 packed_input = pack_padded_sequence(
-                    embed_seq, seq_lengths, batch_first=True, enforce_sorted=False)
+                    pad_seq, seq_lengths, batch_first=True, enforce_sorted=False)
                 feat[k] = packed_input
             elif k in {'action_low_mask'}:
                 # mask padding
@@ -221,65 +217,13 @@ class Module(Base):
         mask = np.expand_dims(mask, axis=0)
         return mask
 
-    # according to traj.json to load depth image
-    def _load_img(self, feat, root, key_name, list_img_traj):
-        """
-        feat: for save image feature
-        root: image path
-        key_name: "frames_depth" or other
-        list_img_traj: traj_data["images"]. To chose feat[key_name] file
-        """
-        def _load_with_path():
-            frames_depth = None
-            low_idx = -1
-            for i, dict_frame in enumerate(list_img_traj):
-                # 60 actions need 61 frames
-                if low_idx != dict_frame["low_idx"] or i == 1:
-                    low_idx = dict_frame["low_idx"]
-                else:
-                    continue
-                name_frame = dict_frame["image_name"].split(".")[0]
-                frame_path = os.path.join(path, name_frame + ".png")
-                # for debug
-                if platform == "win32":
-                    frame_path = "D:\\AI2\\homealfreddatafull_2.1.0trainpick_clean_then_place_in_recep-Lettuc\\000000160.jpg"
-                if os.path.isfile(frame_path):
-                    img_depth = cv2.imread(frame_path, 0)
-                else:
-                    # print("file is not exist: {}".format(frame_path))
-                    img_depth = np.zeros(img_depth.shape[1:])
-                img_depth = torch.tensor(img_depth, dtype=torch.int).unsqueeze(0)
-                if frames_depth is None:
-                    frames_depth = img_depth
-                else:
-                    frames_depth = torch.cat([frames_depth, img_depth], dim=0)
-            try:
-                torch.save(frames_depth, os.path.join(root, self.feat_depth_pt))
-            except Exception as e:
-                print("No such path")
-            return frames_depth
-        def _load_with_pt():
-            frames_depth = torch.load(os.path.join(root, self.feat_depth_pt))
-            return frames_depth
-        path = os.path.join(os.getcwd(), root)
-        path_feat_depth = os.path.join(path, "feat_depth.pt")
-        if os.path.isfile(path_feat_depth):
-            frames_depth = _load_with_pt()
-        else:
-            print("feat_depth.pt doesn't exist: {}".format(path_feat_depth))
-            frames_depth = _load_with_path()
-        # feat["frames_depth"]
-        # import pdb; pdb.set_trace()
-        feat[key_name].append(frames_depth)
-
     def forward(self, feat, max_decode=300):
         cont_lang, enc_lang = self.encode_lang(feat)
         state_0 = cont_lang, torch.zeros_like(cont_lang)
         # import pdb; pdb.set_trace()
         frames = self.vis_dropout(feat['frames'])
-        frames_depth = self.enc_depth(feat['frames_depth'])
         gcn_embedding = self.gcn(frames)
-        res = self.dec(enc_lang, frames, gcn_embedding, frames_depth, max_decode=max_decode,
+        res = self.dec(enc_lang, frames, gcn_embedding, max_decode=max_decode,
                        gold=feat['action_low'], state_0=state_0)
         feat.update(res)
         return feat
@@ -326,14 +270,11 @@ class Module(Base):
         # previous action embedding
         e_t = self.embed_action(prev_action) if prev_action is not None else self.r_state['e_t']
 
-        frames_depth = torch.tensor(feat['frames_depth'], dtype=torch.float, device=self.device)
-        frames_depth = frames_depth.unsqueeze(0).unsqueeze(0)
-        frames_depth = self.enc_depth(frames_depth)
         gcn_embedding = self.gcn(feat['frames'])
         # decode and save embedding and hidden states
         out_action_low, out_action_low_mask, state_t, * \
             _ = self.dec.step(self.r_state['enc_lang'], feat['frames']
-                              [:, 0], e_t=e_t, state_tm1=self.r_state['state_t'], gcn_embedding=gcn_embedding, frames_depth=frames_depth[:, 0])
+                              [:, 0], e_t=e_t, state_tm1=self.r_state['state_t'], gcn_embedding=gcn_embedding)
 
         # save states
         self.r_state['state_t'] = state_t

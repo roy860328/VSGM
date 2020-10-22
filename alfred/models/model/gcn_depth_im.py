@@ -174,6 +174,7 @@ class Module(Base):
                 seqs = [torch.tensor(vv, device=device) for vv in v]
                 pad_seq = pad_sequence(seqs, batch_first=True, padding_value=self.pad)
                 seq_lengths = np.array(list(map(len, v)))
+                import pdb; pdb.set_trace()
                 embed_seq = self.emb_word(pad_seq)
                 packed_input = pack_padded_sequence(
                     embed_seq, seq_lengths, batch_first=True, enforce_sorted=False)

@@ -74,9 +74,9 @@ class EvalTask(Eval):
             image = np.uint8(env.last_event.frame)
             curr_image = Image.fromarray(image)
             feat['frames'] = resnet.featurize([curr_image], batch=1).unsqueeze(0)
-            curr_depth_image = np.uint8(env.last_event.depth_frame)
+            curr_depth_image = env.last_event.depth_frame * (255 / 10000)
+            curr_depth_image = curr_depth_image.astype(np.uint8)
             feat['frames_depth'] = curr_depth_image
-
             # forward model
             m_out = model.step(feat)
             m_pred = model.extract_preds(m_out, [traj_data], feat, clean_special_tokens=False)
