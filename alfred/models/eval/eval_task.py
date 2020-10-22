@@ -5,6 +5,7 @@ from PIL import Image
 from datetime import datetime
 from eval import Eval
 from env.thor_env import ThorEnv
+from models.utils.save_video import images_to_video
 
 class EvalTask(Eval):
     '''
@@ -55,6 +56,8 @@ class EvalTask(Eval):
         # goal instr
         goal_instr = traj_data['turk_annotations']['anns'][r_idx]['task_desc']
 
+        images, depths, list_actions = [], [], []
+        fail_reason = ''
         done, success = False, False
         fails = 0
         t = 0
@@ -65,15 +68,15 @@ class EvalTask(Eval):
                 break
 
             # extract visual features
-            # import pdb; pdb.set_trace()
             # env: {'request_queue': <queue.Queue object at 0x7f67452990b8>, 'response_queue': <queue.Queue object at 0x7f673d062438>, 'receptacle_nearest_pivot_points': {}, 'server': <ai2thor.server.Server object at 0x7f673d062518>, 'unity_pid': 12716, 'docker_enabled': False, 'container_id': None, 'local_executable_path': None, 'last_event': <ai2thor.server.Event object at 0x7f671419f8d0>, 'server_thread': <Thread(Thread-1, started daemon 140078244427520)>, 'killing_unity': False, 'quality': 'MediumCloseFitShadows', 'lock_file': <_io.TextIOWrapper name='/root/.ai2thor/releases/thor-201909061227-Linux64/.lock' mode='w' encoding='ANSI_X3.4-1968'>, 'fullscreen': False, 'headless': False, 'task': <env.tasks.PickHeatThenPlaceInRecepTask object at 0x7f671419f898>, 'cleaned_objects': set(), 'cooled_objects': set(), 'heated_objects': set(), 'last_action': {'action': 'TeleportFull', 'horizon': 30, 'rotateOnTeleport': True, 'rotation': {'y': 180}, 'x': -2.25, 'y': 0.8995012, 'z': 2.5, 'sequenceId': 4}}
             # env: dict_keys(['request_queue', 'response_queue', 'receptacle_nearest_pivot_points', 'server', 'unity_pid', 'docker_enabled', 'container_id', 'local_executable_path', 'last_event', 'server_thread', 'killing_unity', 'quality', 'lock_file', 'fullscreen', 'headless', 'task', 'cleaned_objects', 'cooled_objects', 'heated_objects', 'last_action'])
             # env.last_event: dict_keys(['metadata', 'screen_width', 'screen_height', 'frame', 'depth_frame', 'normals_frame', 'flow_frame', 'color_to_object_id', 'object_id_to_color', 'instance_detections2D', 'instance_masks', 'class_masks', 'instance_segmentation_frame', 'class_segmentation_frame', 'class_detections2D', 'third_party_camera_frames', 'third_party_class_segmentation_frames', 'third_party_instance_segmentation_frames', 'third_party_depth_frames', 'third_party_normals_frames', 'third_party_flows_frames', 'events'])
-            curr_image = Image.fromarray(np.uint8(env.last_event.frame))
+            image = np.uint8(env.last_event.frame)
+            curr_image = Image.fromarray(image)
             feat['frames'] = resnet.featurize([curr_image], batch=1).unsqueeze(0)
             curr_depth_image = np.uint8(env.last_event.depth_frame)
             feat['frames_depth'] = curr_depth_image
-            
+
             # forward model
             m_out = model.step(feat)
             m_pred = model.extract_preds(m_out, [traj_data], feat, clean_special_tokens=False)
@@ -91,7 +94,7 @@ class EvalTask(Eval):
             # print action
             if args.debug:
                 print(action)
-            print(action)
+            # print(action)
 
             # use predicted action and mask (if available) to interact with the env
             t_success, _, _, err, _ = env.va_interact(action, interact_mask=mask, smooth_nav=args.smooth_nav, debug=args.debug)
@@ -99,18 +102,26 @@ class EvalTask(Eval):
                 fails += 1
                 if fails >= args.max_fails:
                     print("Interact API failed %d times" % fails + "; latest error '%s'" % err)
+                    fail_reason = err
                     break
 
             # next time-step
             t_reward, t_done = env.get_transition_reward()
             reward += t_reward
             t += 1
-
+            images.append(image)
+            depths.append(curr_depth_image)
+            list_actions.append(action)
         # check if goal was satisfied
         goal_satisfied = env.get_goal_satisfied()
         if goal_satisfied:
             print("Goal Reached")
             success = True
+            video_name = "S_"
+        else:
+            video_name = "F_"
+        video_name += traj_data['task_type'] + '_' + traj_data['task_id'] + str(traj_data['repeat_idx'])
+        images_to_video(model.args.dout, video_name, images, depths, list_actions, goal_instr, fail_reason)
 
 
         # goal_conditions

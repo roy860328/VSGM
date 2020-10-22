@@ -86,8 +86,8 @@ class THETLOWSG(dgl_gcn_hete.HETLOWSG):
     def train_nodes(self, opt, summary_writer):
         self.train()
         # forward propagation by using all nodes
-        dict_logits = self.predict_nodes()
         total_loss = 0
+        dict_logits = self.predict_nodes()
         for k, logits in dict_logits.items():
             node_labels = self.g.nodes[k].data['label']
             train_mask = self.g.nodes[k].data['train_mask']

@@ -6,6 +6,7 @@ conda install -c dglteam dgl-cuda9.0
 pip install rdflib==4.2.2
 pip install fasttext
 pip install pytorch-nlp
+pip install imageio
 ```
 
 # Run Model
@@ -67,6 +68,15 @@ python models/train/train_graph.py --data data/full_2.1.0/ --model gcn_depth_im 
 ### HetG + depth + graph attention
 ```
 python models/train/train_graph.py --data data/full_2.1.0/ --model gcn_depth_im --dout exp/model,heterograph_depth_attention_{model},name,pm_and_subgoals_01 --splits data/splits/oct21.json --gpu --batch 4 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --HETAttention --dgcnout 1024 --HetLowSg
+# eval
+python models/eval/eval_graph.py --model_path exp/model,heterograph_oratls_depth_attention_gcn_depth_im,name,pm_and_subgoals_01_19-10-2020_04-46-24/latest.pth --model models.model.gcn_depth_im --data data/full_2.1.0/ --model_hete_graph --HETAttention --dgcnout 1024 --HetLowSg --eval_split train
+```
+
+### HetG + graph attention
+```
+python models/train/train_graph.py --data data/full_2.1.0/ --model Het                G_noDepth_im --dout exp/model,heterograph_noDepth_attention_{model},name,pm_and_subgoals_01 --splits data/splits/oct21.json --gpu --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --HETAttention --dgcnout 1024 --HetLowSg
+# eval
+python models/eval/eval_graph.py --model_path exp/model,heterograph_noDepth_attention_HeteG_noDepth_im,name,pm_and_subgoals_01_21-10-2020_05-24-02/latest.pth --model models.model.HeteG_noDepth_im --data data/full_2.1.0/ --model_hete_graph --HETAttention --dgcnout 1024 --HetLowSg --eval_split train
 ```
 
 ## Eval
