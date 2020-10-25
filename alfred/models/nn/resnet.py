@@ -3,6 +3,19 @@ import torch.nn as nn
 from torchvision import models, transforms
 
 
+class Resnet2(nn.Module):
+    '''
+    pretrained Resnet18 from torchvision
+    '''
+
+    def __init__(self, args, device):
+        super().__init__()
+        self.device = device
+        self.model = models.resnet18(pretrained=True)
+        # self.model = torch.hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=True)
+        self.model = self.model.to(device=self.device)
+
+
 class Resnet18(object):
     '''
     pretrained Resnet18 from torchvision
