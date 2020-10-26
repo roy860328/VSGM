@@ -13,7 +13,19 @@ class Resnet2(nn.Module):
         self.device = device
         self.model = models.resnet18(pretrained=True)
         # self.model = torch.hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=True)
-        self.model = self.model.to(device=self.device)
+        # self.model = self.model.to(self.device)
+        for name, param in self.model.named_parameters():
+            # print(name)
+            # print(param.requires_grad)
+            if not name.startswith("fc"):
+                param.requires_grad = False
+        # import pdb; pdb.set_trace()
+
+    def forward(self, frame, device):
+        # frame = frame.to(self.device)
+        feature = self.model(frame)
+        # feature = feature.to(device)
+        return feature
 
 
 class Resnet18(object):

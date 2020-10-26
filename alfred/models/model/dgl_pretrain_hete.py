@@ -44,14 +44,14 @@ class THETLOWSG(dgl_gcn_hete.HETLOWSG):
             # edges predict, edges input "all", "uv" or "eid"
             num_edge = len(g.edges('eid', etype=c_etype))
             labels = torch.empty(num_edge, dtype=torch.long, device=self.device).fill_(ind_label)
-            train_mask = torch.zeros(num_edge, dtype=torch.int, device=self.device).bernoulli(0.6)
+            train_mask = torch.zeros(num_edge, dtype=torch.long, device=self.device).bernoulli(0.6)
             g.edges[c_etype].data['label'] = labels
             g.edges[c_etype].data['train_mask'] = train_mask
         # node predict
         for node, set_label in zip(list_predict_node, list_node_label):
             num_node = g.nodes(node).shape
             labels = torch.empty(num_node, dtype=torch.long, device=self.device).fill_(set_label)
-            train_mask = torch.zeros(num_node, dtype=torch.int, device=self.device).bernoulli(0.6)
+            train_mask = torch.zeros(num_node, dtype=torch.long, device=self.device).bernoulli(0.6)
             g.nodes[node].data['label'] = labels
             g.nodes[node].data['train_mask'] = train_mask
         return n_node_label, n_edge_label

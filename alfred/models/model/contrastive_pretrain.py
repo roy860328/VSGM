@@ -93,32 +93,11 @@ class Module(nn.Module):
         # optimizer
         optimizer = optimizer or torch.optim.Adam(self.parameters(), lr=args.lr)
 
-        train_iter = 0
+        """
+        Contrastive Learning Para
+        """
         margin = 2
-        assert args.batch >1, "batch size have to > 1 let contrastive learning train"
-        for epoch in trange(0, args.epoch, desc='epoch'):
-            random.shuffle(train)
-            self.adjust_lr(optimizer, args.lr, epoch, decay_epoch=args.decay_epoch)
-            for batch, feat in self.iterate_contrastive_data(train, args.batch):
-                feature_visal, feature_ins = self.forward_visaul_instruction(feat)
-                loss_video_instruction = self.visaul_instruction_contrastive(feature_visal, feature_ins)
-                loss_video_video = self.visaul_visaul_contrastive(feature_visal, feature_ins)
-                # positive_sample loss smaller is better to minimize
-                # negative_sample loss bigger is better
-                # negative_sample need to be minus to maximize
-                total_loss = margin + loss_video_instruction - loss_video_video
-                total_loss = torch.clamp(total_loss, min=0.0)
-                print("loss_video_instruction: {}".format(loss_video_instruction))
-                print("loss_video_video: {}".format(loss_video_video))
-                print("total_loss: {}".format(total_loss))
-                self.summary_writer.add_scalar('contrastive/loss_video_instruction', loss_video_instruction.item(), train_iter)
-                self.summary_writer.add_scalar('contrastive/loss_video_video', loss_video_video.item(), train_iter)
-                optimizer.zero_grad()
-                total_loss.backward()
-                optimizer.step()
-                train_iter += 1
-        return
-        optimizer = optimizer or torch.optim.Adam(self.parameters(), lr=args.lr)
+        # assert args.batch >1, "batch size have to > 1 let contrastive learning train"
         # pretrain graph
         for i in range(200):
             self.gcn.train_nodes(optimizer, self.summary_writer)
@@ -128,9 +107,32 @@ class Module(nn.Module):
         train_iter, valid_seen_iter, valid_unseen_iter = 0, 0, 0
         for epoch in trange(0, args.epoch, desc='epoch'):
             m_train = collections.defaultdict(list)
-            self.gcn.train_nodes(self.summary_writer)
+            self.gcn.train_nodes(optimizer, self.summary_writer)
             self.train()
             self.adjust_lr(optimizer, args.lr, epoch, decay_epoch=args.decay_epoch)
+            """
+            Contrastive Learning
+            """
+            for batch, feat in self.iterate_contrastive_data(train, args.batch_contrast):
+                feature_visal, feature_ins = self.forward_visaul_instruction(feat)
+                loss_video_instruction = self.visaul_instruction_contrastive(feature_visal, feature_ins)
+                loss_video_video = self.visaul_visaul_contrastive(feature_visal, feature_ins)
+                # positive_sample loss smaller is better to minimize
+                # negative_sample loss bigger is better
+                # negative_sample need to be minus to maximize
+                total_loss = margin + loss_video_instruction - loss_video_video
+                total_loss = torch.clamp(total_loss, min=0.0)
+                # print("loss_video_instruction: {}".format(loss_video_instruction))
+                # print("loss_video_video: {}".format(loss_video_video))
+                # print("total_loss: {}".format(total_loss))
+                self.summary_writer.add_scalar('contrastive/loss_video_instruction', loss_video_instruction.item(), train_iter)
+                self.summary_writer.add_scalar('contrastive/loss_video_video', loss_video_video.item(), train_iter)
+                optimizer.zero_grad()
+                total_loss.backward()
+                optimizer.step()
+            """
+            Ori train action predict
+            """
             # p_train = {}
             total_train_loss = list()
             random.shuffle(train) # shuffle every epoch
@@ -350,10 +352,12 @@ class Module(nn.Module):
         list_data = list(dict_data.values())
         random.shuffle(list_data)
         for i in trange(0, len(list_data), batch_size, desc='batch'):
-            tasks = list_data[i:i+batch_size]
+            tasks = list_data[i:i+batch_size+1]
             batch_tasks = []
-            # [["repeat_idx": 0, "repeat_idx": 1, "repeat_idx": 2], ["repeat_idx": 0, "repeat_idx": 1, "repeat_idx": 2]...],
-            for j in range(len(tasks)-1):
+            # [[{'repeat_idx': 0, 'task': 'pick_clean_then_place_in_recep-Bowl-None-Shelf-7/trial_T20190908_152810_145685'}, {'repeat_idx': 1, 'task': 'pick_clean_then_place_in_recep-Bowl-None-Shelf-7/trial_T20190908_152810_145685'}, {'repeat_idx': 2, 'task': 'pick_clean_then_place_in_recep-Bowl-None-Shelf-7/trial_T20190908_152810_145685'}], ...]
+            for j in range(len(tasks)):
+                if j == len(tasks)-1:
+                    break
                 # [{'repeat_idx': 1, 'task': 'pick_two_obj_and_place-CreditCard-None-Desk-313/trial_T20190909_104526_715846'}, {'repeat_idx': 1, 'task': 'pick_two_obj_and_place-CreditCard-None-Desk-313/trial_T20190909_104526_715846'}]
                 positive_sample_task = random.choices(tasks[j], k=2)
                 # [{'repeat_idx': 2, 'task': 'pick_two_obj_and_place-Candle-None-Shelf-429/trial_T20190909_075215_332862'}]

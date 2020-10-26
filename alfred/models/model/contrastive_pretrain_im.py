@@ -32,7 +32,7 @@ class Module(Base):
             "cuda:%d" % args.gpu_id if torch.cuda.is_available() and args.gpu else "cpu")
         self.enc = nn.LSTM(args.demb, args.dhid, bidirectional=True, batch_first=True)
         assert args.dframe == 1000, "demb dim must be same with fastText model 300 dim"
-        self.visual_encoder = resnet.Resnet2(args, self.device)
+        self.visual_encoder = resnet.Resnet2(args, torch.device("cpu"))
         self.LSTM_visual_encoder = nn.LSTM(args.dframe, args.dhid*2, batch_first=True)
         self.enc_att = vnn.SelfAttn(args.dhid*2)
         self.enc_visual_att = vnn.SelfAttn(args.dhid*2)
@@ -210,9 +210,14 @@ class Module(Base):
         cont_lang, enc_lang = self.encode_lang(feat)
         state_0 = cont_lang, torch.zeros_like(cont_lang)
         # import pdb; pdb.set_trace()
+        """
+        resnet feature
+        """
         frames = self.vis_dropout(feat['frames'])
+        list_feature_visal = [self.visual_encoder(frame, self.device) for frame in frames]
+        feature_visal = torch.stack(list_feature_visal)
         gcn_embedding = self.gcn(frames)
-        res = self.dec(enc_lang, frames, gcn_embedding, max_decode=max_decode,
+        res = self.dec(enc_lang, feature_visal, gcn_embedding, max_decode=max_decode,
                        gold=feat['action_low'], state_0=state_0)
         feat.update(res)
         return feat
@@ -234,7 +239,7 @@ class Module(Base):
         '''
         frames: torch.Size([3, 138, 3, 224, 224])
         '''
-        list_feature_visal = [self.visual_encoder.model(frame) for frame in frames]
+        list_feature_visal = [self.visual_encoder(frame, self.device) for frame in frames]
         # torch.Size([3, 138, 1000])
         feature_visal = torch.stack(list_feature_visal)
         # torch.Size([3, 138, 1024])
@@ -364,11 +369,17 @@ class Module(Base):
 
         # previous action embedding
         e_t = self.embed_action(prev_action) if prev_action is not None else self.r_state['e_t']
+        """
+        resnet feature
+        """
+        frames = self.vis_dropout(feat['frames'])
+        list_feature_visal = [self.visual_encoder(frame, self.device) for frame in frames]
+        feature_visal = torch.stack(list_feature_visal)
 
         gcn_embedding = self.gcn(feat['frames'])
         # decode and save embedding and hidden states
         out_action_low, out_action_low_mask, state_t, * \
-            _ = self.dec.step(self.r_state['enc_lang'], feat['frames']
+            _ = self.dec.step(self.r_state['enc_lang'], feature_visal
                               [:, 0], e_t=e_t, state_tm1=self.r_state['state_t'], gcn_embedding=gcn_embedding)
 
         # save states
