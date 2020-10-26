@@ -102,7 +102,13 @@ class Module(nn.Module):
                 feature_visal, feature_ins = self.forward_visaul_instruction(feat)
                 loss_video_instruction = self.visaul_instruction_contrastive(feature_visal, feature_ins)
                 loss_video_video = self.visaul_visaul_contrastive(feature_visal, feature_ins)
-                total_loss = loss_video_instruction + loss_video_video
+                # positive_sample loss smaller is better to minimize
+                # negative_sample loss bigger is better
+                # negative_sample need to be minus to maximize
+                total_loss = loss_video_instruction - loss_video_video
+                print("loss_video_instruction: {}".format(loss_video_instruction))
+                print("loss_video_video: {}".format(loss_video_video))
+                print("total_loss: {}".format(total_loss))
                 self.summary_writer.add_scalar('contrastive/loss_video_instruction', loss_video_instruction.item(), train_iter)
                 self.summary_writer.add_scalar('contrastive/loss_video_video', loss_video_video.item(), train_iter)
                 optimizer.zero_grad()

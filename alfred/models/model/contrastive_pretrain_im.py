@@ -265,7 +265,7 @@ class Module(Base):
         for i in range(0, feature_visal.shape[0], 3):
             current = i
             negative_sample = i + 2
-            loss_sum = -1 * torch.dist(feature_visal[current], feature_visal[negative_sample])
+            loss_sum = torch.dist(feature_visal[current], feature_visal[negative_sample])
         return loss_sum
 
     def _load_img(self, feat, root, key_name, list_img_traj, name_pt, type_image=".png", is_rgb=True):
