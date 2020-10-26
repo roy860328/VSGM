@@ -94,6 +94,7 @@ class Module(nn.Module):
         optimizer = optimizer or torch.optim.Adam(self.parameters(), lr=args.lr)
 
         train_iter = 0
+        margin = 2
         assert args.batch >1, "batch size have to > 1 let contrastive learning train"
         for epoch in trange(0, args.epoch, desc='epoch'):
             random.shuffle(train)
@@ -105,7 +106,8 @@ class Module(nn.Module):
                 # positive_sample loss smaller is better to minimize
                 # negative_sample loss bigger is better
                 # negative_sample need to be minus to maximize
-                total_loss = loss_video_instruction - loss_video_video
+                total_loss = margin + loss_video_instruction - loss_video_video
+                total_loss = torch.clamp(total_loss, min=0.0)
                 print("loss_video_instruction: {}".format(loss_video_instruction))
                 print("loss_video_video: {}".format(loss_video_video))
                 print("total_loss: {}".format(total_loss))
