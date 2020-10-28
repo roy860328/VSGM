@@ -38,7 +38,6 @@ class Module(nn.Module):
         assert args.demb == 300, "demb dim must be same with fastText model 300 dim"
         # self.ft_model = fastText_embedding.load_model()
         self.ft_model = FastText()
-        self.ft_model["test"]
         self.emb_word = nn.Embedding(len(vocab['word']), args.demb)
         self.emb_action_low = nn.Embedding(len(vocab['action_low']), args.demb)
 
@@ -96,7 +95,7 @@ class Module(nn.Module):
         """
         Contrastive Learning Para
         """
-        margin = 2
+        margin, contrastive_loss_wt = self.args.contrastive_margin, self.args.contrastive_loss_wt
         # assert args.batch >1, "batch size have to > 1 let contrastive learning train"
         # pretrain graph
         for i in range(200):
@@ -113,30 +112,33 @@ class Module(nn.Module):
             """
             Contrastive Learning
             """
+            contrastive_train_iter = 0
             for batch, feat in self.iterate_contrastive_data(train, args.batch_contrast):
-                feature_visal, feature_ins = self.forward_visaul_instruction(feat)
+                optimizer.zero_grad()
+                feature_visal, feature_ins = self.forward_visaul_action_instruction(feat)
                 loss_video_instruction = self.visaul_instruction_contrastive(feature_visal, feature_ins)
                 loss_video_video = self.visaul_visaul_contrastive(feature_visal, feature_ins)
                 # positive_sample loss smaller is better to minimize
                 # negative_sample loss bigger is better
                 # negative_sample need to be minus to maximize
-                total_loss = margin + loss_video_instruction - loss_video_video
-                total_loss = torch.clamp(total_loss, min=0.0)
+                total_loss = margin + loss_video_instruction + loss_video_video
+                total_loss = torch.clamp(total_loss*contrastive_loss_wt, min=0.0)
                 # print("loss_video_instruction: {}".format(loss_video_instruction))
                 # print("loss_video_video: {}".format(loss_video_video))
                 # print("total_loss: {}".format(total_loss))
-                self.summary_writer.add_scalar('contrastive/loss_video_instruction', loss_video_instruction.item(), train_iter)
-                self.summary_writer.add_scalar('contrastive/loss_video_video', loss_video_video.item(), train_iter)
-                optimizer.zero_grad()
+                self.summary_writer.add_scalar('contrastive/loss_video_instruction', loss_video_instruction.item(), contrastive_train_iter)
+                self.summary_writer.add_scalar('contrastive/loss_video_video', loss_video_video.item(), contrastive_train_iter)
                 total_loss.backward()
                 optimizer.step()
+                contrastive_train_iter += 1
             """
             Ori train action predict
             """
             # p_train = {}
             total_train_loss = list()
             random.shuffle(train) # shuffle every epoch
-            for batch, feat in self.iterate(train, args.batch):
+            for batch, feat in self.iterate(train, args.batch, augmentation=True):
+                optimizer.zero_grad()
                 out = self.forward(feat)
                 preds = self.extract_preds(out, batch, feat)
                 # p_train.update(preds)
@@ -147,7 +149,6 @@ class Module(nn.Module):
                     self.summary_writer.add_scalar('train/' + ln, v.item(), train_iter)
 
                 # optimizer backward pass
-                optimizer.zero_grad()
                 sum_loss = sum(loss.values())
                 sum_loss.backward()
                 optimizer.step()
@@ -290,6 +291,7 @@ class Module(nn.Module):
         raise NotImplementedError()
 
     def get_faxtText_embedding(self, text):
+        # self.ft_model["test"]
         return self.ft_model[text]
 
     def get_task_and_ann_id(self, ex):
@@ -331,14 +333,14 @@ class Module(nn.Module):
         else:
             return os.path.join(self.args.data, ex['split'], *(ex['root'].split('/')[-2:]))
 
-    def iterate(self, data, batch_size):
+    def iterate(self, data, batch_size, augmentation=False):
         '''
         breaks dataset into batch_size chunks for training
         '''
         for i in trange(0, len(data), batch_size, desc='batch'):
             tasks = data[i:i+batch_size]
             batch = [self.load_task_json(task) for task in tasks]
-            feat = self.featurize(batch)
+            feat = self.featurize(batch, augmentation=augmentation)
             yield batch, feat
 
     def iterate_contrastive_data(self, data, batch_size):
@@ -350,8 +352,8 @@ class Module(nn.Module):
         for i in range(len(data)):
             dict_data[data[i]["task"]].append(data[i])
         list_data = list(dict_data.values())
-        random.shuffle(list_data)
-        for i in trange(0, len(list_data), batch_size, desc='batch'):
+        list_data = random.choices(list_data, k=len(list_data)//100)
+        for i in trange(0, len(list_data)-batch_size, batch_size, desc='batch'):
             tasks = list_data[i:i+batch_size+1]
             batch_tasks = []
             # [[{'repeat_idx': 0, 'task': 'pick_clean_then_place_in_recep-Bowl-None-Shelf-7/trial_T20190908_152810_145685'}, {'repeat_idx': 1, 'task': 'pick_clean_then_place_in_recep-Bowl-None-Shelf-7/trial_T20190908_152810_145685'}, {'repeat_idx': 2, 'task': 'pick_clean_then_place_in_recep-Bowl-None-Shelf-7/trial_T20190908_152810_145685'}], ...]
@@ -365,7 +367,8 @@ class Module(nn.Module):
                 batch_tasks.extend(positive_sample_task)
                 batch_tasks.extend(negative_sample_task)
             batch = [self.load_task_json(task) for task in batch_tasks]
-            feat = self.featurize(batch)
+            feat = self.featurize(batch, augmentation=True)
+            # import pdb; pdb.set_trace()
             yield batch, feat
 
     def zero_input(self, x, keep_end_token=True):

@@ -8,10 +8,12 @@ class Resnet2(nn.Module):
     pretrained Resnet18 from torchvision
     '''
 
-    def __init__(self, args, device):
+    def __init__(self, args, device, DataParallelDevice=None):
         super().__init__()
         self.device = device
         self.model = models.resnet18(pretrained=True)
+        if DataParallelDevice:
+            self.model = torch.nn.DataParallel(self.model, device_ids=[0, 1])
         # self.model = torch.hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=True)
         # self.model = self.model.to(self.device)
         for name, param in self.model.named_parameters():

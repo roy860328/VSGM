@@ -16,6 +16,19 @@ from models.utils.metric import compute_f1, compute_exact
 from gen.utils.image_util import decompress_mask
 import cv2
 from PIL import Image
+trans_normalize = transforms.Normalize(
+    mean=[0.485, 0.456, 0.406],
+    std=[0.229, 0.224, 0.225]
+    )
+trans_color = transforms.Compose([
+    transforms.ToPILImage(),
+    transforms.ColorJitter(
+        brightness=0.1,
+        contrast=0.1,
+        saturation=0.1),
+    transforms.ToTensor(),
+])
+trans_toPIL = transforms.ToPILImage()
 
 
 class Module(Base):
@@ -30,13 +43,16 @@ class Module(Base):
         # [batch, sentance, out_feat]
         self.device = torch.device(
             "cuda:%d" % args.gpu_id if torch.cuda.is_available() and args.gpu else "cpu")
+        assert args.dframe == 1000, "resnet output 1000 predict"
         self.enc = nn.LSTM(args.demb, args.dhid, bidirectional=True, batch_first=True)
-        assert args.dframe == 1000, "demb dim must be same with fastText model 300 dim"
-        self.visual_encoder = resnet.Resnet2(args, torch.device("cpu"))
-        self.LSTM_visual_encoder = nn.LSTM(args.dframe, args.dhid*2, batch_first=True)
-        self.enc_att = vnn.SelfAttn(args.dhid*2)
-        self.enc_visual_att = vnn.SelfAttn(args.dhid*2)
-        self.enc = self.enc.to(device=self.device)
+        # self.enc.to(torch.device("cpu"))
+        self.visual_encoder = resnet.Resnet2(args, torch.device("cpu"), DataParallelDevice=args.DataParallelDevice)
+        self.LSTM_visual_encoder = nn.LSTM(args.dframe + 300, args.dhid*2, batch_first=True)
+        self.enc_att = vnn.SelfAttn(args.dhid*2, DataParallelDevice=args.DataParallelDevice)
+        self.enc_visual_att = vnn.SelfAttn(args.dhid*2, DataParallelDevice=args.DataParallelDevice)
+        self._to_DataParallel(DataParallelDevice=args.DataParallelDevice)
+        # self.enc_att = vnn.SelfAttn(args.dhid*2, is_DataParallel=False)
+        # self.enc_visual_att = vnn.SelfAttn(args.dhid*2, is_DataParallel=False)
 
         # subgoal monitoring
         self.subgoal_monitoring = (self.args.pm_aux_loss_wt >
@@ -44,14 +60,16 @@ class Module(Base):
 
         # frame mask decoder
         # decoder = vnn.ConvFrameMaskDecoderProgressMonitor if self.subgoal_monitoring else vnn.ConvFrameMaskDecoder
-        decoder = vnn.ConvFrameMaskAttentionDecoderProgressMonitor
+        decoder = vnn.DataParallelDecoder if args.DataParallelDevice is not None else vnn.ConvFrameMaskAttentionDecoderProgressMonitor
         self.dec = decoder(self.emb_action_low, args.dframe, 2*args.dhid, args.dgcnout,
                            pframe=args.pframe,
                            attn_dropout=args.attn_dropout,
                            hstate_dropout=args.hstate_dropout,
                            actor_dropout=args.actor_dropout,
                            input_dropout=args.input_dropout,
-                           teacher_forcing=args.dec_teacher_forcing)
+                           teacher_forcing=args.dec_teacher_forcing,
+                           visual_encode=False,
+                           DataParallelDevice=args.DataParallelDevice)
         self.dec = self.dec.to(device=self.device)
 
         # dropouts
@@ -82,7 +100,12 @@ class Module(Base):
         # reset model
         self.reset()
 
-    def featurize(self, batch, load_mask=True, load_frames=True):
+    def _to_DataParallel(self, DataParallelDevice=None):
+        if DataParallelDevice:
+            # self.enc = torch.nn.DataParallel(self.enc, device_ids=DataParallelDevice)
+            self.LSTM_visual_encoder = torch.nn.DataParallel(self.LSTM_visual_encoder, device_ids=DataParallelDevice)
+
+    def featurize(self, batch, load_mask=True, load_frames=True, augmentation=False):
         '''
         tensorize and pad batch input
         '''
@@ -131,7 +154,7 @@ class Module(Base):
                 root = self.get_task_root(ex)
                 path_img_frames = os.path.join(root, self.fold_frames)
                 self._load_img(feat, path_img_frames, "frames",
-                               ex["images"], self.feat_raw_pt, ".jpg")
+                               ex["images"], self.feat_raw_pt, ".jpg", augmentation=augmentation)
                 # import pdb; pdb.set_trace()
                 # depth
                 # path_img_depth = os.path.join(root, self.feat_depth)
@@ -144,7 +167,11 @@ class Module(Base):
             if not self.test_mode:
                 # low-level action
                 feat['action_low'].append([a['action'] for a in ex['num']['action_low']])
-
+                # embedding
+                actions = [a['api_action']['action'] for a in ex['plan']['low_actions']]
+                actions.extend(["stop"])
+                embedding_actions = self.get_faxtText_embedding(actions).clone().detach()
+                feat['embedding_action_low'].append(embedding_actions)
                 # low-level action mask
                 if load_mask:
                     feat['action_low_mask'].append([self.decompress_mask(
@@ -158,7 +185,7 @@ class Module(Base):
         for k, v in feat.items():
             if k in {'lang_goal_instr'}:
                 # language embedding and padding
-                seqs = [self.get_faxtText_embedding(vv).to(device=device) for vv in v]
+                seqs = [self.get_faxtText_embedding(vv).to(device=device).clone().detach() for vv in v]
                 pad_seq = pad_sequence(seqs, batch_first=True, padding_value=self.pad)
                 seq_lengths = np.array(list(map(len, v)))
                 packed_input = pack_padded_sequence(
@@ -176,7 +203,7 @@ class Module(Base):
             else:
                 # default: tensorize and pad sequence
                 seqs = [torch.tensor(vv, device=device, dtype=torch.float if (
-                    'frames' in k) else torch.long) for vv in v]
+                    'frames' in k or 'embedding_action_low' in k) else torch.long) for vv in v]
                 pad_seq = pad_sequence(seqs, batch_first=True, padding_value=self.pad)
                 feat[k] = pad_seq
 
@@ -235,23 +262,27 @@ class Module(Base):
 
         return cont_lang_goal_instr, enc_lang_goal_instr
 
-    def _encode_visual(self, frames):
+    def _encode_visual(self, frames, embedding_actions):
         '''
         frames: torch.Size([3, 138, 3, 224, 224])
         '''
         list_feature_visal = [self.visual_encoder(frame, self.device) for frame in frames]
         # torch.Size([3, 138, 1000])
         feature_visal = torch.stack(list_feature_visal)
+        # torch.Size([3, 138, 1300])
+        feature = torch.cat([feature_visal, embedding_actions], dim=2)
         # torch.Size([3, 138, 1024])
-        feature_visal, (hn, cn) = self.LSTM_visual_encoder(feature_visal)
+        feature_visal, (hn, cn) = self.LSTM_visual_encoder(feature)
         # torch.Size([3, 1024])
         feature_visal = self.enc_visual_att(feature_visal)
+        # import pdb; pdb.set_trace()
         return feature_visal
 
-    def forward_visaul_instruction(self, feat):
+    def forward_visaul_action_instruction(self, feat):
         feature_ins, _ = self.encode_lang(feat)
         frames = self.vis_dropout(feat['frames'])
-        feature_visal = self._encode_visual(frames)
+        embedding_actions = feat['embedding_action_low']
+        feature_visal = self._encode_visual(frames, embedding_actions)
         return feature_visal, feature_ins
 
     def visaul_instruction_contrastive(self, feature_visal, feature_ins):
@@ -269,22 +300,19 @@ class Module(Base):
         loss_sum = 0
         for i in range(0, feature_visal.shape[0], 3):
             current = i
+            positive_sample = i + 1
             negative_sample = i + 2
-            loss_sum = torch.dist(feature_visal[current], feature_visal[negative_sample])
+            loss_sum += torch.dist(feature_visal[current], feature_visal[positive_sample]) - \
+                torch.dist(feature_visal[current], feature_visal[negative_sample])
         return loss_sum
 
-    def _load_img(self, feat, root, key_name, list_img_traj, name_pt, type_image=".png", is_rgb=True):
+    def _load_img(self, feat, root, key_name, list_img_traj, name_pt, type_image=".png", is_rgb=True, augmentation=False):
         """
         feat: for save image feature
         root: image path
         key_name: "frames_depth" or other
         list_img_traj: traj_data["images"]. To chose feat[key_name] file
         """
-        trans = transforms.Normalize(
-            mean=[0.485, 0.456, 0.406],
-            std=[0.229, 0.224, 0.225],
-        )
-
         def _load_with_path():
             frames_depth = None
             low_idx = -1
@@ -314,7 +342,7 @@ class Module(Base):
                 img_depth = torch.tensor(img_depth, dtype=torch.float32)
                 if is_rgb:
                     img_depth = img_depth.view(3, 224, 224)
-                    img_depth = trans(img_depth)
+                    img_depth = trans_normalize(img_depth)
                 img_depth = img_depth.unsqueeze(0)
 
                 if frames_depth is None:
@@ -328,7 +356,7 @@ class Module(Base):
             return frames_depth
 
         def _load_with_pt():
-            frames_depth = torch.load(os.path.join(root, name_pt))
+            frames_depth = torch.load(os.path.join(root, name_pt)).to(dtype=torch.float32)
             return frames_depth
         path = os.path.join(os.getcwd(), root)
         path_feat_pt = os.path.join(path, name_pt)
@@ -337,9 +365,15 @@ class Module(Base):
         else:
             print("{} doesn't exist: {}".format(name_pt, path_feat_pt))
             frames_depth = _load_with_path()
+        if augmentation:
+            frames_depth = self.transform_video_style(frames_depth)
         # feat["frames_depth"]
-        # import pdb; pdb.set_trace()
         feat[key_name].append(frames_depth)
+
+    def transform_video_style(self, frames):
+        frames = [trans_color(frame) for frame in frames]
+        frames = torch.stack(frames, dim=0)
+        return frames
 
     def reset(self):
         '''

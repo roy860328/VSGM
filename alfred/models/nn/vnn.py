@@ -9,9 +9,11 @@ class SelfAttn(nn.Module):
     self-attention with learnable parameters
     '''
 
-    def __init__(self, dhid):
+    def __init__(self, dhid, DataParallelDevice=None):
         super().__init__()
         self.scorer = nn.Linear(dhid, 1)
+        if DataParallelDevice:
+            self.scorer = torch.nn.DataParallel(self.scorer, device_ids=DataParallelDevice)
 
     def forward(self, inp):
         # inp : [2, 145, 1024]
@@ -595,14 +597,16 @@ class ConvFrameMaskAttentionDecoderProgressMonitor(nn.Module):
 
     def __init__(self, emb, dframe, dhid, dgcn, pframe=300,
                  attn_dropout=0., hstate_dropout=0., actor_dropout=0., input_dropout=0.,
-                 teacher_forcing=False):
+                 teacher_forcing=False, visual_encode=True, DataParallelDevice=None):
         super().__init__()
         demb = emb.weight.size(1)
 
         self.emb = emb
         self.pframe = pframe
         self.dhid = dhid
-        self.vis_encoder = ResnetVisualEncoder(dframe=dframe)
+        self.visual_encode = visual_encode
+        if self.visual_encode:
+            self.vis_encoder = ResnetVisualEncoder(dframe=dframe)
         self.cell = nn.LSTMCell(dhid+dframe+demb+dgcn, dhid)
         self.attn = DotAttn()
         self.attn_graph = DotAttn()
@@ -627,7 +631,10 @@ class ConvFrameMaskAttentionDecoderProgressMonitor(nn.Module):
         h_tm1 = state_tm1[0]
 
         # encode vision and lang feat
-        vis_feat_t = self.vis_encoder(frame)
+        if self.visual_encode:
+            vis_feat_t = self.vis_encoder(frame)
+        else:
+            vis_feat_t = frame
         lang_feat_t = enc # language is encoded once at the start
 
         # attend over language
@@ -692,3 +699,18 @@ class ConvFrameMaskAttentionDecoderProgressMonitor(nn.Module):
             'state_t': state_t
         }
         return results
+
+
+class DataParallelDecoder(ConvFrameMaskAttentionDecoderProgressMonitor):
+    '''
+    action decoder with subgoal and progress monitoring
+    '''
+
+    def __init__(self, emb, dframe, dhid, dgcn, pframe=300,
+                 attn_dropout=0., hstate_dropout=0., actor_dropout=0., input_dropout=0.,
+                 teacher_forcing=False, visual_encode=True, DataParallelDevice=None):
+        super().__init__(emb, dframe, dhid, dgcn, pframe, attn_dropout, hstate_dropout, actor_dropout, input_dropout, teacher_forcing, visual_encode)
+        self.cell = torch.nn.DataParallel(self.cell, device_ids=DataParallelDevice)
+        self.actor = torch.nn.DataParallel(self.actor, device_ids=DataParallelDevice)
+        self.h_tm1_fc = torch.nn.DataParallel(self.h_tm1_fc, device_ids=DataParallelDevice)
+        self.h_tm1_fc_graph = torch.nn.DataParallel(self.h_tm1_fc_graph, device_ids=DataParallelDevice)
