@@ -91,11 +91,13 @@ class Module(nn.Module):
 
         # optimizer
         optimizer = optimizer or torch.optim.Adam(self.parameters(), lr=args.lr)
+        optimizer = optimizer or torch.optim.SGD(self.parameters(), lr=args.lr, momentum=0.9)
 
         """
         Contrastive Learning Para
         """
         margin, contrastive_loss_wt = self.args.contrastive_margin, self.args.contrastive_loss_wt
+        contrastive_train_iter = 0
         # assert args.batch >1, "batch size have to > 1 let contrastive learning train"
         # pretrain graph
         for i in range(200):
@@ -108,27 +110,30 @@ class Module(nn.Module):
             m_train = collections.defaultdict(list)
             self.gcn.train_nodes(optimizer, self.summary_writer)
             self.train()
-            self.adjust_lr(optimizer, args.lr, epoch, decay_epoch=args.decay_epoch)
+            lr = self.adjust_lr(optimizer, args.lr, epoch, decay_epoch=args.decay_epoch)
+            self.summary_writer.add_scalar('train/lr', lr, epoch)
             """
             Contrastive Learning
             """
-            contrastive_train_iter = 0
             for batch, feat in self.iterate_contrastive_data(train, args.batch_contrast):
                 optimizer.zero_grad()
                 feature_visal, feature_ins = self.forward_visaul_action_instruction(feat)
-                loss_video_instruction = self.visaul_instruction_contrastive(feature_visal, feature_ins)
-                loss_video_video = self.visaul_visaul_contrastive(feature_visal, feature_ins)
+                loss_video_instruction_pos, loss_video_instruction_neg = self.visaul_instruction_contrastive(feature_visal, feature_ins)
+                loss_video_video_pos, loss_video_video_neg = self.visaul_visaul_contrastive(feature_visal, feature_ins)
                 # positive_sample loss smaller is better to minimize
                 # negative_sample loss bigger is better
                 # negative_sample need to be minus to maximize
-                total_loss = margin + loss_video_instruction + loss_video_video
-                total_loss = torch.clamp(total_loss*contrastive_loss_wt, min=0.0)
-                # print("loss_video_instruction: {}".format(loss_video_instruction))
-                # print("loss_video_video: {}".format(loss_video_video))
-                # print("total_loss: {}".format(total_loss))
-                self.summary_writer.add_scalar('contrastive/loss_video_instruction', loss_video_instruction.item(), contrastive_train_iter)
-                self.summary_writer.add_scalar('contrastive/loss_video_video', loss_video_video.item(), contrastive_train_iter)
-                total_loss.backward()
+                total_loss_pos = loss_video_instruction_pos + loss_video_video_pos
+                total_loss_neg = margin + loss_video_instruction_neg + loss_video_video_neg
+                total_loss_neg = torch.clamp(total_loss_neg*contrastive_loss_wt, min=0.0)
+                self.summary_writer.add_scalar('contrastive/loss_video_instruction_pos', loss_video_instruction_pos.item(), contrastive_train_iter)
+                self.summary_writer.add_scalar('contrastive/loss_video_instruction_neg', loss_video_instruction_neg.item(), contrastive_train_iter)
+                self.summary_writer.add_scalar('contrastive/loss_video_video_pos', loss_video_video_pos.item(), contrastive_train_iter)
+                self.summary_writer.add_scalar('contrastive/loss_video_video_neg', loss_video_video_neg.item(), contrastive_train_iter)
+                self.summary_writer.add_scalar('contrastive/total_loss_neg', total_loss_neg.item(), contrastive_train_iter)
+                self.summary_writer.add_scalar('contrastive/total_loss_pos', total_loss_pos.item(), contrastive_train_iter)
+                total_loss_pos.backward(retain_graph=True)
+                total_loss_neg.backward()
                 optimizer.step()
                 contrastive_train_iter += 1
             """
@@ -394,6 +399,7 @@ class Module(nn.Module):
         lr = init_lr * (0.1 ** (epoch // decay_epoch))
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
+        return lr
 
     @classmethod
     def load(cls, fsave, device=None, use_gpu=None):

@@ -75,7 +75,7 @@ if __name__ == '__main__':
     # contrastive learning
     parser.add_argument('--DataParallelDevice', action='append', type=int)
     parser.add_argument('--contrastive_loss_wt', help='weight of progress monitor', default=0.1, type=float)
-    parser.add_argument('--contrastive_margin', help='weight of progress monitor', default=1, type=float)
+    parser.add_argument('--contrastive_margin', help='weight of progress monitor', default=0.1, type=float)
 
     # args and init
     args = parser.parse_args()

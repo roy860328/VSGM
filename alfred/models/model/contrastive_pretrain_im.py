@@ -16,6 +16,7 @@ from models.utils.metric import compute_f1, compute_exact
 from gen.utils.image_util import decompress_mask
 import cv2
 from PIL import Image
+import pdb
 trans_normalize = transforms.Normalize(
     mean=[0.485, 0.456, 0.406],
     std=[0.229, 0.224, 0.225]
@@ -29,6 +30,7 @@ trans_color = transforms.Compose([
     transforms.ToTensor(),
 ])
 trans_toPIL = transforms.ToPILImage()
+cos = nn.CosineSimilarity(dim=0, eps=1e-6)
 
 
 class Module(Base):
@@ -286,25 +288,31 @@ class Module(Base):
         return feature_visal, feature_ins
 
     def visaul_instruction_contrastive(self, feature_visal, feature_ins):
-        loss_sum = 0
+        loss_pos, loss_neg = 0, 0
         for i in range(0, feature_visal.shape[0], 3):
             current = i
             positive_sample = i + 1
             negative_sample = i + 2
-            loss_sum += torch.dist(feature_visal[current], feature_ins[current]) + \
-                torch.dist(feature_visal[current], feature_ins[positive_sample]) - \
-                torch.dist(feature_visal[current], feature_ins[negative_sample])
-        return loss_sum
+            loss_pos += cos(feature_visal[current], feature_ins[current]) + \
+                cos(feature_visal[current], feature_ins[positive_sample])
+            loss_neg += -cos(feature_visal[current], feature_ins[negative_sample])
+
+            # loss_sum += torch.dist(feature_visal[current], feature_ins[current]) + \
+            #     torch.dist(feature_visal[current], feature_ins[positive_sample]) - \
+            #     torch.dist(feature_visal[current], feature_ins[negative_sample])
+        return loss_pos, loss_neg
 
     def visaul_visaul_contrastive(self, feature_visal, feature_ins):
-        loss_sum = 0
+        loss_pos, loss_neg = 0, 0
         for i in range(0, feature_visal.shape[0], 3):
             current = i
             positive_sample = i + 1
             negative_sample = i + 2
-            loss_sum += torch.dist(feature_visal[current], feature_visal[positive_sample]) - \
-                torch.dist(feature_visal[current], feature_visal[negative_sample])
-        return loss_sum
+            loss_pos += cos(feature_visal[current], feature_visal[positive_sample])
+            loss_neg += -cos(feature_visal[current], feature_visal[negative_sample])
+            # loss_sum += torch.dist(feature_visal[current], feature_visal[positive_sample]) - \
+            #     torch.dist(feature_visal[current], feature_visal[negative_sample])
+        return loss_pos, loss_neg
 
     def _load_img(self, feat, root, key_name, list_img_traj, name_pt, type_image=".png", is_rgb=True, augmentation=False):
         """
