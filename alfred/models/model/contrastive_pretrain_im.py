@@ -30,7 +30,8 @@ trans_color = transforms.Compose([
     transforms.ToTensor(),
 ])
 trans_toPIL = transforms.ToPILImage()
-cos = nn.CosineSimilarity(dim=0, eps=1e-6)
+fn_cos = nn.CosineSimilarity(dim=0, eps=1e-6)
+fn_logsoftmax = nn.LogSoftmax(dim=1)
 
 
 class Module(Base):
@@ -50,6 +51,8 @@ class Module(Base):
         # self.enc.to(torch.device("cpu"))
         self.visual_encoder = resnet.Resnet2(args, torch.device("cpu"), DataParallelDevice=args.DataParallelDevice)
         self.LSTM_visual_encoder = nn.LSTM(args.dframe + 300, args.dhid*2, batch_first=True)
+        self.mlp_nlp_enc = nn.Linear(args.dhid*2, args.dhid*2)
+        self.mlp_vis_enc = nn.Linear(args.dhid*2, args.dhid*2)
         self.enc_att = vnn.SelfAttn(args.dhid*2, DataParallelDevice=args.DataParallelDevice)
         self.enc_visual_att = vnn.SelfAttn(args.dhid*2, DataParallelDevice=args.DataParallelDevice)
         self._to_DataParallel(DataParallelDevice=args.DataParallelDevice)
@@ -285,7 +288,50 @@ class Module(Base):
         frames = self.vis_dropout(feat['frames'])
         embedding_actions = feat['embedding_action_low']
         feature_visal = self._encode_visual(frames, embedding_actions)
+        feature_ins = self.mlp_nlp_enc(feature_ins)
+        feature_visal = self.mlp_vis_enc(feature_visal)
         return feature_visal, feature_ins
+
+    def compute_SimCLR_loss(self, feature):
+        '''
+        loss column 0 is pos similarity
+        '''
+        list_sim = []
+        # 6
+        for i in range(0, feature.shape[0], 3):
+            current = i
+            pos_samples = i + 1
+            neg_samples = [*range(feature.shape[0])]
+            del neg_samples[pos_samples], neg_samples[current]
+            i_cos_compare = [fn_cos(feature[current], feature[pos_samples])]
+            # [0, 1, 2, 5]
+            if self.args.print:
+                print(neg_samples)
+            for neg_sample in neg_samples:
+                i_cos_compare.append(fn_cos(feature[current], feature[neg_sample]))
+            # tensor([0.9845, 0.8050, 0.8093, 0.9821, 0.9845], grad_fn=<StackBackward>)
+            i_cos_compare = torch.stack(i_cos_compare)
+            list_sim.append(i_cos_compare)
+        # tensor([[0.9819, 0.8073, 0.8050, 0.8097, 0.7932],
+        #         [0.9845, 0.8050, 0.8093, 0.9821, 0.9789]], grad_fn=<StackBackward>)
+        # torch.Size([2, 5])
+        all_sim = torch.stack(list_sim)
+        # tensor([[1.4696, 1.6442, 1.6465, 1.6418, 1.6583],
+        #         [1.5405, 1.7200, 1.7157, 1.5429, 1.5461]], grad_fn=<NegBackward>)
+        result = -fn_logsoftmax(all_sim)
+        # loss column 0 is pos similarity
+        loss = result[:, 0].sum()
+        return loss
+
+    def instruction_instruction_contrastive(self, feature_ins):
+        loss_pos, loss_neg = 0, 0
+        for i in range(0, feature_ins.shape[0], 3):
+            current = i
+            positive_sample = i + 1
+            negative_sample = i + 2
+            loss_pos += fn_cos(feature_ins[current], feature_ins[positive_sample])
+            loss_neg += -fn_cos(feature_ins[current], feature_ins[negative_sample])
+        return loss_pos, loss_neg
 
     def visaul_instruction_contrastive(self, feature_visal, feature_ins):
         loss_pos, loss_neg = 0, 0
@@ -293,9 +339,9 @@ class Module(Base):
             current = i
             positive_sample = i + 1
             negative_sample = i + 2
-            loss_pos += cos(feature_visal[current], feature_ins[current]) + \
-                cos(feature_visal[current], feature_ins[positive_sample])
-            loss_neg += -cos(feature_visal[current], feature_ins[negative_sample])
+            loss_pos += fn_cos(feature_visal[current], feature_ins[current]) + \
+                fn_cos(feature_visal[current], feature_ins[positive_sample])
+            loss_neg += -fn_cos(feature_visal[current], feature_ins[negative_sample])
 
             # loss_sum += torch.dist(feature_visal[current], feature_ins[current]) + \
             #     torch.dist(feature_visal[current], feature_ins[positive_sample]) - \
@@ -308,8 +354,8 @@ class Module(Base):
             current = i
             positive_sample = i + 1
             negative_sample = i + 2
-            loss_pos += cos(feature_visal[current], feature_visal[positive_sample])
-            loss_neg += -cos(feature_visal[current], feature_visal[negative_sample])
+            loss_pos += fn_cos(feature_visal[current], feature_visal[positive_sample])
+            loss_neg += -fn_cos(feature_visal[current], feature_visal[negative_sample])
             # loss_sum += torch.dist(feature_visal[current], feature_visal[positive_sample]) - \
             #     torch.dist(feature_visal[current], feature_visal[negative_sample])
         return loss_pos, loss_neg

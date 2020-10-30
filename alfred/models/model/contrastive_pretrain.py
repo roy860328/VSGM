@@ -14,7 +14,7 @@ sys.path.append(os.path.join(os.environ['ALFRED_ROOT'], '..', 'graph_analysis'))
 import fastText_embedding
 from torchnlp.word_to_vector import FastText
 from model.dgl_pretrain_hete import THETLOWSG
-
+import pdb
 
 class Module(nn.Module):
 
@@ -100,8 +100,8 @@ class Module(nn.Module):
         contrastive_train_iter = 0
         # assert args.batch >1, "batch size have to > 1 let contrastive learning train"
         # pretrain graph
-        for i in range(200):
-            self.gcn.train_nodes(optimizer, self.summary_writer)
+        # for i in range(200):
+        #     self.gcn.train_nodes(optimizer, self.summary_writer)
         # display dout
         print("Saving to: %s" % self.args.dout)
         best_loss = {'train': 1e10, 'valid_seen': 1e10, 'valid_unseen': 1e10}
@@ -118,22 +118,31 @@ class Module(nn.Module):
             for batch, feat in self.iterate_contrastive_data(train, args.batch_contrast):
                 optimizer.zero_grad()
                 feature_visal, feature_ins = self.forward_visaul_action_instruction(feat)
-                loss_video_instruction_pos, loss_video_instruction_neg = self.visaul_instruction_contrastive(feature_visal, feature_ins)
-                loss_video_video_pos, loss_video_video_neg = self.visaul_visaul_contrastive(feature_visal, feature_ins)
-                # positive_sample loss smaller is better to minimize
-                # negative_sample loss bigger is better
-                # negative_sample need to be minus to maximize
-                total_loss_pos = loss_video_instruction_pos + loss_video_video_pos
-                total_loss_neg = margin + loss_video_instruction_neg + loss_video_video_neg
-                total_loss_neg = torch.clamp(total_loss_neg*contrastive_loss_wt, min=0.0)
-                self.summary_writer.add_scalar('contrastive/loss_video_instruction_pos', loss_video_instruction_pos.item(), contrastive_train_iter)
-                self.summary_writer.add_scalar('contrastive/loss_video_instruction_neg', loss_video_instruction_neg.item(), contrastive_train_iter)
-                self.summary_writer.add_scalar('contrastive/loss_video_video_pos', loss_video_video_pos.item(), contrastive_train_iter)
-                self.summary_writer.add_scalar('contrastive/loss_video_video_neg', loss_video_video_neg.item(), contrastive_train_iter)
-                self.summary_writer.add_scalar('contrastive/total_loss_neg', total_loss_neg.item(), contrastive_train_iter)
-                self.summary_writer.add_scalar('contrastive/total_loss_pos', total_loss_pos.item(), contrastive_train_iter)
-                total_loss_pos.backward(retain_graph=True)
-                total_loss_neg.backward()
+                if False:
+                    loss_video_instruction_pos, loss_video_instruction_neg = self.visaul_instruction_contrastive(feature_visal, feature_ins)
+                    loss_video_video_pos, loss_video_video_neg = self.visaul_visaul_contrastive(feature_visal, feature_ins)
+                    # positive_sample loss smaller is better to minimize
+                    # negative_sample loss bigger is better
+                    # negative_sample need to be minus to maximize
+                    total_loss_pos = loss_video_instruction_pos + loss_video_video_pos
+                    total_loss_neg = margin + loss_video_instruction_neg + loss_video_video_neg
+                    total_loss_neg = torch.clamp(total_loss_neg*contrastive_loss_wt, min=0.0)
+                    self.summary_writer.add_scalar('contrastive/loss_video_instruction_pos', loss_video_instruction_pos.item(), contrastive_train_iter)
+                    self.summary_writer.add_scalar('contrastive/loss_video_instruction_neg', loss_video_instruction_neg.item(), contrastive_train_iter)
+                    self.summary_writer.add_scalar('contrastive/loss_video_video_pos', loss_video_video_pos.item(), contrastive_train_iter)
+                    self.summary_writer.add_scalar('contrastive/loss_video_video_neg', loss_video_video_neg.item(), contrastive_train_iter)
+                    self.summary_writer.add_scalar('contrastive/total_loss_neg', total_loss_neg.item(), contrastive_train_iter)
+                    self.summary_writer.add_scalar('contrastive/total_loss_pos', total_loss_pos.item(), contrastive_train_iter)
+                    total_loss_pos.backward(retain_graph=True)
+                    total_loss_neg.backward()
+                else:
+                    loss_visal = self.compute_SimCLR_loss(feature_visal)
+                    loss_ins = self.compute_SimCLR_loss(feature_ins)
+                    total_loss = loss_visal + loss_ins
+                    self.summary_writer.add_scalar('contrastive/SimCLR_visual', loss_visal.item(), contrastive_train_iter)
+                    self.summary_writer.add_scalar('contrastive/SimCLR_ins', loss_ins.item(), contrastive_train_iter)
+                    self.summary_writer.add_scalar('contrastive/SimCLR_total', total_loss.item(), contrastive_train_iter)
+                    total_loss.backward()
                 optimizer.step()
                 contrastive_train_iter += 1
             """
