@@ -295,6 +295,7 @@ class ConvFrameMaskDecoderProgressMonitor(nn.Module):
         h_tm1 = state_tm1[0]
 
         # encode vision and lang feat
+        # import pdb; pdb.set_trace()
         vis_feat_t = self.vis_encoder(frame)
         # [2, 145, 1024]
         lang_feat_t = enc # language is encoded once at the start

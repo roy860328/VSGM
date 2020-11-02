@@ -234,7 +234,7 @@ class Module(Base):
             low_idx = -1
             for i, dict_frame in enumerate(list_img_traj):
                 # 60 actions need 61 frames
-                if low_idx != dict_frame["low_idx"] or i == 1:
+                if low_idx != dict_frame["low_idx"]:
                     low_idx = dict_frame["low_idx"]
                 else:
                     continue
@@ -254,6 +254,7 @@ class Module(Base):
                     frames_depth = img_depth
                 else:
                     frames_depth = torch.cat([frames_depth, img_depth], dim=0)
+            frames_depth = torch.cat([frames_depth, frames_depth[-1].unsqueeze(0)], dim=0)
             try:
                 torch.save(frames_depth, os.path.join(root, self.feat_depth_pt))
             except Exception as e:

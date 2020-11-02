@@ -108,7 +108,8 @@ class Module(Base):
     def _to_DataParallel(self, DataParallelDevice=None):
         if DataParallelDevice:
             # self.enc = torch.nn.DataParallel(self.enc, device_ids=DataParallelDevice)
-            self.LSTM_visual_encoder = torch.nn.DataParallel(self.LSTM_visual_encoder, device_ids=DataParallelDevice)
+            # self.LSTM_visual_encoder = torch.nn.DataParallel(self.LSTM_visual_encoder, device_ids=DataParallelDevice)
+            pass
 
     def featurize(self, batch, load_mask=True, load_frames=True, augmentation=False):
         '''
@@ -372,7 +373,7 @@ class Module(Base):
             low_idx = -1
             for i, dict_frame in enumerate(list_img_traj):
                 # 60 actions need 61 frames
-                if low_idx != dict_frame["low_idx"] or i == 1:
+                if low_idx != dict_frame["low_idx"]:
                     low_idx = dict_frame["low_idx"]
                 else:
                     continue
@@ -387,7 +388,7 @@ class Module(Base):
                         img_depth = img_depth.resize((224, 224))
                         # transforms.ToTensor(),
                         # transforms.Normalize
-                        img_depth = np.asarray(img_depth)/255
+                        img_depth = np.asarray(img_depth)# /255
                     else:
                         img_depth = cv2.imread(frame_path, 0)
                 else:
@@ -403,6 +404,7 @@ class Module(Base):
                     frames_depth = img_depth
                 else:
                     frames_depth = torch.cat([frames_depth, img_depth], dim=0)
+            frames_depth = torch.cat([frames_depth, frames_depth[-1].unsqueeze(0)], dim=0)
             try:
                 torch.save(frames_depth, os.path.join(root, path_feat_pt))
             except Exception as e:

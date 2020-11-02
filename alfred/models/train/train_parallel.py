@@ -36,7 +36,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_contrast', help='batch_contrast size', default=3, type=int)
     parser.add_argument('--epoch', help='number of epochs', default=20, type=int)
     parser.add_argument('--lr', help='optimizer learning rate', default=1e-4, type=float)
-    parser.add_argument('--decay_epoch', help='num epoch to adjust learning rate', default=10, type=int)
+    parser.add_argument('--decay_epoch', help='num epoch to adjust learning rate', default=1, type=int)
     parser.add_argument('--dhid', help='hidden layer size', default=512, type=int)
     parser.add_argument('--dframe', help='image feature vec size', default=2500, type=int)
     parser.add_argument('--dframedepth', help='image feature vec size', default=2500, type=int)
@@ -121,7 +121,6 @@ if __name__ == '__main__':
     else:
         model = M.Module(args, vocab)
         optimizer = None
-
     # to gpu
     if args.gpu:
         from torch import nn

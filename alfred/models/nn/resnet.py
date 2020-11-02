@@ -13,7 +13,7 @@ class Resnet2(nn.Module):
         self.device = device
         self.model = models.resnet18(pretrained=True)
         if DataParallelDevice:
-            self.model = torch.nn.DataParallel(self.model, device_ids=[0, 1])
+            self.model = torch.nn.DataParallel(self.model, device_ids=DataParallelDevice)
         # self.model = torch.hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=True)
         # self.model = self.model.to(self.device)
         for name, param in self.model.named_parameters():
@@ -37,20 +37,20 @@ class Resnet18(object):
 
     def __init__(self, args, eval=True, share_memory=False, use_conv_feat=True):
         self.model = models.resnet18(pretrained=True)
-
         if args.gpu:
-            self.model = self.model.to(torch.device('cuda'))
+            # self.model.to(torch.device('cuda:%d' % args.gpu_id))
+            # self.model = torch.nn.DataParallel(self.model, device_ids=[0, 1])
+            # import pdb; pdb.set_trace()
+            pass
 
         if eval:
             self.model = self.model.eval()
-
-        if share_memory:
-            self.model.share_memory()
 
         if use_conv_feat:
             self.model = nn.Sequential(*list(self.model.children())[:-2])
 
     def extract(self, x):
+        # import pdb; pdb.set_trace()
         return self.model(x)
 
 
@@ -81,15 +81,13 @@ class MaskRCNN(object):
 
 class Resnet(object):
 
-    def __init__(self, args, eval=True, share_memory=False, use_conv_feat=True):
-        self.model_type = args.visual_model
-        self.gpu = args.gpu
+    def __init__(self, args, device, eval=True, share_memory=False, use_conv_feat=True):
+        # self.model_type = args.visual_model
+        # self.gpu = args.gpu
 
         # choose model type
-        if self.model_type == "maskrcnn":
-            self.resnet_model = MaskRCNN(args, eval, share_memory)
-        else:
-            self.resnet_model = Resnet18(args, eval, share_memory, use_conv_feat=use_conv_feat)
+        self.resnet_model = Resnet18(args, eval, share_memory, use_conv_feat=use_conv_feat)
+        self.resnet_model.model.to(device)
 
         # normalization transform
         self.transform = self.get_default_transform()
@@ -108,8 +106,8 @@ class Resnet(object):
 
     def featurize(self, images, batch=32):
         images_normalized = torch.stack([self.transform(i) for i in images], dim=0)
-        if self.gpu:
-            images_normalized = images_normalized.to(torch.device('cuda'))
+        # if self.gpu:
+        #     images_normalized = images_normalized.to(torch.device('cuda'))
 
         out = []
         with torch.set_grad_enabled(False):

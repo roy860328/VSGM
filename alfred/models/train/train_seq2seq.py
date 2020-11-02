@@ -33,9 +33,10 @@ if __name__ == '__main__':
 
     # hyper parameters
     parser.add_argument('--batch', help='batch size', default=8, type=int)
+    parser.add_argument('--batch_contrast', help='batch_contrast size', default=3, type=int)
     parser.add_argument('--epoch', help='number of epochs', default=20, type=int)
     parser.add_argument('--lr', help='optimizer learning rate', default=1e-4, type=float)
-    parser.add_argument('--decay_epoch', help='num epoch to adjust learning rate', default=10, type=int)
+    parser.add_argument('--decay_epoch', help='num epoch to adjust learning rate', default=1, type=int)
     parser.add_argument('--dhid', help='hidden layer size', default=512, type=int)
     parser.add_argument('--dframe', help='image feature vec size', default=2500, type=int)
     parser.add_argument('--demb', help='language embedding size', default=100, type=int)
@@ -65,6 +66,9 @@ if __name__ == '__main__':
     parser.add_argument('--fast_epoch', help='fast epoch during debugging', action='store_true')
     parser.add_argument('--dataset_fraction', help='use fraction of the dataset for debugging (0 indicates full size)', default=0, type=int)
 
+    parser.add_argument('--contrastive_loss_wt', help='weight of progress monitor', default=0.1, type=float)
+    parser.add_argument('--contrastive_margin', help='weight of progress monitor', default=0.1, type=float)
+    parser.add_argument('--print', help='', action='store_true')
     # args and init
     args = parser.parse_args()
     args.dout = args.dout.format(**vars(args)) + "_" + time.strftime("%d-%m-%Y_%H-%M-%S")
@@ -106,7 +110,6 @@ if __name__ == '__main__':
     else:
         model = M.Module(args, vocab)
         optimizer = None
-
     # to gpu
     if args.gpu:
         model = model.to(torch.device('cuda:%d' % args.gpu_id))

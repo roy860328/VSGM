@@ -1,5 +1,4 @@
 import os
-import sys
 import random
 import json
 import torch
@@ -10,11 +9,8 @@ from torch import nn
 from tensorboardX import SummaryWriter
 from tqdm import trange
 from sys import platform
-sys.path.append(os.path.join(os.environ['ALFRED_ROOT'], '..', 'graph_analysis'))
-import fastText_embedding
 from torchnlp.word_to_vector import FastText
-from model.dgl_pretrain_hete import THETLOWSG
-import pdb
+
 
 class Module(nn.Module):
 
@@ -32,19 +28,17 @@ class Module(nn.Module):
         self.args = args
         self.vocab = vocab
 
-        self.device = torch.device("cuda:%d" % args.gpu_id if torch.cuda.is_available() and args.gpu else "cpu")
-
-        # emb modules
-        assert args.demb == 300, "demb dim must be same with fastText model 300 dim"
-        # self.ft_model = fastText_embedding.load_model()
         self.ft_model = FastText()
+        # emb modules
         self.emb_word = nn.Embedding(len(vocab['word']), args.demb)
+        # self.vocab['action_low'].index2word(list(range(0, len(vocab['action_low']))))
+        # self.vocab['action_high'].index2word(list(range(0, len(vocab['action_high']))))
+        # self.vocab['word'].index2word(list(range(0, len(vocab['word']))))
         self.emb_action_low = nn.Embedding(len(vocab['action_low']), args.demb)
 
         # end tokens
         self.stop_token = self.vocab['action_low'].word2index("<<stop>>", train=False)
         self.seg_token = self.vocab['action_low'].word2index("<<seg>>", train=False)
-        self.gcn = THETLOWSG(args, self.args.HETAttention, args.dgcnout, self.device)
 
         # set random seed (Note: this is not the seed used to initialize THOR object locations)
         random.seed(a=args.seed)
@@ -91,68 +85,36 @@ class Module(nn.Module):
 
         # optimizer
         optimizer = optimizer or torch.optim.Adam(self.parameters(), lr=args.lr)
-        optimizer = optimizer or torch.optim.SGD(self.parameters(), lr=args.lr, momentum=0.9)
 
         """
         Contrastive Learning Para
         """
         margin, contrastive_loss_wt = self.args.contrastive_margin, self.args.contrastive_loss_wt
         contrastive_train_iter = 0
-        # assert args.batch >1, "batch size have to > 1 let contrastive learning train"
-        # pretrain graph
-        # for i in range(200):
-        #     self.gcn.train_nodes(optimizer, self.summary_writer)
         # display dout
         print("Saving to: %s" % self.args.dout)
         best_loss = {'train': 1e10, 'valid_seen': 1e10, 'valid_unseen': 1e10}
         train_iter, valid_seen_iter, valid_unseen_iter = 0, 0, 0
         for epoch in trange(0, args.epoch, desc='epoch'):
             m_train = collections.defaultdict(list)
-            self.gcn.train_nodes(optimizer, self.summary_writer)
             self.train()
-            lr = self.adjust_lr(optimizer, args.lr, epoch, decay_epoch=args.decay_epoch)
-            self.summary_writer.add_scalar('train/lr', lr, epoch)
-            """
-            Contrastive Learning
-            """
+            self.adjust_lr(optimizer, args.lr, epoch, decay_epoch=args.decay_epoch)
+            # p_train = {}
             for batch, feat in self.iterate_contrastive_data(train, args.batch_contrast):
                 optimizer.zero_grad()
                 feature_visal, feature_ins = self.forward_visaul_action_instruction(feat)
-                if False:
-                    loss_video_instruction_pos, loss_video_instruction_neg = self.visaul_instruction_contrastive(feature_visal, feature_ins)
-                    loss_video_video_pos, loss_video_video_neg = self.visaul_visaul_contrastive(feature_visal, feature_ins)
-                    # positive_sample loss smaller is better to minimize
-                    # negative_sample loss bigger is better
-                    # negative_sample need to be minus to maximize
-                    total_loss_pos = loss_video_instruction_pos + loss_video_video_pos
-                    total_loss_neg = margin + loss_video_instruction_neg + loss_video_video_neg
-                    total_loss_neg = torch.clamp(total_loss_neg*contrastive_loss_wt, min=0.0)
-                    self.summary_writer.add_scalar('contrastive/loss_video_instruction_pos', loss_video_instruction_pos.item(), contrastive_train_iter)
-                    self.summary_writer.add_scalar('contrastive/loss_video_instruction_neg', loss_video_instruction_neg.item(), contrastive_train_iter)
-                    self.summary_writer.add_scalar('contrastive/loss_video_video_pos', loss_video_video_pos.item(), contrastive_train_iter)
-                    self.summary_writer.add_scalar('contrastive/loss_video_video_neg', loss_video_video_neg.item(), contrastive_train_iter)
-                    self.summary_writer.add_scalar('contrastive/total_loss_neg', total_loss_neg.item(), contrastive_train_iter)
-                    self.summary_writer.add_scalar('contrastive/total_loss_pos', total_loss_pos.item(), contrastive_train_iter)
-                    total_loss_pos.backward(retain_graph=True)
-                    total_loss_neg.backward()
-                else:
-                    loss_visal = self.compute_SimCLR_loss(feature_visal)
-                    loss_ins = self.compute_SimCLR_loss(feature_ins)
-                    total_loss = loss_visal + loss_ins
-                    self.summary_writer.add_scalar('contrastive/SimCLR_visual', loss_visal.item(), contrastive_train_iter)
-                    self.summary_writer.add_scalar('contrastive/SimCLR_ins', loss_ins.item(), contrastive_train_iter)
-                    self.summary_writer.add_scalar('contrastive/SimCLR_total', total_loss.item(), contrastive_train_iter)
-                    total_loss.backward()
+                loss_visal = self.compute_SimCLR_loss(feature_visal)
+                loss_ins = self.compute_SimCLR_loss(feature_ins)
+                total_loss = loss_visal + loss_ins
+                self.summary_writer.add_scalar('contrastive/SimCLR_visual', loss_visal.item(), contrastive_train_iter)
+                self.summary_writer.add_scalar('contrastive/SimCLR_ins', loss_ins.item(), contrastive_train_iter)
+                self.summary_writer.add_scalar('contrastive/SimCLR_total', total_loss.item(), contrastive_train_iter)
+                total_loss.backward()
                 optimizer.step()
                 contrastive_train_iter += 1
-            """
-            Ori train action predict
-            """
-            # p_train = {}
             total_train_loss = list()
             random.shuffle(train) # shuffle every epoch
-            for batch, feat in self.iterate(train, args.batch, augmentation=True):
-                optimizer.zero_grad()
+            for batch, feat in self.iterate(train, args.batch):
                 out = self.forward(feat)
                 preds = self.extract_preds(out, batch, feat)
                 # p_train.update(preds)
@@ -163,6 +125,7 @@ class Module(nn.Module):
                     self.summary_writer.add_scalar('train/' + ln, v.item(), train_iter)
 
                 # optimizer backward pass
+                optimizer.zero_grad()
                 sum_loss = sum(loss.values())
                 sum_loss.backward()
                 optimizer.step()
@@ -289,74 +252,6 @@ class Module(nn.Module):
         total_loss = sum(total_loss) / len(total_loss)
         return p_dev, dev_iter, total_loss, m_dev
 
-    def featurize(self, batch):
-        raise NotImplementedError()
-
-    def forward(self, feat, max_decode=100):
-        raise NotImplementedError()
-
-    def extract_preds(self, out, batch, feat):
-        raise NotImplementedError()
-
-    def compute_loss(self, out, batch, feat):
-        raise NotImplementedError()
-
-    def compute_metric(self, preds, data):
-        raise NotImplementedError()
-
-    def get_faxtText_embedding(self, text):
-        # self.ft_model["test"]
-        return self.ft_model[text]
-
-    def get_task_and_ann_id(self, ex):
-        '''
-        single string for task_id and annotation repeat idx
-        '''
-        return "%s_%s" % (ex['task_id'], str(ex['repeat_idx']))
-
-    def make_debug(self, preds, data):
-        '''
-        readable output generator for debugging
-        '''
-        debug = {}
-        for task in data:
-            ex = self.load_task_json(task)
-            i = self.get_task_and_ann_id(ex)
-            debug[i] = {
-                'lang_goal': ex['turk_annotations']['anns'][ex['ann']['repeat_idx']]['task_desc'],
-                'action_low': [a['discrete_action']['action'] for a in ex['plan']['low_actions']],
-                'p_action_low': preds[i]['action_low'].split(),
-            }
-        return debug
-
-    def load_task_json(self, task):
-        '''
-        load preprocessed json from disk
-        '''
-        json_path = os.path.join(self.args.data, task['task'], '%s' % self.args.pp_folder, 'ann_%d.json' % task['repeat_idx'])
-        with open(json_path) as f:
-            data = json.load(f)
-        return data
-
-    def get_task_root(self, ex):
-        '''
-        returns the folder path of a trajectory
-        '''
-        if platform == "win32":
-            return os.path.join(self.args.data, ex['split'], ex['root'].split('\\')[-1])
-        else:
-            return os.path.join(self.args.data, ex['split'], *(ex['root'].split('/')[-2:]))
-
-    def iterate(self, data, batch_size, augmentation=False):
-        '''
-        breaks dataset into batch_size chunks for training
-        '''
-        for i in trange(0, len(data), batch_size, desc='batch'):
-            tasks = data[i:i+batch_size]
-            batch = [self.load_task_json(task) for task in tasks]
-            feat = self.featurize(batch, augmentation=augmentation)
-            yield batch, feat
-
     def iterate_contrastive_data(self, data, batch_size):
         '''
         breaks dataset into batch_size chunks for training
@@ -381,8 +276,76 @@ class Module(nn.Module):
                 batch_tasks.extend(positive_sample_task)
                 batch_tasks.extend(negative_sample_task)
             batch = [self.load_task_json(task) for task in batch_tasks]
-            feat = self.featurize(batch, augmentation=True)
+            feat = self.featurize(batch)
             # import pdb; pdb.set_trace()
+            yield batch, feat
+
+    def featurize(self, batch):
+        raise NotImplementedError()
+
+    def forward(self, feat, max_decode=100):
+        raise NotImplementedError()
+
+    def extract_preds(self, out, batch, feat):
+        raise NotImplementedError()
+
+    def compute_loss(self, out, batch, feat):
+        raise NotImplementedError()
+
+    def compute_metric(self, preds, data):
+        raise NotImplementedError()
+
+    def get_task_and_ann_id(self, ex):
+        '''
+        single string for task_id and annotation repeat idx
+        '''
+        return "%s_%s" % (ex['task_id'], str(ex['repeat_idx']))
+
+    def make_debug(self, preds, data):
+        '''
+        readable output generator for debugging
+        '''
+        debug = {}
+        for task in data:
+            ex = self.load_task_json(task)
+            i = self.get_task_and_ann_id(ex)
+            debug[i] = {
+                'lang_goal': ex['turk_annotations']['anns'][ex['ann']['repeat_idx']]['task_desc'],
+                'action_low': [a['discrete_action']['action'] for a in ex['plan']['low_actions']],
+                'p_action_low': preds[i]['action_low'].split(),
+            }
+        return debug
+
+    def get_faxtText_embedding(self, text):
+        # self.ft_model["test"]
+        return self.ft_model[text]
+
+    def load_task_json(self, task):
+        '''
+        load preprocessed json from disk
+        '''
+        json_path = os.path.join(self.args.data, task['task'], '%s' % self.args.pp_folder, 'ann_%d.json' % task['repeat_idx'])
+        with open(json_path) as f:
+            data = json.load(f)
+        return data
+
+    def get_task_root(self, ex):
+        '''
+        returns the folder path of a trajectory
+        '''
+        if platform == "win32":
+            return os.path.join(self.args.data, ex['split'], ex['root'].split('\\')[-1])
+        else:
+            return os.path.join(self.args.data, ex['split'], *(ex['root'].split('/')[-2:]))
+
+    def iterate(self, data, batch_size):
+        '''
+        breaks dataset into batch_size chunks for training
+        '''
+        for i in trange(0, len(data), batch_size, desc='batch'):
+            tasks = data[i:i+batch_size]
+            batch = [self.load_task_json(task) for task in tasks]
+            feat = self.featurize(batch)
             yield batch, feat
 
     def zero_input(self, x, keep_end_token=True):
@@ -405,18 +368,19 @@ class Module(nn.Module):
         '''
         decay learning rate every decay_epoch
         '''
-        lr = init_lr * (0.5 ** (epoch // decay_epoch))
+        lr = init_lr * (0.1 ** (epoch // decay_epoch))
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
-        return lr
 
     @classmethod
-    def load(cls, fsave, device=None, use_gpu=None):
+    def load(cls, fsave, device=None, use_gpu=None, gpu_id=1):
         '''
         load pth model from disk
         '''
         save = torch.load(fsave, map_location=device)
         save['args'].gpu = use_gpu if use_gpu == False else save['args'].gpu
+        save['args'].gpu_id = gpu_id
+        # import pdb; pdb.set_trace()
         model = cls(save['args'], save['vocab'])
         model.load_state_dict(save['model'])
         model = model.to(device=device)
