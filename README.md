@@ -16,6 +16,7 @@ pip install imageio
 cd gcn/alfred
 # linux
 export ALFRED_ROOT=/home/host/gcn/alfred/
+export ALFRED_ROOT=/home/alfworld/
 # windows
 SET ALFRED_ROOT=D:\HetG\alfred
 SET ALFRED_ROOT=D:\alfred\alfred

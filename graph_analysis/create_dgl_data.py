@@ -33,7 +33,7 @@ def create_node_object():
         string_csv += ','.join(str(vector) for vector in vectors)
         string_csv += "\n"
     # csv
-    nodes = open(save_path + "object.csv", "w")
+    nodes = open(save_path + "object_alfworld.csv", "w")
     nodes.write(string_csv)
 
 

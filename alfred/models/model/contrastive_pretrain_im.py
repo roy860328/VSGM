@@ -17,10 +17,6 @@ from gen.utils.image_util import decompress_mask
 import cv2
 from PIL import Image
 import pdb
-trans_normalize = transforms.Normalize(
-    mean=[0.485, 0.456, 0.406],
-    std=[0.229, 0.224, 0.225]
-    )
 trans_color = transforms.Compose([
     transforms.ToPILImage(),
     transforms.ColorJitter(
@@ -29,7 +25,10 @@ trans_color = transforms.Compose([
         saturation=0.1),
     transforms.ToTensor(),
 ])
-trans_toPIL = transforms.ToPILImage()
+trans_normalize = transforms.Normalize(
+    mean=[0.485, 0.456, 0.406],
+    std=[0.229, 0.224, 0.225]
+)
 fn_cos = nn.CosineSimilarity(dim=0, eps=1e-6)
 fn_logsoftmax = nn.LogSoftmax(dim=1)
 
@@ -368,66 +367,24 @@ class Module(Base):
         key_name: "frames_depth" or other
         list_img_traj: traj_data["images"]. To chose feat[key_name] file
         """
-        def _load_with_path():
-            frames_depth = None
-            low_idx = -1
-            for i, dict_frame in enumerate(list_img_traj):
-                # 60 actions need 61 frames
-                if low_idx != dict_frame["low_idx"]:
-                    low_idx = dict_frame["low_idx"]
-                else:
-                    continue
-                name_frame = dict_frame["image_name"].split(".")[0]
-                frame_path = os.path.join(path, name_frame + type_image)
-                # for debug
-                if platform == "win32":
-                    frame_path = "D:\\AI2\\homealfreddatafull_2.1.0trainpick_clean_then_place_in_recep-Lettuc\\000000160.jpg"
-                if os.path.isfile(frame_path):
-                    if is_rgb:
-                        img_depth = Image.open(frame_path)
-                        img_depth = img_depth.resize((224, 224))
-                        # transforms.ToTensor(),
-                        # transforms.Normalize
-                        img_depth = np.asarray(img_depth)# /255
-                    else:
-                        img_depth = cv2.imread(frame_path, 0)
-                else:
-                    print("file is not exist: {}".format(frame_path))
-                    img_depth = np.zeros(img_depth.shape[1:])
-                img_depth = torch.tensor(img_depth, dtype=torch.float32)
-                if is_rgb:
-                    img_depth = img_depth.view(3, 224, 224)
-                    img_depth = trans_normalize(img_depth)
-                img_depth = img_depth.unsqueeze(0)
-
-                if frames_depth is None:
-                    frames_depth = img_depth
-                else:
-                    frames_depth = torch.cat([frames_depth, img_depth], dim=0)
-            frames_depth = torch.cat([frames_depth, frames_depth[-1].unsqueeze(0)], dim=0)
-            try:
-                torch.save(frames_depth, os.path.join(root, path_feat_pt))
-            except Exception as e:
-                print("No such path")
-            return frames_depth
-
         def _load_with_pt():
             frames_depth = torch.load(os.path.join(root, name_pt)).to(dtype=torch.float32)
             return frames_depth
-        path = os.path.join(os.getcwd(), root)
-        path_feat_pt = os.path.join(path, name_pt)
+        path_feat_pt = os.path.join(os.getcwd(), root, name_pt)
         if os.path.isfile(path_feat_pt):
             frames_depth = _load_with_pt()
         else:
             print("{} doesn't exist: {}".format(name_pt, path_feat_pt))
-            frames_depth = _load_with_path()
-        if augmentation:
-            frames_depth = self.transform_video_style(frames_depth)
+            raise
+        # pdb.set_trace()
+        frames_depth = self.transform_video_style(frames_depth, augmentation)
         # feat["frames_depth"]
         feat[key_name].append(frames_depth)
 
-    def transform_video_style(self, frames):
-        frames = [trans_color(frame) for frame in frames]
+    def transform_video_style(self, frames, augmentation=False):
+        if augmentation:
+            frames = [trans_color(frame) for frame in frames]
+        frames = [trans_normalize(frame) for frame in frames]
         frames = torch.stack(frames, dim=0)
         return frames
 

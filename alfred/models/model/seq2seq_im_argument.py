@@ -14,10 +14,6 @@ from nn.resnet import Resnet
 from sys import platform
 from PIL import Image
 import pdb
-trans_normalize = transforms.Normalize(
-    mean=[0.485, 0.456, 0.406],
-    std=[0.229, 0.224, 0.225]
-    )
 trans_color = transforms.Compose([
     transforms.ToPILImage(),
     transforms.ColorJitter(
@@ -26,7 +22,10 @@ trans_color = transforms.Compose([
         saturation=0.1),
     transforms.ToTensor(),
 ])
-trans_toPIL = transforms.ToPILImage()
+trans_normalize = transforms.Normalize(
+    mean=[0.485, 0.456, 0.406],
+    std=[0.229, 0.224, 0.225]
+    )
 
 
 class Module(Base):
@@ -200,14 +199,12 @@ class Module(Base):
                     img_depth = img_depth.resize((224, 224))
                     # transforms.ToTensor(),
                     # transforms.Normalize
-                    img_depth = np.asarray(img_depth)# /255
+                    img_depth = np.asarray(img_depth)/255
                 else:
                     print("file is not exist: {}".format(frame_path))
                     img_depth = np.zeros(img_depth.shape[1:])
                 img_depth = torch.tensor(img_depth, dtype=torch.float32)
                 img_depth = img_depth.view(3, 224, 224)
-                img_depth = trans_normalize(img_depth)
-                # img_depth = trans_color(img_depth)
                 img_depth = img_depth.unsqueeze(0)
 
                 if frames_depth is None:
@@ -228,7 +225,10 @@ class Module(Base):
         return frames_depth
 
     def transform_video_style(self, frames):
-        frames = [trans_color(frame) for frame in frames]
+        if self.args.augmentation:
+            frames = [trans_color(frame) for frame in frames]
+        # pdb.set_trace()
+        frames = [trans_normalize(frame) for frame in frames]
         frames = torch.stack(frames, dim=0)
         return frames
 

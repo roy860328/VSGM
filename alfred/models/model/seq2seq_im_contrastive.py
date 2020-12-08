@@ -14,10 +14,6 @@ from nn.resnet import Resnet
 from sys import platform
 from PIL import Image
 import pdb
-trans_normalize = transforms.Normalize(
-    mean=[0.485, 0.456, 0.406],
-    std=[0.229, 0.224, 0.225]
-    )
 trans_color = transforms.Compose([
     transforms.ToPILImage(),
     transforms.ColorJitter(
@@ -26,7 +22,10 @@ trans_color = transforms.Compose([
         saturation=0.1),
     transforms.ToTensor(),
 ])
-trans_toPIL = transforms.ToPILImage()
+trans_normalize = transforms.Normalize(
+    mean=[0.485, 0.456, 0.406],
+    std=[0.229, 0.224, 0.225]
+    )
 fn_cos = nn.CosineSimilarity(dim=0, eps=1e-6)
 fn_logsoftmax = nn.LogSoftmax(dim=1)
 
@@ -135,7 +134,7 @@ class Module(Base):
             # load Resnet features from disk
             if load_frames and not self.test_mode:
                 root = self.get_task_root(ex)
-                images = self._load_with_path(os.path.join(root, 'raw_images'), ex["images"], )
+                images = self._load_img(os.path.join(root, 'raw_images'), ex["images"], name_pt="feat_raw_frames.pt", type_image=".jpg")
                 im = images.to(self.device)
                 # import pdb; pdb.set_trace()
                 im = self.visual_encoder.resnet_model.extract(images)
@@ -192,41 +191,59 @@ class Module(Base):
         # feat['frames'][0].shape
         return feat
 
-    def _load_with_path(self, path, list_img_traj, type_image=".jpg", ):
-        frames_depth = None
-        low_idx = -1
-        for i, dict_frame in enumerate(list_img_traj):
-            # 60 actions need 61 frames
-            if low_idx != dict_frame["low_idx"]:
-                low_idx = dict_frame["low_idx"]
-            else:
-                continue
-            name_frame = dict_frame["image_name"].split(".")[0]
-            frame_path = os.path.join(path, name_frame + type_image)
-            # for debug
-            if platform == "win32":
-                frame_path = "D:\\AI2\\homealfreddatafull_2.1.0trainpick_clean_then_place_in_recep-Lettuc\\000000160.jpg"
-            if os.path.isfile(frame_path):
-                img_depth = Image.open(frame_path)
-                img_depth = img_depth.resize((224, 224))
-                # transforms.ToTensor(),
-                # transforms.Normalize
-                img_depth = np.asarray(img_depth)/255
-            else:
-                print("file is not exist: {}".format(frame_path))
-                img_depth = np.zeros(img_depth.shape[1:])
-            img_depth = torch.tensor(img_depth, dtype=torch.float32)
-            img_depth = img_depth.view(3, 224, 224)
-            img_depth = trans_normalize(img_depth)
-            img_depth = trans_color(img_depth)
-            img_depth = img_depth.unsqueeze(0)
+    def _load_img(self, path, list_img_traj, name_pt=None, type_image=".png"):
+        def _load_with_path():
+            frames_depth = None
+            low_idx = -1
+            for i, dict_frame in enumerate(list_img_traj):
+                # 60 actions need 61 frames
+                if low_idx != dict_frame["low_idx"]:
+                    low_idx = dict_frame["low_idx"]
+                else:
+                    continue
+                name_frame = dict_frame["image_name"].split(".")[0]
+                frame_path = os.path.join(path, name_frame + type_image)
+                # for debug
+                if platform == "win32":
+                    frame_path = "D:\\AI2\\homealfreddatafull_2.1.0trainpick_clean_then_place_in_recep-Lettuc\\000000160.jpg"
+                if os.path.isfile(frame_path):
+                    img_depth = Image.open(frame_path)
+                    img_depth = img_depth.resize((224, 224))
+                    # transforms.ToTensor(),
+                    # transforms.Normalize
+                    img_depth = np.asarray(img_depth)/255
+                else:
+                    print("file is not exist: {}".format(frame_path))
+                    img_depth = np.zeros(img_depth.shape[1:])
+                img_depth = torch.tensor(img_depth, dtype=torch.float32)
+                img_depth = img_depth.view(3, 224, 224)
+                img_depth = img_depth.unsqueeze(0)
 
-            if frames_depth is None:
-                frames_depth = img_depth
-            else:
-                frames_depth = torch.cat([frames_depth, img_depth], dim=0)
-        frames_depth = torch.cat([frames_depth, img_depth], dim=0)
+                if frames_depth is None:
+                    frames_depth = img_depth
+                else:
+                    frames_depth = torch.cat([frames_depth, img_depth], dim=0)
+            frames_depth = torch.cat([frames_depth, img_depth], dim=0)
+            return frames_depth
+
+        def _load_with_pt():
+            frames_depth = torch.load(os.path.join(path, name_pt)).to(dtype=torch.float32)
+            return frames_depth
+        if name_pt is not None:
+            frames_depth = _load_with_pt()
+        else:
+            frames_depth = _load_with_path()
+        frames_depth = self.transform_video_style(frames_depth)
         return frames_depth
+
+    def transform_video_style(self, frames):
+        if self.args.augmentation:
+            frames = [trans_color(frame) for frame in frames]
+        # pdb.set_trace()
+        frames = [trans_normalize(frame) for frame in frames]
+        frames = torch.stack(frames, dim=0)
+        return frames
+
     def serialize_lang_action(self, feat):
         '''
         append segmented instr language and low-level actions into single sequences

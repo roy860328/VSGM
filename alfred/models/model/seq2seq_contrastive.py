@@ -261,7 +261,8 @@ class Module(nn.Module):
         for i in range(len(data)):
             dict_data[data[i]["task"]].append(data[i])
         list_data = list(dict_data.values())
-        list_data = random.choices(list_data, k=len(list_data)//100)
+        print("contrastive_data len: ", len(list_data))
+        list_data = random.choices(list_data, k=len(list_data)//10)
         for i in trange(0, len(list_data)-batch_size, batch_size, desc='batch'):
             tasks = list_data[i:i+batch_size+1]
             batch_tasks = []

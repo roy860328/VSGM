@@ -389,6 +389,7 @@ class DepthConvFrameMaskDecoderProgressMonitor(nn.Module):
         self.pframe = pframe
         self.dhid = dhid
         self.vis_encoder = ResnetVisualEncoder(dframe=dframe)
+        self.vis_depth_encoder = ResnetVisualEncoder(dframe=dframedepth)
         self.cell = nn.LSTMCell(dhid+dframe+demb+dgcn+dframedepth, dhid)
         self.attn = DotAttn()
         self.input_dropout = nn.Dropout(input_dropout)
@@ -412,6 +413,7 @@ class DepthConvFrameMaskDecoderProgressMonitor(nn.Module):
 
         # encode vision and lang feat
         vis_feat_t = self.vis_encoder(frame)
+        vis_depth_feat_t = self.vis_depth_encoder(frames_depth)
         lang_feat_t = enc # language is encoded once at the start
 
         # attend over language
@@ -421,9 +423,9 @@ class DepthConvFrameMaskDecoderProgressMonitor(nn.Module):
         # concat visual feats, weight lang, and previous action embedding
         if gcn_embedding is not None:
             gcn_embedding = gcn_embedding.squeeze(0)
-            inp_t = torch.cat([vis_feat_t, weighted_lang_t, e_t, gcn_embedding, frames_depth], dim=1)
+            inp_t = torch.cat([vis_feat_t, weighted_lang_t, e_t, gcn_embedding, vis_depth_feat_t], dim=1)
         else:
-            inp_t = torch.cat([vis_feat_t, weighted_lang_t, e_t, frames_depth], dim=1)
+            inp_t = torch.cat([vis_feat_t, weighted_lang_t, e_t, vis_depth_feat_t], dim=1)
         inp_t = self.input_dropout(inp_t)
 
         # update hidden state
@@ -456,7 +458,10 @@ class DepthConvFrameMaskDecoderProgressMonitor(nn.Module):
         subgoals = []
         progresses = []
         for t in range(max_t):
-            action_t, mask_t, state_t, attn_score_t, subgoal_t, progress_t = self.step(enc, frames[:, t], e_t, state_t, gcn_embedding[:, t], frames_depth[:, t])
+            if gcn_embedding is not None:
+                action_t, mask_t, state_t, attn_score_t, subgoal_t, progress_t = self.step(enc, frames[:, t], e_t, state_t, gcn_embedding[:, t], frames_depth[:, t])
+            else:
+                action_t, mask_t, state_t, attn_score_t, subgoal_t, progress_t = self.step(enc, frames[:, t], e_t, state_t, None, frames_depth[:, t])
             masks.append(mask_t)
             actions.append(action_t)
             attn_scores.append(attn_score_t)
