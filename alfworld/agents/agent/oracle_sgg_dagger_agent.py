@@ -1,25 +1,24 @@
 import os
 import sys
 import copy
-
 import numpy as np
 import torch
 import torch.nn.functional as F
-
 import modules.memory as memory
 from agent import TextDAggerAgent
 from modules.generic import to_np, to_pt, _words_to_ids, pad_sequences, preproc, max_len, ez_gather_dim_1, LinearSchedule
 from modules.layers import NegativeLogLoss, masked_mean, compute_mask
-
-sys.path.insert(0, os.environ['ALFRED_ROOT'])
-from detector.mrcnn import load_pretrained_model
-
 import torchvision.transforms as T
 from torchvision import models
 from torchvision.ops import boxes as box_ops
-import pdb
 
-class VisionDAggerAgent(TextDAggerAgent):
+sys.path.insert(0, os.path.join(os.environ['ALFRED_ROOT'], 'agents', 'semantic_graph'))
+import importlib
+from semantic_graph import SceneGraph
+import pdb
+from sgg import alfred_data_format
+
+class OracleSggDAggerAgent(TextDAggerAgent):
     '''
     Vision Agent trained with DAgger
     '''
@@ -36,138 +35,91 @@ class VisionDAggerAgent(TextDAggerAgent):
         self.use_exploration_frame_feats = config['vision_dagger']['use_exploration_frame_feats']
         self.sequence_aggregation_method = config['vision_dagger']['sequence_aggregation_method']
 
+        '''
+        NEW
+        '''
+        # Semantic graph create
+        self.cfg_yaml = config['semantic_cfg']
+        self.isORACLE = self.cfg_yaml.SCENE_GRAPH.ORACLE
+        self.graph_embed_model = importlib.import_module(self.cfg_yaml.SCENE_GRAPH.MODEL).Net(self.cfg_yaml)
+        if self.use_gpu:
+            self.graph_embed_model.cuda()
+        self.scene_graphs = []
+        for i in range(config['general']['training']['batch_size']):
+            scene_graph = SceneGraph(self.cfg_yaml)
+            self.scene_graphs.append(scene_graph)
+
         # initialize model
-        if self.vision_model_type in {'resnet'}:
-            self.detector = models.resnet18(pretrained=True)
-            self.detector.eval()
-            if self.use_gpu:
-                self.detector.cuda()
-        elif self.vision_model_type in {'maskrcnn', 'maskrcnn_whole'}:
-            pretrained_model_path = os.path.join(os.environ['ALFRED_ROOT'], config['mask_rcnn']['pretrained_model_path'])
-            self.mask_rcnn_top_k_boxes = self.config['vision_dagger']['maskrcnn_top_k_boxes']
-            self.avg2dpool = torch.nn.AvgPool2d((13, 13))
-            self.detector = load_pretrained_model(pretrained_model_path)
-            self.detector.roi_heads.register_forward_hook(self.box_features_hook)
-            self.detection_box_features = []
-            self.fpn_pooled_features = []
-            self.detector.eval()
-            if self.use_gpu:
-                self.detector.cuda()
-        elif self.vision_model_type in {"no_vision"}:
-            print("No Vision Agent")
+        if self.isORACLE:
+            self.trans_MetaData = alfred_data_format.TransMetaData(self.cfg_yaml)
         else:
+            # import graph-rcnn
             raise NotImplementedError()
+            self.detector = None
+            self.detector.eval()
+            if self.use_gpu:
+                self.detector.cuda()
 
-    def box_features_hook(self, module, input, output):
-        '''
-        hook for extracting features from MaskRCNN
-        '''
+        self.load_pretrained = self.cfg_yaml.GENERAL.LOAD_PRETRAINED
+        self.load_from_tag = self.cfg_yaml.GENERAL.LOAD_PRETRAINED_PATH
 
-        features, proposals, image_shapes, targets = input
+    def reset_all_scene_graph(self):
+        for scene_graph in self.scene_graphs:
+            scene_graph.init_graph_data()
 
-        box_features = module.box_roi_pool(features, proposals, image_shapes)
-        box_features = module.box_head(box_features)
-        class_logits, box_regression = module.box_predictor(box_features)
+    def finish_of_episode(self, episode_no, batch_size):
+        super().finish_of_episode(episode_no, batch_size)
+        self.reset_all_scene_graph()
 
-        device = class_logits.device
-        num_classes = class_logits.shape[-1]
-
-        boxes_per_image = [len(boxes_in_image) for boxes_in_image in proposals]
-        pred_boxes = module.box_coder.decode(box_regression, proposals)
-
-        pred_scores = F.softmax(class_logits, -1)
-
-        # split boxes and scores per image
-        pred_boxes = pred_boxes.split(boxes_per_image, 0)
-        pred_scores = pred_scores.split(boxes_per_image, 0)
-
-        all_boxes = []
-        all_scores = []
-        all_labels = []
-        all_keeps = []
-        for boxes, scores, image_shape in zip(pred_boxes, pred_scores, image_shapes):
-            boxes = box_ops.clip_boxes_to_image(boxes, image_shape)
-
-            # create labels for each prediction
-            labels = torch.arange(num_classes, device=device)
-            labels = labels.view(1, -1).expand_as(scores)
-
-            # remove predictions with the background label
-            boxes = boxes[:, 1:]
-            scores = scores[:, 1:]
-            labels = labels[:, 1:]
-
-            # batch everything, by making every class prediction be a separate instance
-            boxes = boxes.reshape(-1, 4)
-            scores = scores.flatten()
-            labels = labels.flatten()
-
-            # remove low scoring boxes
-            inds = torch.nonzero(scores > module.score_thresh).squeeze(1)
-            boxes, scores, labels = boxes[inds], scores[inds], labels[inds]
-
-            # remove empty boxes
-            keep = box_ops.remove_small_boxes(boxes, min_size=1e-2)
-            boxes, scores, labels = boxes[keep], scores[keep], labels[keep]
-
-            # non-maximum suppression, independently done per class
-            keep = box_ops.batched_nms(boxes, scores, labels, module.nms_thresh)
-            # keep only topk scoring predictions
-            keep = keep[:self.mask_rcnn_top_k_boxes]
-            boxes, scores, labels = boxes[keep], scores[keep], labels[keep]
-
-            all_boxes.append(boxes)
-            all_scores.append(scores)
-            all_labels.append(labels)
-            all_keeps.append(keep)
-
-        box_features_per_image = []
-        for keep in all_keeps:
-            box_features_per_image.append(box_features[keep])
-
-        self.detection_box_features = box_features_per_image
-        self.fpn_pooled_features = self.avg2dpool(features['pool']).squeeze(-1).squeeze(-1)
+    def get_env_last_event_data(self, envs):
+        store_state = {
+            "rgb_image": [],
+            "mask_image": [],
+            "sgg_meta_data": [],
+        }
+        for i, thor in enumerate(envs):
+            env = thor.env
+            rgb_image = env.last_event.frame[:, :, ::-1]
+            mask_image = env.last_event.instance_segmentation_frame
+            sgg_meta_data = env.last_event.metadata['objects']
+            store_state["rgb_image"].append(rgb_image)
+            store_state["mask_image"].append(mask_image)
+            store_state["sgg_meta_data"].append(sgg_meta_data)
+        return store_state
 
     # visual features for state representation
-    def extract_visual_features(self, images):
-        with torch.no_grad():
-            if "resnet" in self.vision_model_type:
-                image_tensors = [self.transform(i).cuda() if self.use_gpu else self.transform(i) for i in images]
-                image_tensors = torch.stack(image_tensors, dim=0)
-                res_out = self.detector(image_tensors)
-                res_out_list = [res_out[i].unsqueeze(0) for i in range(res_out.shape[0])]
-                return res_out_list
-            elif "maskrcnn" in self.vision_model_type:
-                image_tensors = [self.transform(i).cuda() if self.use_gpu else self.transform(i) for i in images]
-                self.detector(image_tensors) # hook writes to self.detection_box_features
-                if "maskrcnn_whole" in self.vision_model_type:
-                    return [i.unsqueeze(0) for i in self.fpn_pooled_features]
-                else:
-                    # torch.Size([10, 1024])
-                    return self.detection_box_features
-            elif "no_vision" in self.vision_model_type:
-                batch_size = len(images)
-                zeros = [torch.zeros((1, 1000)) for _ in range(batch_size)]
-                if self.use_gpu:
-                    zeros = [z.cuda() for z in zeros]
-                return zeros
+    def extract_visual_features(self, envs=None, store_state=None):
+        if envs is not None:
+            store_state = self.get_env_last_event_data(envs)
+        if store_state is None:
+            raise NotImplementedError()
+
+        graph_embed_features = []
+        for i in range(len(store_state["rgb_image"])):
+            scene_graph = self.scene_graphs[i]
+            rgb_image = store_state["rgb_image"][i]
+            mask_image = store_state["mask_image"][i]
+            # color_to_obj_id_type = {}
+            # for color, object_id in env.last_event.color_to_object_id.items():
+            #     color_to_obj_id_type[str(color)] = object_id
+            if self.isORACLE:
+                sgg_meta_data = store_state["sgg_meta_data"][i]
+                target = self.trans_MetaData.trans_object_meta_data_to_relation_and_attribute(sgg_meta_data)
+                scene_graph.add_oracle_local_graph_to_global_graph(rgb_image, target)
             else:
                 raise NotImplementedError()
+                # with torch.no_grad():
+                #     image_tensors = [self.transform(i).cuda() if self.use_gpu else self.transform(i) for i in images]
+                #     sgg_meta_data = self.detector(image_tensors)
+                #     sgg_meta_data = ?
+            global_graph = scene_graph.get_graph_data()
+            graph_embed_feature = self.graph_embed_model(global_graph)
+            graph_embed_features.append(graph_embed_feature)
+        return graph_embed_features, store_state
 
     # without recurrency
     def train_dagger(self):
-
-        if len(self.dagger_memory) < self.dagger_replay_batch_size:
-            return None
-        transitions = self.dagger_memory.sample(self.dagger_replay_batch_size)
-        if transitions is None:
-            return None
-        batch = memory.dagger_transition(*zip(*transitions))
-
-        if self.action_space == "generation":
-            return self.command_generation_teacher_force(batch.observation_list, batch.task_list, batch.target_list)
-        else:
-            raise NotImplementedError()
+        raise NotImplementedError()
 
     # with recurrency
     def train_dagger_recurrent(self):
@@ -184,12 +136,12 @@ class VisionDAggerAgent(TextDAggerAgent):
             batches.append(batch)
 
         if self.action_space == "generation":
-            return self.command_generation_recurrent_teacher_force([batch.observation_list for batch in batches], [batch.task_list for batch in batches], [batch.target_list for batch in batches], contains_first_step)
+            return self.train_command_generation_recurrent_teacher_force([batch.observation_list for batch in batches], [batch.task_list for batch in batches], [batch.target_list for batch in batches], contains_first_step)
         else:
             raise NotImplementedError()
 
     # not recurrent loss
-    def command_generation_teacher_force(self, observation_feats, task_desc_strings, target_strings):
+    def train_command_generation_teacher_force(self, observation_feats, task_desc_strings, target_strings):
         input_target_strings = [" ".join(["[CLS]"] + item.split()) for item in target_strings]
         output_target_strings = [" ".join(item.split() + ["[SEP]"]) for item in target_strings]
         batch_size = len(observation_feats)
@@ -226,18 +178,20 @@ class VisionDAggerAgent(TextDAggerAgent):
         return to_np(pred), to_np(loss)
 
     # loss
-    def command_generation_recurrent_teacher_force(self, seq_observation_feats, seq_task_desc_strings, seq_target_strings, contains_first_step=False):
+    def train_command_generation_recurrent_teacher_force(self, store_state, seq_task_desc_strings, seq_target_strings, contains_first_step=False):
         # pdb.set_trace()
         loss_list = []
         previous_dynamics = None
-        batch_size = len(seq_observation_feats[0])
+        batch_size = len(seq_target_strings[0])
         h_td, td_mask = self.encode(seq_task_desc_strings[0], use_model="online")
         h_td_mean = self.online_net.masked_mean(h_td, td_mask).unsqueeze(1)
-        for step_no in range(self.dagger_replay_sample_history_length):
+        # with torch.autograd.set_detect_anomaly(True):
+        for step_no in range(len(seq_target_strings)):
             input_target_strings = [" ".join(["[CLS]"] + item.split()) for item in seq_target_strings[step_no]]
             output_target_strings = [" ".join(item.split() + ["[SEP]"]) for item in seq_target_strings[step_no]]
+            observation_feats, _ = self.extract_visual_features(store_state=store_state[step_no])
 
-            obs = [o.to(h_td.device) for o in seq_observation_feats[step_no]]
+            obs = [o.to(h_td.device) for o in observation_feats]
             aggregated_obs_feat = self.aggregate_feats_seq(obs)
             h_obs = self.online_net.vision_fc(aggregated_obs_feat)
             vision_td = torch.cat((h_obs, h_td_mean), dim=1) # batch x k boxes x hid
@@ -260,9 +214,10 @@ class VisionDAggerAgent(TextDAggerAgent):
             loss = torch.mean(batch_loss)
             loss_list.append(loss)
 
-        loss = torch.stack(loss_list).mean()
-        if loss is None:
+        if loss_list is None:
             return None
+        loss = torch.stack(loss_list).mean()
+        print("loss: ", loss)
         # Backpropagate
         self.online_net.zero_grad()
         self.optimizer.zero_grad()
@@ -340,6 +295,8 @@ class VisionDAggerAgent(TextDAggerAgent):
         for batch in exploration_frames:
             ef_feats = []
             for image in batch:
+                raise NotImplementedError()
+                # observation_feats, _ = self.extract_visual_features(envs=env.envs, store_state=store_state[step_no])
                 ef_feats.append(self.extract_visual_features([image])[0])
             # cat_feats = torch.cat(ef_feats, dim=0)
             max_feat_len = max([f.shape[0] for f in ef_feats])

@@ -132,9 +132,14 @@ def transfer_mask_semantic_to_bbox_label(mask, color_to_object, object_classes, 
                 boxes.append([xmin, ymin, xmax, ymax])
                 labels.append(class_idx)
                 boxes_id.append(object_id)
+
+    return np.array(masks), np.array(boxes), np.array(labels), boxes_id
+
+
+def transfer_object_meta_data_to_relation_and_attribute(boxes_id, data_obj_relation_attribute):
     # relation & attribute
     obj_relations, obj_relation_triplets, obj_attributes = [], [], []
-    obj_relations = np.zeros((len(boxes), len(boxes)))
+    obj_relations = np.zeros((len(boxes_id), len(boxes_id)))
 
     for i, object_id in enumerate(boxes_id):
         # {objectId, attribute, parentReceptacles}
@@ -142,17 +147,30 @@ def transfer_mask_semantic_to_bbox_label(mask, color_to_object, object_classes, 
             if obj_relation_attribute['objectId'] == object_id:
                 obj_attribute = _set_obj_attribute(obj_relation_attribute)
                 parentReceptacles_ids = obj_relation_attribute['parentReceptacles']
-                # import pdb;pdb.set_trace()
                 if parentReceptacles_ids and len(parentReceptacles_ids) > 0:
                     for parentReceptacles_id in parentReceptacles_ids:
+                        '''
+                        relation
+                         Sofa|-02.96|+00.08|+01.39
+                        Pillow|-02.89|+00.62|+00.82
+                        relation
+                         Sofa|-02.96|+00.08|+01.39
+                        RemoteControl|-03.03|+00.56|+02.01
+                        relation
+                         Sofa|-02.96|+00.08|+01.39
+                        Laptop|-02.81|+00.56|+01.81
+                        relation
+                         Sofa|-02.96|+00.08|+01.39
+                        Pillow|-02.89|+00.62|+01.19
+                        '''
                         j, relation, isfind = _search_boxes_index(boxes_id, parentReceptacles_id)
+                        # print(object_id)
                         if isfind:
                             obj_relations[j, i] = relation
                             obj_relation_triplets.append(np.array([j, i, relation]))
                 obj_attributes.append(obj_attribute)
 
-
-    return np.array(masks), np.array(boxes), np.array(labels), boxes_id, np.array(obj_relations), np.array(obj_relation_triplets), np.array(obj_attributes)
+    return np.array(obj_relations), np.array(obj_relation_triplets), np.array(obj_attributes)
 
 
 def _set_obj_attribute(obj_relation_attribute):
@@ -163,6 +181,7 @@ def _set_obj_attribute(obj_relation_attribute):
 def _search_boxes_index(boxes_id, parentReceptacles_id):
     for j, object_id in enumerate(boxes_id):
         if parentReceptacles_id == object_id:
+            # print("relation\n", parentReceptacles_id)
             return j, RELATION["parentReceptacles"], True
     return 0, 0, False
 

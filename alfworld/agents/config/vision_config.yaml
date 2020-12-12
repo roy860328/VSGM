@@ -48,7 +48,7 @@ general:
   hide_init_receptacles: False                              # remove initial observation containing navigable receptacles
 
   training:
-    batch_size: 10
+    batch_size: 20
     max_episode: 50000
     smoothing_eps: 0.1
     optimizer:
@@ -56,7 +56,7 @@ general:
       clip_grad_norm: 5
 
   evaluate:
-    run_eval: True
+    run_eval: False
     batch_size: 10
     env:
       type: "AlfredTWEnv"
@@ -64,7 +64,7 @@ general:
   checkpoint:
     report_frequency: 1000                                  # report every N episode
     experiment_tag: 'test_visual'                                  # name of experiment
-    load_pretrained: True                                  # during test, enable this so that the agent load your pretrained model
+    load_pretrained: False                                  # during test, enable this so that the agent load your pretrained model
     load_from_tag: 'runs/pretrained_checkpoint_ood'                   # name of pre-trained model to load in save_path
 
   model:

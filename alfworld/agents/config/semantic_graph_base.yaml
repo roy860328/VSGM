@@ -26,7 +26,7 @@ env:
     screen_width: 300                                       # width of THOR window
     screen_height: 300                                      # height of THOR window
     smooth_nav: True                                       # smooth rotations, looks, and translations during navigation (very slow)
-    save_frames_to_disk: True                              # save frame PNGs to disk (useful for making videos)
+    save_frames_to_disk: False                              # save frame PNGs to disk (useful for making videos)
     save_frames_path: '../videos/'                          # path to save frame PNGs
 
 controller:
@@ -56,15 +56,15 @@ general:
       clip_grad_norm: 5
 
   evaluate:
-    run_eval: True
-    batch_size: 10
+    run_eval: False
+    batch_size: 1
     env:
       type: "AlfredTWEnv"
 
   checkpoint:
     report_frequency: 1000                                  # report every N episode
-    experiment_tag: 'test_visual'                                  # name of experiment
-    load_pretrained: True                                  # during test, enable this so that the agent load your pretrained model
+    experiment_tag: 'semantic_graph'                                  # name of experiment
+    load_pretrained: False                                  # during test, enable this so that the agent load your pretrained model
     load_from_tag: 'runs/pretrained_checkpoint_ood'                   # name of pre-trained model to load in save_path
 
   model:
@@ -137,7 +137,7 @@ dagger:
     replay_sample_update_from: 2
 
 vision_dagger:
-  model_type: "resnet"                                      # 'resnet' (whole image features) or 'maskrcnn_whole' (whole image MaskRCNN feats) or 'maskrcnn' (top k MaskRCNN detection feats) or 'no_vision' (zero vision input)
+  model_type: "sgg"                                      # 'resnet' (whole image features) or 'maskrcnn_whole' (whole image MaskRCNN feats) or 'maskrcnn' (top k MaskRCNN detection feats) or 'no_vision' (zero vision input)
   resnet_fc_dim: 64
   maskrcnn_top_k_boxes: 10                                  # top k box features
   use_exploration_frame_feats: False                        # append feats from initial exploration (memory intensive!)

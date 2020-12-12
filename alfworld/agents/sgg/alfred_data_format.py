@@ -9,8 +9,8 @@ from torch.utils.data import Dataset
 sys.path.insert(0, os.environ['ALFRED_ROOT'])
 sys.path.insert(0, os.path.join(os.environ['ALFRED_ROOT'], 'agents'))
 sys.path.insert(0, os.environ["GRAPH_RCNN_ROOT"])
-import sgg.parser_scene as parser_scene
 from lib.scene_parser.rcnn.structures.bounding_box import BoxList
+import sgg.parser_scene as parser_scene
 
 
 # Transform
@@ -33,28 +33,75 @@ class TransMetaData():
         self.ind_to_predicates = sorted(self.predicate_to_ind, key=lambda k:
                                         self.predicate_to_ind[k])
 
+
+    def trans_object_meta_data_to_relation_and_attribute(self, data_obj_relation_attribute, boxes_id=None):
+        if boxes_id is None:
+            boxes_id, boxes_labels = [], []
+            for obj_relation_attribute in data_obj_relation_attribute:
+                if obj_relation_attribute["visible"] == True and obj_relation_attribute["objectType"] in self.object_classes:
+                    boxes_id.append(obj_relation_attribute["objectId"])
+                    class_idx = self.object_classes.index(obj_relation_attribute["objectType"])
+                    boxes_labels.append(class_idx)
+        obj_relations, obj_relation_triplets, obj_attribute = parser_scene.transfer_object_meta_data_to_relation_and_attribute(
+            boxes_id, data_obj_relation_attribute)
+        '''
+        {
+         'pred_labels': array([[0., 0., 0., 0., 0., 0., 0., 0.],
+                               [0., 0., 0., 0., 0., 0., 0., 0.],
+                               [0., 1., 0., 0., 1., 0., 0., 1.],
+                               [0., 0., 0., 0., 0., 0., 0., 0.],
+                               [0., 0., 0., 0., 0., 0., 0., 0.],
+                               [0., 0., 0., 0., 0., 0., 0., 0.],
+                               [1., 0., 0., 0., 0., 0., 0., 0.],
+                               [0., 0., 0., 0., 0., 0., 0., 0.]]), 
+         'relation_labels': array([[6, 0, 1],
+                                   [2, 1, 1],
+                                   [2, 4, 1],
+                                   [2, 7, 1]]), 
+         'attributes': array([[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+                               0],
+                              [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+                               0],
+                              [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                               0],
+                              [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                               0],
+                              [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                               0],
+                              [1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                               0],
+                              [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                               0],
+                              [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                               0]]), 
+         'objectIds': ['Spatula|+03.07|+00.76|-00.03', 'ButterKnife|+02.97|+00.90|-00.70', 'CounterTop|+03.11|+00.94|+00.02', 'Sink|+03.08|+00.89|+00.09', 'HousePlant|+03.20|+00.89|-00.37', 'Window|+03.70|+01.68|+00.05', 'Sink|+03.08|+00.89|+00.09|SinkBasin', 'Faucet|+03.31|+00.89|+00.09'], 'labels': array(['Spatula', 'ButterKnife', 'CounterTop', 'Sink', 'HousePlant',
+                       'Window', 'SinkBasin', 'Faucet'], dtype='<U11')}
+
+        '''
+        dict_obj_rel_attr = {
+            "pred_labels": obj_relations,
+            "relation_labels": torch.from_numpy(obj_relation_triplets).to(dtype=torch.float),
+            "attributes": torch.from_numpy(obj_attribute).to(dtype=torch.float),
+            "objectIds": boxes_id,
+            "labels": torch.tensor(boxes_labels).to(dtype=torch.float),
+        }
+        return dict_obj_rel_attr
+
     def trans_meta_data_to_sgg(self, img, mask, color_to_object, data_obj_relation_attribute):
-        masks, boxes, labels, objectIds, obj_relations, obj_relation_triplets, obj_attribute = \
-            parser_scene.transfer_mask_semantic_to_bbox_label(
-                mask, color_to_object, self.object_classes, data_obj_relation_attribute)
+        masks, boxes, labels, boxes_id = parser_scene.transfer_mask_semantic_to_bbox_label(
+            mask, color_to_object, self.object_classes, data_obj_relation_attribute)
+        dict_obj_rel_attr = self.trans_object_meta_data_to_relation_and_attribute(
+            data_obj_relation_attribute, boxes_id)
+        sgg_data = dict_obj_rel_attr
+        sgg_data["boxes"] = boxes
+        sgg_data["labels"] = labels
+        sgg_data["objectIds"] = boxes_id
+        return sgg_data
 
-        if len(boxes) == 0:
-            return None, None
 
-        width, height = img.size
-        target_raw = BoxList(boxes, (width, height), mode="xyxy")
-        img, target = self.transforms(img, target_raw)
-        target.add_field("labels", torch.from_numpy(labels).to(dtype=torch.float))
-        target.add_field("pred_labels", torch.from_numpy(obj_relations).to(dtype=torch.float))
-        target.add_field("relation_labels", torch.from_numpy(
-            obj_relation_triplets).to(dtype=torch.float))
-        target.add_field("attributes", torch.from_numpy(obj_attribute).to(dtype=torch.float))
-        target.add_field("objectIds", objectIds)
-        target = target.clip_to_image(remove_empty=False)
-
-        return img, target
-
-# data from gen/scripts/augment_sgg_trajectories.py
+'''
+data from gen/scripts/augment_sgg_trajectories.py
+'''
 
 
 class AlfredDataset(Dataset):
@@ -132,8 +179,30 @@ class AlfredDataset(Dataset):
 
         mask = np.array(mask)
 
-        img, target = self.trans_meta_data.trans_meta_data_to_sgg(
+        sgg_data = self.trans_meta_data.trans_meta_data_to_sgg(
             img, mask, color_to_object, data_obj_relation_attribute)
+        boxes = sgg_data["boxes"]
+        labels = sgg_data["labels"]
+        obj_relations = sgg_data["obj_relations"]
+        relation_labels = sgg_data["relation_labels"]
+        attributes = sgg_data["attributes"]
+        objectIds = sgg_data["objectIds"]
+
+        if len(boxes) == 0:
+            return None, None
+
+        width, height = img.size
+        target_raw = BoxList(boxes, (width, height), mode="xyxy")
+        img, target = self.transforms(img, target_raw)
+        target.add_field("labels", torch.from_numpy(labels).to(dtype=torch.float))
+        target.add_field("pred_labels", torch.from_numpy(obj_relations).to(dtype=torch.float))
+        target.add_field("relation_labels", torch.from_numpy(
+            relation_labels).to(dtype=torch.float))
+        target.add_field("attributes", torch.from_numpy(attributes).to(dtype=torch.float))
+        target.add_field("objectIds", objectIds)
+        target = target.clip_to_image(remove_empty=False)
+
+        return img, target
 
         return img, target, idx
 

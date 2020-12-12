@@ -183,7 +183,7 @@ class LinearSchedule(object):
 def load_config():
     parser = argparse.ArgumentParser()
     parser.add_argument("config_file", help="path to config file")
-    parser.add_argument("semantic_config_file", help="path to config file")
+    parser.add_argument("--semantic_config_file", default=None, help="path to config file")
     parser.add_argument("-p", "--params", nargs="+", metavar="my.setting=value", default=[],
                         help="override params of the config file,"
                              " e.g. -p 'training.gamma=0.95'")
@@ -201,10 +201,11 @@ def load_config():
         entry_to_change[keys[-1]] = yaml.load(value)
 
     ### other ###
-    from config import cfg
-    cfg.merge_from_file(args.semantic_config_file)
-    config['semantic_cfg'] = cfg
-    print(config)
+    if args.semantic_config_file is not None:
+        from config import cfg
+        cfg.merge_from_file(args.semantic_config_file)
+        config['semantic_cfg'] = cfg
+        print(config)
     return config
 
 

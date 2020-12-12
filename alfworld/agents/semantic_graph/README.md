@@ -15,3 +15,8 @@ pip install torch-geometric
 ```
 python semantic_graph/semantic_graph.py config/semantic_graph_base.yaml config/semantic_graph.yaml
 ```
+
+- obj_cls_name_to_features
+	- obj_cls_name would +1
+	- cause
+		- '__background__' = 0

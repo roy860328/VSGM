@@ -19,7 +19,7 @@ from torchvision import models
 from torchvision.ops import boxes as box_ops
 import pdb
 
-class VisionDAggerAgent(TextDAggerAgent):
+class OracleSggDAggerAgent(TextDAggerAgent):
     '''
     Vision Agent trained with DAgger
     '''
@@ -37,24 +37,10 @@ class VisionDAggerAgent(TextDAggerAgent):
         self.sequence_aggregation_method = config['vision_dagger']['sequence_aggregation_method']
 
         # initialize model
-        if self.vision_model_type in {'resnet'}:
+        if self.vision_model_type in {'sgg'}:
             self.detector = models.resnet18(pretrained=True)
             self.detector.eval()
-            if self.use_gpu:
-                self.detector.cuda()
-        elif self.vision_model_type in {'maskrcnn', 'maskrcnn_whole'}:
-            pretrained_model_path = os.path.join(os.environ['ALFRED_ROOT'], config['mask_rcnn']['pretrained_model_path'])
-            self.mask_rcnn_top_k_boxes = self.config['vision_dagger']['maskrcnn_top_k_boxes']
-            self.avg2dpool = torch.nn.AvgPool2d((13, 13))
-            self.detector = load_pretrained_model(pretrained_model_path)
-            self.detector.roi_heads.register_forward_hook(self.box_features_hook)
-            self.detection_box_features = []
-            self.fpn_pooled_features = []
-            self.detector.eval()
-            if self.use_gpu:
-                self.detector.cuda()
-        elif self.vision_model_type in {"no_vision"}:
-            print("No Vision Agent")
+            
         else:
             raise NotImplementedError()
 
