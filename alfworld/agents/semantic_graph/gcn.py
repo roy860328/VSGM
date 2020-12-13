@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch_geometric.nn import GCNConv, ChebConv
-import graph_embed
+from . import graph_embed
 
 class Net(torch.nn.Module):
     """docstring for Net"""

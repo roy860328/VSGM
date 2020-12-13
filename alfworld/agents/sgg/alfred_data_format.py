@@ -34,7 +34,7 @@ class TransMetaData():
                                         self.predicate_to_ind[k])
 
 
-    def trans_object_meta_data_to_relation_and_attribute(self, data_obj_relation_attribute, boxes_id=None):
+    def trans_object_meta_data_to_relation_and_attribute(self, data_obj_relation_attribute, boxes_id=None, boxes_labels=None):
         if boxes_id is None:
             boxes_id, boxes_labels = [], []
             for obj_relation_attribute in data_obj_relation_attribute:
@@ -88,13 +88,12 @@ class TransMetaData():
         return dict_obj_rel_attr
 
     def trans_meta_data_to_sgg(self, img, mask, color_to_object, data_obj_relation_attribute):
-        masks, boxes, labels, boxes_id = parser_scene.transfer_mask_semantic_to_bbox_label(
+        masks, boxes, boxes_labels, boxes_id = parser_scene.transfer_mask_semantic_to_bbox_label(
             mask, color_to_object, self.object_classes, data_obj_relation_attribute)
         dict_obj_rel_attr = self.trans_object_meta_data_to_relation_and_attribute(
-            data_obj_relation_attribute, boxes_id)
+            data_obj_relation_attribute, boxes_id, boxes_labels)
         sgg_data = dict_obj_rel_attr
         sgg_data["boxes"] = boxes
-        sgg_data["labels"] = labels
         sgg_data["objectIds"] = boxes_id
         return sgg_data
 
@@ -115,6 +114,13 @@ class AlfredDataset(Dataset):
         self.get_data_files(self.root, balance_scenes=cfg.ALFREDTEST.balance_scenes)
 
         self.trans_meta_data = TransMetaData(cfg)
+        self.ind_to_classes = self.trans_meta_data.ind_to_classes
+        self.object_classes = self.trans_meta_data.object_classes
+        self.class_to_ind = self.trans_meta_data.class_to_ind
+        self.ind_to_classes = self.trans_meta_data.ind_to_classes
+        # cfg.ind_to_class = self.ind_to_classes
+        self.predicate_to_ind = self.trans_meta_data.predicate_to_ind
+        self.ind_to_predicates = self.trans_meta_data.ind_to_predicates
 
     def get_data_files(self, root, balance_scenes=False):
         if balance_scenes:
@@ -183,7 +189,7 @@ class AlfredDataset(Dataset):
             img, mask, color_to_object, data_obj_relation_attribute)
         boxes = sgg_data["boxes"]
         labels = sgg_data["labels"]
-        obj_relations = sgg_data["obj_relations"]
+        obj_relations = sgg_data["pred_labels"]
         relation_labels = sgg_data["relation_labels"]
         attributes = sgg_data["attributes"]
         objectIds = sgg_data["objectIds"]
@@ -193,16 +199,13 @@ class AlfredDataset(Dataset):
 
         width, height = img.size
         target_raw = BoxList(boxes, (width, height), mode="xyxy")
-        img, target = self.transforms(img, target_raw)
-        target.add_field("labels", torch.from_numpy(labels).to(dtype=torch.float))
+        img, target = self.trans_meta_data.transforms(img, target_raw)
+        target.add_field("labels", labels)
         target.add_field("pred_labels", torch.from_numpy(obj_relations).to(dtype=torch.float))
-        target.add_field("relation_labels", torch.from_numpy(
-            relation_labels).to(dtype=torch.float))
-        target.add_field("attributes", torch.from_numpy(attributes).to(dtype=torch.float))
+        target.add_field("relation_labels", relation_labels)
+        target.add_field("attributes", attributes)
         target.add_field("objectIds", objectIds)
         target = target.clip_to_image(remove_empty=False)
-
-        return img, target
 
         return img, target, idx
 

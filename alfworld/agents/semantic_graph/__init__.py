@@ -1,1 +1,1 @@
-import gcn
+from . import gcn

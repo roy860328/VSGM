@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.join(os.environ['ALFRED_ROOT'], 'agents', 'semantic_g
 import importlib
 from semantic_graph import SceneGraph
 import pdb
-from sgg import alfred_data_format
+from sgg import alfred_data_format, sgg
 
 class OracleSggDAggerAgent(TextDAggerAgent):
     '''
@@ -39,29 +39,29 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         NEW
         '''
         # Semantic graph create
-        self.cfg_yaml = config['semantic_cfg']
-        self.isORACLE = self.cfg_yaml.SCENE_GRAPH.ORACLE
-        self.graph_embed_model = importlib.import_module(self.cfg_yaml.SCENE_GRAPH.MODEL).Net(self.cfg_yaml)
+        self.cfg_semantic = config['semantic_cfg']
+        self.cfg_sgg = config['sgg_cfg']
+        self.isORACLE = self.cfg_semantic.SCENE_GRAPH.ORACLE
+        self.graph_embed_model = importlib.import_module(self.cfg_semantic.SCENE_GRAPH.MODEL).Net(self.cfg_semantic)
         if self.use_gpu:
             self.graph_embed_model.cuda()
         self.scene_graphs = []
         for i in range(config['general']['training']['batch_size']):
-            scene_graph = SceneGraph(self.cfg_yaml)
+            scene_graph = SceneGraph(self.cfg_semantic)
             self.scene_graphs.append(scene_graph)
 
         # initialize model
-        if self.isORACLE:
-            self.trans_MetaData = alfred_data_format.TransMetaData(self.cfg_yaml)
-        else:
+        self.trans_MetaData = alfred_data_format.TransMetaData(self.cfg_semantic)
+        if not self.isORACLE:
             # import graph-rcnn
-            raise NotImplementedError()
-            self.detector = None
+            self.detector = sgg.load_pretrained_model(
+                self.cfg_sgg, self.trans_MetaData.transforms, self.trans_MetaData.ind_to_classes, 'cuda'
+                )
             self.detector.eval()
-            if self.use_gpu:
-                self.detector.cuda()
+            self.detector.cuda()
 
-        self.load_pretrained = self.cfg_yaml.GENERAL.LOAD_PRETRAINED
-        self.load_from_tag = self.cfg_yaml.GENERAL.LOAD_PRETRAINED_PATH
+        self.load_pretrained = self.cfg_semantic.GENERAL.LOAD_PRETRAINED
+        self.load_from_tag = self.cfg_semantic.GENERAL.LOAD_PRETRAINED_PATH
 
     def reset_all_scene_graph(self):
         for scene_graph in self.scene_graphs:
@@ -107,11 +107,10 @@ class OracleSggDAggerAgent(TextDAggerAgent):
                 target = self.trans_MetaData.trans_object_meta_data_to_relation_and_attribute(sgg_meta_data)
                 scene_graph.add_oracle_local_graph_to_global_graph(rgb_image, target)
             else:
-                raise NotImplementedError()
-                # with torch.no_grad():
-                #     image_tensors = [self.transform(i).cuda() if self.use_gpu else self.transform(i) for i in images]
-                #     sgg_meta_data = self.detector(image_tensors)
-                #     sgg_meta_data = ?
+                rgb_image = rgb_image.unsqueeze(0)
+                results = self.detector(rgb_image)
+                result = results[0]
+                scene_graph.add_local_graph_to_global_graph(rgb_image, result)
             global_graph = scene_graph.get_graph_data()
             graph_embed_feature = self.graph_embed_model(global_graph)
             graph_embed_features.append(graph_embed_feature)

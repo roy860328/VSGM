@@ -4,6 +4,8 @@ import torch
 from torch_geometric.data import Data
 from collections import defaultdict
 import pandas as pd
+from sklearn.metrics.pairwise import cosine_similarity
+
 
 class GraphData(Data):
     def __init__(self, obj_cls_name_to_features, GPU, x=None, edge_index=None, edge_attr=None, y=None,
@@ -12,6 +14,7 @@ class GraphData(Data):
                                         pos=None, normal=None, face=None, **kwargs)
         # {'Fridge|-00.33|+00.00|-00.77': 0, 'Pot|-01.13|+00.94|-03.50': 0, 'CounterTop|-00.30|+00.95|-02.79': 1, 'Toaster|-00.15|+00.90|-02.76': 2, 'Fork|-00.30|+00.79|-01.86': 3, 'Bowl|-00.42|+00.08|-02.16': 4, 'Spatula|-00.30|+00.92|-02.54': 5, 'Cabinet|-00.58|+00.39|-01.80': 6}
         self.obj_id_to_ind = {}
+        self.ind_to_obj_id = {}
         # {54: [0], 15: [1], 11: [2], 34: [3], 77: [4], 24: [5], 26: [6], 33: [7], 78: [8], 22: [9], 83: [10]}
         self.obj_cls_to_ind = defaultdict(list)
         self.obj_cls_to_features = obj_cls_name_to_features
@@ -26,7 +29,7 @@ class GraphData(Data):
         return the index of the node
         '''
         # shape : 300 + 23
-        feature = self._cat_wore_embed_and_attribute(obj_cls, feature).unsqueeze(0)
+        feature = self._cat_feature_and_wore_embed(obj_cls, feature).unsqueeze(0)
         # init self.x
         if self.x is None:
             ind = 0
@@ -35,12 +38,11 @@ class GraphData(Data):
             ind = len(self.x)
             self.x = torch.cat([self.x, feature], dim=0)
         # Oracle
-        if obj_id is not None:
-            self.obj_id_to_ind[obj_id] = ind
-        # Not Oracle. Create new obj_id
-        else:
-            # creat_obj_id
-            raise NotImplementedError
+        if obj_id is None:
+            # Not Oracle. Create new obj_id
+            obj_id = str(obj_cls) + "_" + str(len(self.obj_cls_to_ind[obj_cls]))
+        self.obj_id_to_ind[obj_id] = ind
+        self.ind_to_obj_id[ind] = obj_id
         self.obj_cls_to_ind[obj_cls].append(ind)
         return ind
 
@@ -52,7 +54,7 @@ class GraphData(Data):
         return the index of the node
         '''
         # shape : 300 + 23
-        feature = self._cat_wore_embed_and_attribute(obj_cls, feature)
+        feature = self._cat_feature_and_wore_embed(obj_cls, feature)
         ind = self.obj_id_to_ind[obj_id]
         self.x[ind] = feature
         return ind
@@ -94,10 +96,10 @@ class GraphData(Data):
         else:
             raise NotImplementedError
 
-    def _cat_wore_embed_and_attribute(self, obj_cls, attribute):
+    def _cat_feature_and_wore_embed(self, obj_cls, feature):
         word_embed = self.obj_cls_to_features[obj_cls].clone().detach()
-        attribute = attribute.clone().detach()
-        feature = torch.cat([word_embed, attribute])
+        feature = feature.clone().detach()
+        feature = torch.cat([feature, word_embed])
         if self.GPU:
             feature = feature.cuda()
         return feature
@@ -111,6 +113,8 @@ class SceneGraph(object):
         self.cfg = cfg
         self.isORACLE = cfg.SCENE_GRAPH.ORACLE
         self.GPU = cfg.SCENE_GRAPH.GPU
+        self.VISION_FEATURE_SIZE = cfg.SCENE_GRAPH.VISION_FEATURE_SIZE
+        self.SAME_VISION_FEATURE_THRESHOLD = cfg.SCENE_GRAPH.SAME_VISION_FEATURE_THRESHOLD
         self.obj_cls_name_to_features = self._get_obj_cls_name_to_features()
         self.init_graph_data()
 
@@ -139,9 +143,23 @@ class SceneGraph(object):
     def get_graph_data(self):
         return self.global_graph
 
-    def compare_existing_node(self, tar_id=None):
-        isExist = False
-        raise NotImplementedError
+    def compare_existing_node(self, obj_cls, feature, compare_feature_len=0):
+        obj_id = None
+        nodes = self.global_graph.x
+        obj_cls_to_ind = self.global_graph.obj_cls_to_ind
+        for suspect_node_ind in obj_cls_to_ind[obj_cls]:
+            suspect_node_feature = nodes[suspect_node_ind]
+            suspect_node_feature = suspect_node_feature[:compare_feature_len].clone().to('cpu')
+            similarity = self.compare_features(feature, suspect_node_feature)[0,0]
+            print("similarity: ", similarity)
+            if similarity >= self.SAME_VISION_FEATURE_THRESHOLD:
+                # node ind to obj_id
+                obj_id = self.global_graph.ind_to_obj_id[suspect_node_ind]
+                break
+        return obj_id
+
+    def compare_features(self, feature1, feature2):
+        return cosine_similarity(feature1.reshape(1, -1), feature2.reshape(1, -1))
 
     def add_oracle_local_graph_to_global_graph(self, img, target):
         current_frame_obj_cls_to_node_index = []
@@ -170,12 +188,30 @@ class SceneGraph(object):
             dst_node_ind = current_frame_obj_cls_to_node_index[dst_obj_ind]
             self.global_graph.update_relation(src_node_ind, dst_node_ind, relation)
 
-    def add_local_graph_to_global_graph(self, img, obj_features, obj_boxes, obj_relations, obj_attributes):
-        raise NotImplementedError()
-        obj_features = target["obj_features"]
-        for i, obj_feature, obj_box, obj_relation, obj_attribute in enumerate(obj_features, obj_boxes, obj_relations, obj_attributes):
-            isExist, obj_id = self.compare_existing_node()
-            self.global_graph.num_nodes("object")
+    def add_local_graph_to_global_graph(self, img, sgg_results):
+        current_frame_obj_cls_to_node_index = []
+        obj_clses = sgg_results["labels"].numpy().astype(int)
+        obj_features = sgg_results["features"]
+        obj_attributes = sgg_results["attribute_logits"]
+        obj_relations_idx_pairs = sgg_results["obj_relations_idx_pairs"].numpy().astype(int)
+        obj_relations_scores = sgg_results["obj_relations_scores"]
+        for i, obj_cls in enumerate(obj_clses):
+            obj_feature = obj_features[i].reshape(-1)
+            obj_attribute = obj_attributes[i].reshape(-1)
+            feature = torch.cat([obj_feature, obj_attribute], dim=0)
+            obj_id = self.compare_existing_node(obj_cls, feature, compare_feature_len=self.VISION_FEATURE_SIZE)
+            if obj_id is not None:
+                ind = self.global_graph.update_node(obj_cls, feature, obj_id)
+            else:
+                ind = self.global_graph.add_node(obj_cls, feature)
+            current_frame_obj_cls_to_node_index.append(ind)
+        for i, max_relation in enumerate(torch.argmax(obj_relations_scores, dim=1).numpy()):
+            if max_relation == 1:
+                src_obj_ind, dst_obj_ind = obj_relations_idx_pairs[i]
+                src_node_ind = current_frame_obj_cls_to_node_index[src_obj_ind]
+                dst_node_ind = current_frame_obj_cls_to_node_index[dst_obj_ind]
+                print("src_node_ind {}, dst_node_ind {}, relation {}".format(src_node_ind, dst_node_ind, max_relation))
+                self.global_graph.update_relation(src_node_ind, dst_node_ind, max_relation)
 
 
 if __name__ == '__main__':
@@ -193,7 +229,7 @@ if __name__ == '__main__':
         img, target, idx = alfred_dataset[i]
         dict_target = {
             "labels": target.extra_fields["objectIds"],
-            "obj_relations": target.extra_fields["obj_relations"],
+            "obj_relations": target.extra_fields["pred_labels"],
             "relation_labels": target.extra_fields["relation_labels"],
             "attributes": target.extra_fields["attributes"],
             "objectIds": target.extra_fields["objectIds"],

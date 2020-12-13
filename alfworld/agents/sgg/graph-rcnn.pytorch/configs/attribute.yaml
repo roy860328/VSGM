@@ -16,7 +16,9 @@ ALFREDTEST:
 INPUT:
   TO_BGR255: False
 MODEL:
-  WEIGHT_IMG: "catalog://ImageNetPretrained/MSRA/R-101"
+  SAVE_SGG_RESULT: True
+  SAVE_SGG_RESULT_PATH: "/home/alfworld/sgg_detector/"
+  WEIGHT_IMG: "/home/graph-rcnn.pytorch/checkpoints/vg_benchmark_object/R-101-C4/sg_baseline_joint_2/BatchSize_4/Base_LR_0.0005/checkpoint_final.pth"
   WEIGHT_DET: ""
   RELATION_ON: True
   ATTRIBUTE_ON: True

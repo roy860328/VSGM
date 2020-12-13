@@ -1,6 +1,7 @@
 import torch
 import argparse
 import os
+import sys
 import yaml
 import numpy as np
 import string
@@ -184,6 +185,7 @@ def load_config():
     parser = argparse.ArgumentParser()
     parser.add_argument("config_file", help="path to config file")
     parser.add_argument("--semantic_config_file", default=None, help="path to config file")
+    parser.add_argument("--sgg_config_file", default=None, help="path to config file")
     parser.add_argument("-p", "--params", nargs="+", metavar="my.setting=value", default=[],
                         help="override params of the config file,"
                              " e.g. -p 'training.gamma=0.95'")
@@ -205,7 +207,12 @@ def load_config():
         from config import cfg
         cfg.merge_from_file(args.semantic_config_file)
         config['semantic_cfg'] = cfg
-        print(config)
+    if args.sgg_config_file is not None:
+        sys.path.insert(0, os.environ['GRAPH_RCNN_ROOT'])
+        from lib.config import cfg
+        cfg.merge_from_file(args.sgg_config_file)
+        config['sgg_cfg'] = cfg
+    # print(config)
     return config
 
 
