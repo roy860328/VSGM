@@ -77,6 +77,7 @@ def train():
     while(True):
         if episode_no > agent.max_episode:
             break
+        print("episode_no: ", episode_no)
         np.random.seed(episode_no)
         env.seed(episode_no)
         obs, infos = env.reset()

@@ -16,7 +16,7 @@ INPUT:
   MAX_SIZE_TEST: 1024      # Maximum size of the side of the image during testing
   PIXEL_MEAN: [102.9801, 115.9465, 122.7717]  # Values to be used for image normalization
   PIXEL_STD: [1., 1., 1.]  # Values to be used for image normalization
-  TO_BGR255: True          # Convert image to BGR format (for Caffe2 models), in range 0-255
+  TO_BGR255: False          # Convert image to BGR format (for Caffe2 models), in range 0-255
   BRIGHTNESS: 0.0          # Image ColorJitter
   CONTRAST: 0.0            # Image ColorJitter
   SATURATION: 0.0          # Image ColorJitter
@@ -31,6 +31,7 @@ SCENE_GRAPH:
   GPU: True
   ORACLE: True
   OBJ_NAME_EMBEDDING: "word_embed/object_alfworld.csv"
+  GRAPH_RESULT_PATH: "/home/alfworld/global_graph/"
   SAME_VISION_FEATURE_THRESHOLD: 0.7
   VISION_FEATURE_SIZE: 2071     # 2048 + 23
   NODE_FEATURE_SIZE: 2371       # 2048 + 23 + 300

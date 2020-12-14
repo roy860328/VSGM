@@ -39,7 +39,7 @@ mask_rcnn:
 
 general:
   random_seed: 42
-  use_cuda: True                                            # disable this when running on machine without cuda
+  use_cuda: False                                            # disable this when running on machine without cuda
   visdom: False                                             # plot training/eval curves, run with visdom server
   task: 'alfred'
   training_method: 'dagger'                                 # 'dqn' or 'dagger'
@@ -48,7 +48,7 @@ general:
   hide_init_receptacles: False                              # remove initial observation containing navigable receptacles
 
   training:
-    batch_size: 20
+    batch_size: 5
     max_episode: 50000
     smoothing_eps: 0.1
     optimizer:

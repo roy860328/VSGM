@@ -64,7 +64,7 @@ python dagger/train_sgg_vision_dagger.py config/semantic_graph_base.yaml --seman
 
 ### SGG - Test model OK
 Change $GRAPH_RCNN_ROOT/configs/attribute.yaml parameter
-1. MODEL.WEIGHT_IMG PATH
+1. Pretrain model PATH: MODEL.WEIGHT_IMG 
 
 ```
 python sgg/sgg.py config/semantic_graph_base.yaml --semantic_config_file config/semantic_graph.yaml --sgg_config_file $GRAPH_RCNN_ROOT/configs/attribute.yaml

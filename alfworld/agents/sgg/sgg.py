@@ -58,6 +58,7 @@ class SGG(SceneParser):
             extra_fields : 'labels', 'scores', 'logits', 'features', 'attribute_logits'
         '''
         with torch.no_grad():
+            import pdb; pdb.set_trace()
             if type(imgs) != torch.Tensor:
                 imgs = [Image.fromarray(imgs) for img in imgs]
                 imgs = self.transforms(imgs)

@@ -183,6 +183,7 @@ class TextDAggerAgent(BaseAgent):
             loss_list.append(loss)
 
         loss = torch.stack(loss_list).mean()
+        print("loss: ", loss)
         if loss is None:
             return None
         # Backpropagate

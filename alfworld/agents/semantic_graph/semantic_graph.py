@@ -5,6 +5,8 @@ from torch_geometric.data import Data
 from collections import defaultdict
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
+sys.path.insert(0, os.path.join(os.environ['ALFRED_ROOT'], 'agents'))
+from semantic_graph import utils
 
 
 class GraphData(Data):
@@ -12,11 +14,18 @@ class GraphData(Data):
                  pos=None, normal=None, face=None, **kwargs):
         super(GraphData, self).__init__(x=None, edge_index=None, edge_attr=None, y=None,
                                         pos=None, normal=None, face=None, **kwargs)
-        # {'Fridge|-00.33|+00.00|-00.77': 0, 'Pot|-01.13|+00.94|-03.50': 0, 'CounterTop|-00.30|+00.95|-02.79': 1, 'Toaster|-00.15|+00.90|-02.76': 2, 'Fork|-00.30|+00.79|-01.86': 3, 'Bowl|-00.42|+00.08|-02.16': 4, 'Spatula|-00.30|+00.92|-02.54': 5, 'Cabinet|-00.58|+00.39|-01.80': 6}
+        # {'ButterKnife|-00.06|+01.11|+00.25': 0, 'Lettuce|-00.06|+01.19|-00.76': 1, 'Statue|+00.22|+01.11|-00.51': 2, 'CounterTop|-00.08|+01.15|00.00': 3, 'Knife|+00.22|+01.14|+00.25': 4, 'LightSwitch|+02.33|+01.31|-00.16': 5, 'DishSponge|-00.06|+01.11|-00.25': 6, 'Vase|-00.34|+01.11|+00.25': 7, 'Book|+00.16|+01.10|+00.62': 8}
         self.obj_id_to_ind = {}
+        # {0: 'ButterKnife|-00.06|+01.11|+00.25', 1: 'Lettuce|-00.06|+01.19|-00.76', 2: 'Statue|+00.22|+01.11|-00.51', 3: 'CounterTop|-00.08|+01.15|00.00', 4: 'Knife|+00.22|+01.14|+00.25', 5: 'LightSwitch|+02.33|+01.31|-00.16', 6: 'DishSponge|-00.06|+01.11|-00.25', 7: 'Vase|-00.34|+01.11|+00.25', 8: 'Book|+00.16|+01.10|+00.62'}
         self.ind_to_obj_id = {}
-        # {54: [0], 15: [1], 11: [2], 34: [3], 77: [4], 24: [5], 26: [6], 33: [7], 78: [8], 22: [9], 83: [10]}
+        # {15: [0], 50: [1], 85: [2], 24: [3], 45: [4], 52: [5], 30: [6], 102: [7], 10: [8]}
         self.obj_cls_to_ind = defaultdict(list)
+        # list[0] = x[0] label
+        # [15, 50, 85, 24, 45, 52, 30, 102, 10]
+        self.list_node_obj_cls = []
+        # dict_keys([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105])
+        # self.obj_cls_to_features[1].shape 
+        # torch.Size([300])
         self.obj_cls_to_features = obj_cls_name_to_features
         self.GPU = GPU
 
@@ -44,6 +53,7 @@ class GraphData(Data):
         self.obj_id_to_ind[obj_id] = ind
         self.ind_to_obj_id[ind] = obj_id
         self.obj_cls_to_ind[obj_cls].append(ind)
+        self.list_node_obj_cls.append(obj_cls)
         return ind
 
     def update_node(self, obj_cls, feature, obj_id):
@@ -115,6 +125,7 @@ class SceneGraph(object):
         self.GPU = cfg.SCENE_GRAPH.GPU
         self.VISION_FEATURE_SIZE = cfg.SCENE_GRAPH.VISION_FEATURE_SIZE
         self.SAME_VISION_FEATURE_THRESHOLD = cfg.SCENE_GRAPH.SAME_VISION_FEATURE_THRESHOLD
+        self.GRAPH_RESULT_PATH = cfg.SCENE_GRAPH.GRAPH_RESULT_PATH
         self.obj_cls_name_to_features = self._get_obj_cls_name_to_features()
         self.init_graph_data()
 
@@ -142,6 +153,11 @@ class SceneGraph(object):
 
     def get_graph_data(self):
         return self.global_graph
+
+    def save_graph_data(self):
+        if not os.path.exists(self.GRAPH_RESULT_PATH):
+            os.mkdir(self.GRAPH_RESULT_PATH)
+        utils.save_graph_data(self.global_graph, self.GRAPH_RESULT_PATH)
 
     def compare_existing_node(self, obj_cls, feature, compare_feature_len=0):
         obj_id = None
@@ -225,13 +241,14 @@ if __name__ == '__main__':
     scenegraph = SceneGraph(cfg)
     # trans_meta_data = alfred_data_format.TransMetaData(cfg)
     alfred_dataset = alfred_data_format.AlfredDataset(cfg)
-    for i in range(len(alfred_dataset)):
+    for i in range(10):
         img, target, idx = alfred_dataset[i]
         dict_target = {
-            "labels": target.extra_fields["objectIds"],
+            "labels": target.extra_fields["labels"],
             "obj_relations": target.extra_fields["pred_labels"],
             "relation_labels": target.extra_fields["relation_labels"],
             "attributes": target.extra_fields["attributes"],
             "objectIds": target.extra_fields["objectIds"],
         }
         scenegraph.add_oracle_local_graph_to_global_graph(img, dict_target)
+        scenegraph.save_graph_data()
