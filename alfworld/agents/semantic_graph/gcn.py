@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch_geometric.nn import GCNConv, ChebConv
-from . import graph_embed
+import graph_embed
 
 class Net(torch.nn.Module):
     """docstring for Net"""
@@ -13,7 +13,6 @@ class Net(torch.nn.Module):
         output_size = cfg.SCENE_GRAPH.NODE_OUT_FEATURE_SIZE
         # True => one of the variables needed for gradient computation has been modified by an inplace operation
         normalize = cfg.SCENE_GRAPH.NORMALIZATION
-        normalize = False
         graph_embed_model = getattr(graph_embed, cfg.SCENE_GRAPH.EMBED_TYPE)
         self.cfg = cfg
         self.conv1 = GCNConv(input_size, middle_size, cached=True,

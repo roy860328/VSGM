@@ -232,10 +232,12 @@ class AlfredThorEnv(object):
         def get_exploration_frames(self):
             return self.controller.get_exploration_frames()
 
-    def __init__(self, config, train_eval="train"):
+    def __init__(self, config, train_eval="train", save_train_data=False):
         print("Initialize AlfredThorEnv...")
         self.config = config
         self.train_eval = train_eval
+        self.save_train_data = save_train_data
+        self.index_save_train_data = 0
         self.random_seed = 123
         self.batch_size = 1
         self.envs = []
@@ -330,8 +332,13 @@ class AlfredThorEnv(object):
         batch_size = self.batch_size
         # reset envs
 
-        if self.train_eval == 'train':
+        if self.train_eval == 'train' and not self.save_train_data:
             tasks = random.sample(self.json_file_list, k=batch_size)
+        elif self.save_train_data:
+            tasks = self.json_file_list[self.index_save_train_data:self.index_save_train_data + batch_size]
+            if len(tasks) < batch_size:
+                tasks = tasks + self.json_file_list[:batch_size-len(tasks)]
+            self.index_save_train_data += batch_size
         else:
             if len(self.json_file_list)-batch_size > batch_size:
                 tasks = [self.json_file_list.pop(random.randrange(len(self.json_file_list))) for _ in range(batch_size)]

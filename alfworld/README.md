@@ -28,12 +28,17 @@ python dagger/train_vision_dagger.py config/vision_config.yaml
 infos: {'admissible_commands': [['go to countertop 1', 'go to coffeemachine 1', 'go to cabinet 1', 'go to cabinet 2', 'go to cabinet 3', 'go to sink 1', 'go to cabinet 4', 'go to drawer 1', 'go to drawer 2', 'go to drawer 3', 'go to sinkbasin 1', 'go to cabinet 5', 'go to toaster 1', 'go to fridge 1', 'go to cabinet 6', 'go to cabinet 7', 'go to cabinet 8', 'go to microwave 1', 'go to cabinet 9', 'go to cabinet 10', 'go to cabinet 11', 'go to drawer 4', 'go to cabinet 12', 'go to stoveburner 1', 'go to drawer 5', 'go to stoveburner 2', 'inventory', 'look']], 'won': [False], 'goal_condition_success_rate': [0.0], 'extra.gamefile': ['../data/json_2.1.1/train/pick_and_place_simple-Lettuce-None-CounterTop-25/trial_T20190907_000040_764797'], 'expert_plan': [['go to fridge 1']]}
 ```
 
-# visual semantic
+# Visual Semantic
 agents/sgg/*
 agents/semantic_graph/*
 
 object_classes = "__background__" + objects
 predicate_to_ind = "__background__" + relations
+
+## Visual Semantic Train Data
+```
+python dagger/save_expert_dagger.py config/save_semantic_data_base.yaml --semantic_config_file config/save_semantic_data.yaml
+```
 
 ## SGG
 ### 1. Get SGG Train Data
@@ -50,7 +55,7 @@ python -m torch.distributed.launch --nproc_per_node=2 main.py --config-file conf
 python main.py --config-file configs/attribute.yaml --inference --resume 99999 --visualize
 ```
 
-## Semantic Graph
+## Semantic Global Graph
 ### Oracle - Test semantic graph
 ```
 cd $ALFRED_ROOT/agents/

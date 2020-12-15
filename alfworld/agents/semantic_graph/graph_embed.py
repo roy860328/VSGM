@@ -39,3 +39,27 @@ class SelfAttn(nn.Module):
         scores = F.softmax(self.scorer(features), dim=1)
         merge_features = scores.bmm(features).sum(0, keepdim=True)
         return merge_features
+
+
+class DotAttn(nn.Module):
+    '''
+    dot-attention (or soft-attention)
+    '''
+
+    def forward(self, inp, h):
+        score = self.softmax(inp, h)
+        # [2, 145, 1] -> [2, 145, 1024] -> * inp -> sum all 145 word to 1024 feature
+        # -> [2, 1024]
+        return score.expand_as(inp).mul(inp).sum(1), score
+
+    def softmax(self, inp, h):
+        '''
+        inp : [2, 145, 1024]
+        h : [2, 1024]
+        '''
+        # import pdb; pdb.set_trace()
+        # [2, 145, 1]
+        raw_score = inp.bmm(h.unsqueeze(2))
+        # [2, 145, 1]
+        score = F.softmax(raw_score, dim=1)
+        return score

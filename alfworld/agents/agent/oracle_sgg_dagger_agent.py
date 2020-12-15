@@ -40,7 +40,6 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         '''
         # Semantic graph create
         self.cfg_semantic = config['semantic_cfg']
-        self.cfg_sgg = config['sgg_cfg']
         self.isORACLE = self.cfg_semantic.SCENE_GRAPH.ORACLE
         self.graph_embed_model = importlib.import_module(self.cfg_semantic.SCENE_GRAPH.MODEL).Net(self.cfg_semantic)
         if self.use_gpu:
@@ -53,7 +52,7 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         # initialize model
         self.trans_MetaData = alfred_data_format.TransMetaData(self.cfg_semantic)
         if not self.isORACLE:
-            # import graph-rcnn
+            self.cfg_sgg = config['sgg_cfg']
             self.detector = sgg.load_pretrained_model(
                 self.cfg_sgg, self.trans_MetaData.transforms, self.trans_MetaData.ind_to_classes, 'cuda'
                 )
@@ -317,3 +316,35 @@ class OracleSggDAggerAgent(TextDAggerAgent):
             return [b for b in aggregated_feats]
         else:
             raise ValueError("sequence_aggregation_method must be sum, average or rnn")
+
+    def save_trajectory(self, envs, store_states, task_desc_strings, expert_actions):
+        import cv2
+        import json
+        print("=== SAVE BATCH ===")
+        TRAIN_DATA = "TRAIN_DATA.json"
+        for i, thor in enumerate(envs):
+            save_data_path = thor.env.save_frames_path
+            print("=== save one episode len ===", len(expert_actions))
+            print("=== save path ===", save_data_path)
+            data = {
+                "task_desc_string": [],
+                "expert_action": [],
+                "sgg_meta_data": [],
+                "rgb_image": [],
+            }
+            img_name = 0
+            for store_state, task_desc_string, expert_action in zip(store_states, task_desc_strings, expert_actions):
+                _task_desc_string = task_desc_string[i]
+                _expert_action = expert_action[i]
+                rgb_image = store_state["rgb_image"][i]
+                img_path = os.path.join(save_data_path, '%09d.png' % img_name)
+                cv2.imwrite(img_path, rgb_image)
+
+                data["task_desc_string"].append(_task_desc_string)
+                data["expert_action"].append(_expert_action)
+                data["rgb_image"].append(img_path)
+                data["sgg_meta_data"].append(store_state["sgg_meta_data"][i])
+                img_name += 1
+
+            with open(os.path.join(save_data_path, TRAIN_DATA), 'w') as f:
+                json.dump(data, f)

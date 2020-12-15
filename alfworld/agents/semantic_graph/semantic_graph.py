@@ -6,7 +6,7 @@ from collections import defaultdict
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 sys.path.insert(0, os.path.join(os.environ['ALFRED_ROOT'], 'agents'))
-from semantic_graph import utils
+from agents.semantic_graph import utils
 
 
 class GraphData(Data):
