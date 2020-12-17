@@ -31,7 +31,11 @@ infos: {'admissible_commands': [['go to countertop 1', 'go to coffeemachine 1', 
 # Visual Semantic
 agents/sgg/*
 agents/semantic_graph/*
-
+config setting
+```
+vision_dagger:
+  model_type: "sgg"
+```
 object_classes = "__background__" + objects
 predicate_to_ind = "__background__" + relations
 
@@ -40,7 +44,7 @@ predicate_to_ind = "__background__" + relations
 python dagger/save_expert_dagger.py config/save_semantic_data_base.yaml --semantic_config_file config/save_semantic_data.yaml
 ```
 
-## SGG
+## SGG train object relation attribute
 ### 1. Get SGG Train Data
 $ALFRED_ROOT/DATASET_SGG.md
 
@@ -65,6 +69,9 @@ python semantic_graph/semantic_graph.py config/semantic_graph_base.yaml --semant
 ```
 cd $ALFRED_ROOT/agents/
 python dagger/train_sgg_vision_dagger.py config/semantic_graph_base.yaml --semantic_config_file config/oracle_semantic_graph.yaml
+```
+```
+python dagger/train_sgg_vision_dagger_without_env.py config/save_semantic_data_base.yaml --semantic_config_file config/save_semantic_data.yaml
 ```
 
 ### SGG - Test model OK

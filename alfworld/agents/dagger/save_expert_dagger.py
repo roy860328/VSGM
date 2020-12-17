@@ -18,6 +18,7 @@ import torch
 from eval import evaluate_vision_dagger
 from modules.generic import HistoryScoreCache, EpisodicCountingMemory, ObjCentricEpisodicMemory
 from agents.utils.misc import extract_admissible_commands
+from agents.utils.traj_process import save_trajectory
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import pdb
 
@@ -29,7 +30,7 @@ def train():
     agent = OracleSggDAggerAgent(config)
     env_type = "AlfredThorEnv"
     alfred_env = getattr(importlib.import_module("environment"), env_type)(config, train_eval="train", save_train_data=True)
-    env = alfred_env.init_env(batch_size=agent.batch_size)
+    env = alfred_env.init_env(batch_size=agent.batch_size, save_action_result=True)
 
     id_eval_env, num_id_eval_game = None, 0
     ood_eval_env, num_ood_eval_game = None, 0
@@ -90,7 +91,7 @@ def train():
         env.seed(episode_no)
         print("reload")
         print("=== env.index_save_train_data === ", env.index_save_train_data)
-        print("=== env.json_file_list === ", env.json_file_list)
+        print("=== env.json_file_list === ", len(env.json_file_list))
         if env.index_save_train_data > len(env.json_file_list):
             break
         obs, infos = env.reset()
@@ -194,7 +195,7 @@ def train():
         store_states = [replay_info[0] for replay_info in transition_cache]
         task_desc_strings = [replay_info[1] for replay_info in transition_cache]
         expert_actions = [replay_info[2] for replay_info in transition_cache]
-        agent.save_trajectory(env.envs, store_states, task_desc_strings, expert_actions)
+        save_trajectory(env.envs, store_states, task_desc_strings, expert_actions, still_running_mask)
 
         still_running_mask_np = np.array(still_running_mask)
         game_points_np = np.array(sequence_game_points) * still_running_mask_np  # step x batch

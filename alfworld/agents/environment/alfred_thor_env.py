@@ -30,13 +30,14 @@ class AlfredThorEnv(object):
     '''
 
     class Thor(threading.Thread):
-        def __init__(self, queue, train_eval="train"):
+        def __init__(self, queue, train_eval="train", save_action_result=False):
             Thread.__init__(self)
             self.action_queue = queue
             self.mask_rcnn = None
             self.env =  None
             self.train_eval = train_eval
             self.controller_type = "oracle"
+            self.save_action_result = save_action_result
 
         def run(self):
             while True:
@@ -166,7 +167,7 @@ class AlfredThorEnv(object):
                 self.prev_command = str(action)
                 self._feedback = self.controller.step(action)
                 self._res = self.get_info()
-                if self.env.save_frames_to_disk:
+                if self.env.save_frames_to_disk or self.save_action_result:
                     self.record_action(action)
             self.steps += 1
 
@@ -312,14 +313,14 @@ class AlfredThorEnv(object):
             self.num_games = len(self.json_file_list)
             print("Evaluating with %d games" % (len(self.json_file_list)))
 
-    def init_env(self, batch_size):
+    def init_env(self, batch_size, save_action_result=False):
         self.get_env_paths()
         self.batch_size = batch_size
         self.action_queues = []
         self.task_order = [""] * self.batch_size
         for n in range(self.batch_size):
             queue = Queue()
-            env = self.Thor(queue, self.train_eval)
+            env = self.Thor(queue, self.train_eval, save_action_result=save_action_result)
             self.action_queues.append(queue)
             self.envs.append(env)
             env.daemon = True

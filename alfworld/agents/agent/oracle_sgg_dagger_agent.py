@@ -97,7 +97,7 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         for i in range(len(store_state["rgb_image"])):
             scene_graph = self.scene_graphs[i]
             rgb_image = store_state["rgb_image"][i]
-            mask_image = store_state["mask_image"][i]
+            # mask_image = store_state["mask_image"][i]
             # color_to_obj_id_type = {}
             # for color, object_id in env.last_event.color_to_object_id.items():
             #     color_to_obj_id_type[str(color)] = object_id
@@ -124,6 +124,7 @@ class OracleSggDAggerAgent(TextDAggerAgent):
 
         if len(self.dagger_memory) < self.dagger_replay_batch_size:
             return None
+        # self.dagger_replay_batch_size, self.dagger_replay_sample_history_length = 64, 4
         sequence_of_transitions, contains_first_step = self.dagger_memory.sample_sequence(self.dagger_replay_batch_size, self.dagger_replay_sample_history_length)
         if sequence_of_transitions is None:
             return None
@@ -176,7 +177,7 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         return to_np(pred), to_np(loss)
 
     # loss
-    def train_command_generation_recurrent_teacher_force(self, store_state, seq_task_desc_strings, seq_target_strings, contains_first_step=False):
+    def train_command_generation_recurrent_teacher_force(self, store_state, seq_task_desc_strings, seq_target_strings, contains_first_step=False, train_now=True):
         # pdb.set_trace()
         loss_list = []
         previous_dynamics = None
@@ -214,8 +215,15 @@ class OracleSggDAggerAgent(TextDAggerAgent):
 
         if loss_list is None:
             return None
-        loss = torch.stack(loss_list).mean()
         print("loss: ", loss)
+        loss = torch.stack(loss_list).mean()
+        if train_now:
+            self.grad(loss)
+            return to_np(loss)
+        else:
+            return loss
+
+    def grad(self, loss):
         # Backpropagate
         self.online_net.zero_grad()
         self.optimizer.zero_grad()
@@ -223,7 +231,6 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
         torch.nn.utils.clip_grad_norm_(self.online_net.parameters(), self.clip_grad_norm)
         self.optimizer.step()  # apply gradients
-        return to_np(loss)
 
     # recurrent
     def command_generation_greedy_generation(self, observation_feats, task_desc_strings, previous_dynamics):
@@ -316,35 +323,3 @@ class OracleSggDAggerAgent(TextDAggerAgent):
             return [b for b in aggregated_feats]
         else:
             raise ValueError("sequence_aggregation_method must be sum, average or rnn")
-
-    def save_trajectory(self, envs, store_states, task_desc_strings, expert_actions):
-        import cv2
-        import json
-        print("=== SAVE BATCH ===")
-        TRAIN_DATA = "TRAIN_DATA.json"
-        for i, thor in enumerate(envs):
-            save_data_path = thor.env.save_frames_path
-            print("=== save one episode len ===", len(expert_actions))
-            print("=== save path ===", save_data_path)
-            data = {
-                "task_desc_string": [],
-                "expert_action": [],
-                "sgg_meta_data": [],
-                "rgb_image": [],
-            }
-            img_name = 0
-            for store_state, task_desc_string, expert_action in zip(store_states, task_desc_strings, expert_actions):
-                _task_desc_string = task_desc_string[i]
-                _expert_action = expert_action[i]
-                rgb_image = store_state["rgb_image"][i]
-                img_path = os.path.join(save_data_path, '%09d.png' % img_name)
-                cv2.imwrite(img_path, rgb_image)
-
-                data["task_desc_string"].append(_task_desc_string)
-                data["expert_action"].append(_expert_action)
-                data["rgb_image"].append(img_path)
-                data["sgg_meta_data"].append(store_state["sgg_meta_data"][i])
-                img_name += 1
-
-            with open(os.path.join(save_data_path, TRAIN_DATA), 'w') as f:
-                json.dump(data, f)
