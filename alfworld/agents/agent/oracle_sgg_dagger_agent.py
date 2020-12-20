@@ -11,12 +11,15 @@ from modules.layers import NegativeLogLoss, masked_mean, compute_mask
 import torchvision.transforms as T
 from torchvision import models
 from torchvision.ops import boxes as box_ops
-
-sys.path.insert(0, os.path.join(os.environ['ALFRED_ROOT'], 'agents', 'semantic_graph'))
 import importlib
-from semantic_graph import SceneGraph
+
+sys.path.insert(0, os.path.join(os.environ['ALFRED_ROOT'], 'agents'))
+from agents.utils import tensorboard
+sys.path.insert(0, os.path.join(os.environ['ALFRED_ROOT'], 'agents', 'semantic_graph'))
 import pdb
+from semantic_graph import SceneGraph
 from sgg import alfred_data_format, sgg
+
 
 class OracleSggDAggerAgent(TextDAggerAgent):
     '''
@@ -41,7 +44,7 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         # Semantic graph create
         self.cfg_semantic = config['semantic_cfg']
         self.isORACLE = self.cfg_semantic.SCENE_GRAPH.ORACLE
-        self.graph_embed_model = importlib.import_module(self.cfg_semantic.SCENE_GRAPH.MODEL).Net(self.cfg_semantic)
+        self.graph_embed_model = importlib.import_module(self.cfg_semantic.SCENE_GRAPH.MODEL).Net(self.cfg_semantic, config=config)
         if self.use_gpu:
             self.graph_embed_model.cuda()
         self.scene_graphs = []
@@ -61,6 +64,8 @@ class OracleSggDAggerAgent(TextDAggerAgent):
 
         self.load_pretrained = self.cfg_semantic.GENERAL.LOAD_PRETRAINED
         self.load_from_tag = self.cfg_semantic.GENERAL.LOAD_PRETRAINED_PATH
+
+        self.summary_writer = tensorboard.TensorBoardX(config["general"]["save_path"])
 
     def reset_all_scene_graph(self):
         for scene_graph in self.scene_graphs:
@@ -87,7 +92,7 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         return store_state
 
     # visual features for state representation
-    def extract_visual_features(self, envs=None, store_state=None):
+    def extract_visual_features(self, envs=None, store_state=None, hidden_state=None):
         if envs is not None:
             store_state = self.get_env_last_event_data(envs)
         if store_state is None:
@@ -111,7 +116,7 @@ class OracleSggDAggerAgent(TextDAggerAgent):
                 result = results[0]
                 scene_graph.add_local_graph_to_global_graph(rgb_image, result)
             global_graph = scene_graph.get_graph_data()
-            graph_embed_feature = self.graph_embed_model(global_graph)
+            graph_embed_feature = self.graph_embed_model(global_graph, hidden_state=hidden_state)
             graph_embed_features.append(graph_embed_feature)
         return graph_embed_features, store_state
 
@@ -188,7 +193,7 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         for step_no in range(len(seq_target_strings)):
             input_target_strings = [" ".join(["[CLS]"] + item.split()) for item in seq_target_strings[step_no]]
             output_target_strings = [" ".join(item.split() + ["[SEP]"]) for item in seq_target_strings[step_no]]
-            observation_feats, _ = self.extract_visual_features(store_state=store_state[step_no])
+            observation_feats, _ = self.extract_visual_features(store_state=store_state[step_no], hidden_state=previous_dynamics)
 
             obs = [o.to(h_td.device) for o in observation_feats]
             aggregated_obs_feat = self.aggregate_feats_seq(obs)
@@ -205,9 +210,6 @@ class OracleSggDAggerAgent(TextDAggerAgent):
             pred = self.online_net.vision_decode(input_target, target_mask, vision_td, vision_td_mask, current_dynamics)  # batch x target_length x vocab
 
             previous_dynamics = current_dynamics
-            if (not contains_first_step) and step_no < self.dagger_replay_sample_update_from:
-                previous_dynamics = previous_dynamics.detach()
-                continue
 
             batch_loss = NegativeLogLoss(pred * target_mask.unsqueeze(-1), ground_truth, target_mask, smoothing_eps=self.smoothing_eps)
             loss = torch.mean(batch_loss)
@@ -215,11 +217,11 @@ class OracleSggDAggerAgent(TextDAggerAgent):
 
         if loss_list is None:
             return None
-        print("loss: ", loss)
         loss = torch.stack(loss_list).mean()
+        print("loss: ", loss)
         if train_now:
-            self.grad(loss)
-            return to_np(loss)
+            loss = self.grad(loss)
+            return loss
         else:
             return loss
 
@@ -231,6 +233,7 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
         torch.nn.utils.clip_grad_norm_(self.online_net.parameters(), self.clip_grad_norm)
         self.optimizer.step()  # apply gradients
+        return to_np(loss)
 
     # recurrent
     def command_generation_greedy_generation(self, observation_feats, task_desc_strings, previous_dynamics):

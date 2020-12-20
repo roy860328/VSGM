@@ -357,7 +357,10 @@ class BaseAgent:
         # fraction_random annealing
         self.fraction_random = self.fraction_random_scheduler.value(episode_no)
         self.fraction_random = max(self.fraction_random, 0.0)
-
+        for param_group in self.optimizer.param_groups:
+            param_group['lr'] = self.config['general']['training']['optimizer']['learning_rate'] * self.fraction_assist
+            print("lr: ", param_group['lr'])
+            break
         # Update target network
         if (episode_no + batch_size) % self.target_net_update_frequency <= episode_no % self.target_net_update_frequency:
             self.update_target_net()

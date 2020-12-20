@@ -7,6 +7,10 @@ import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 sys.path.insert(0, os.path.join(os.environ['ALFRED_ROOT'], 'agents'))
 from agents.semantic_graph import utils
+import importlib
+
+
+__all__ = ['GraphData', 'SceneGraph', 'HeteGraphData']
 
 
 class GraphData(Data):
@@ -28,6 +32,13 @@ class GraphData(Data):
         # torch.Size([300])
         self.obj_cls_to_features = obj_cls_name_to_features
         self.GPU = GPU
+
+    def __inc__(self, key, value):
+        increasing_funcs = ["edge_obj_to_obj"]
+        if key in increasing_funcs:
+            return len(self["x"])
+        else:
+            return 0
 
     def add_node(self, obj_cls, feature, obj_id=None):
         '''
@@ -78,8 +89,8 @@ class GraphData(Data):
         tensor_node = torch.tensor([[node_src], [node_dst]], dtype=torch.long).contiguous()
         if self.GPU:
             tensor_node = tensor_node.cuda()
-        if self.edge_index is None:
-            self.edge_index = tensor_node
+        if self.edge_obj_to_obj is None:
+            self.edge_obj_to_obj = tensor_node
         else:
             '''
             tensor([[ 5,  0],
@@ -93,7 +104,7 @@ class GraphData(Data):
                     [ 6, 10],
                     [ 8, 10]])
             '''
-            self.edge_index = torch.cat([self.edge_index, tensor_node], dim=1)
+            self.edge_obj_to_obj = torch.cat([self.edge_obj_to_obj, tensor_node], dim=1)
 
     def search_node(self, obj_id=None):
         # Oracle
@@ -106,14 +117,112 @@ class GraphData(Data):
         else:
             raise NotImplementedError
 
-    def _cat_feature_and_wore_embed(self, obj_cls, feature):
+    def get_wore_embed(self, obj_cls):
         word_embed = self.obj_cls_to_features[obj_cls].clone().detach()
+        if self.GPU:
+            word_embed = word_embed.cuda()
+        return word_embed
+
+    def _cat_feature_and_wore_embed(self, obj_cls, feature):
         feature = feature.clone().detach()
-        feature = torch.cat([feature, word_embed])
         if self.GPU:
             feature = feature.cuda()
+        word_embed = self.get_wore_embed(obj_cls)
+        feature = torch.cat([feature, word_embed])
         return feature
 
+
+class HeteGraphData(GraphData):
+    def __init__(self, obj_cls_name_to_features, GPU, x=None, edge_index=None, edge_attr=None, y=None,
+                 pos=None, normal=None, face=None, **kwargs):
+        super(HeteGraphData, self).__init__(obj_cls_name_to_features, GPU,
+                                            x=None, edge_index=None, edge_attr=None, y=None,
+                                            pos=None, normal=None, face=None, **kwargs)
+        self.attributes = None
+        self.edge_obj_to_obj = None
+
+    def __inc__(self, key, value):
+        increasing_funcs = ["edge_obj_to_obj"]
+        if key in increasing_funcs:
+            return len(self["x"])
+        else:
+            return 0
+
+    def _append_unique_obj_index_to_attribute(self, feature, obj_cls):
+        unique_obj_index = len(self.obj_cls_to_ind[obj_cls])
+        unique_obj_index_tensor = torch.tensor([unique_obj_index], dtype=torch.float)
+        feature = torch.cat([feature, unique_obj_index_tensor]).unsqueeze(0)
+        if self.GPU:
+            feature = feature.cuda()
+        return feature, unique_obj_index
+
+    def add_node(self, obj_cls, feature, obj_id=None):
+        word_embed = self.get_wore_embed(obj_cls).unsqueeze(0)
+        feature, unique_obj_index = self._append_unique_obj_index_to_attribute(feature, obj_cls)
+        # init self.x
+        if self.x is None:
+            ind = 0
+            self.x = word_embed
+            self.attributes = feature
+        else:
+            ind = len(self.x)
+            self.x = torch.cat([self.x, word_embed], dim=0)
+            self.attributes = torch.cat([self.attributes, feature], dim=0)
+        # Oracle
+        if obj_id is None:
+            # Not Oracle. Create new obj_id
+            obj_id = str(obj_cls) + "_" + str(unique_obj_index)
+        self.obj_id_to_ind[obj_id] = ind
+        self.ind_to_obj_id[ind] = obj_id
+        self.obj_cls_to_ind[obj_cls].append(ind)
+        self.list_node_obj_cls.append(obj_cls)
+        return ind
+
+    def update_node(self, obj_cls, feature, obj_id):
+        '''
+        '''
+        ind = self.obj_id_to_ind[obj_id]
+        if self.GPU:
+            feature = feature.cuda()
+        self.attributes[ind][:-1] = feature
+        return ind
+
+    def update_relation(self, node_src, node_dst, relation):
+        '''
+        node_src : 320
+        node_dst : 321
+        relation : 1
+        '''
+        tensor_node = torch.tensor([[node_src], [node_dst]], dtype=torch.long).contiguous()
+        if self.GPU:
+            tensor_node = tensor_node.cuda()
+        if self.edge_obj_to_obj is None:
+            self.edge_obj_to_obj = tensor_node
+        else:
+            '''
+            tensor([[ 5,  0],
+                    [ 9,  0],
+                    [ 2,  1],
+                    [ 8,  1],
+                    [ 8,  2],
+                    [ 8,  6],
+                    [ 8,  7],
+                    [ 5,  9],
+                    [ 6, 10],
+                    [ 8, 10]])
+            '''
+            self.edge_obj_to_obj = torch.cat([self.edge_obj_to_obj, tensor_node], dim=1)
+
+    def search_node(self, obj_id=None):
+        # Oracle
+        if obj_id is not None:
+            if obj_id in self.obj_id_to_ind:
+                return True
+            else:
+                return False
+        # compare alg
+        else:
+            raise NotImplementedError
 
 class SceneGraph(object):
     """docstring for SceneGraph"""
@@ -130,7 +239,13 @@ class SceneGraph(object):
         self.init_graph_data()
 
     def init_graph_data(self):
-        self.global_graph = GraphData(self.obj_cls_name_to_features, self.GPU)
+        graphdata = getattr(
+            importlib.import_module(
+                'agents.semantic_graph.semantic_graph'),
+            self.cfg.SCENE_GRAPH.GraphData
+            )
+        self.global_graph = graphdata(self.obj_cls_name_to_features, self.GPU)
+
 
     def _get_obj_cls_name_to_features(self):
         def get_feature(csv_nodes_data):

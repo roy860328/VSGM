@@ -99,6 +99,10 @@ RuntimeError: Error(s) in loading state_dict for SGG:
 
 ### SGG - Train with semantic graph dagger
 
+### Hete semantic graph
+```
+CUDA_VISIBLE_DEVICES=1 python dagger/train_sgg_vision_dagger_without_env.py config/semantic_graph_base.yaml --semantic_config_file config/hete_semantic_graph.yaml
+```
 
 ```
 ```

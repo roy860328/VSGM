@@ -32,6 +32,8 @@ def train():
     alfred_env = getattr(importlib.import_module("environment"), env_type)(config, train_eval="train")
     # env = alfred_env.init_env(batch_size=1)
     json_file_list = alfred_env.json_file_list
+    # print(json_file_list)
+    # import pdb;pdb.set_trace()
 
     id_eval_env, num_id_eval_game = None, 0
     ood_eval_env, num_ood_eval_game = None, 0
@@ -50,10 +52,8 @@ def train():
     output_dir = config["general"]["save_path"]
     data_dir = config["general"]["save_path"]
     action_space = config["dagger"]["action_space"]
-
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-
 
     step_in_total = 0
     episode_no = 0
@@ -81,7 +81,8 @@ def train():
         print("reload ends")
         batch_size = agent.batch_size
         tasks = random.sample(json_file_list, k=batch_size)
-        save_frames_path = config['env']['thor']['save_frames_path']
+        print("tasks: ", tasks)
+        save_frames_path = config['dataset']['presave_data_path']
         transition_caches = get_traj_train_data(tasks, save_frames_path)
 
         agent.train()
@@ -101,9 +102,10 @@ def train():
             )
             loss_copy = loss.clone().detach()
             losses.append(loss)
-            running_avg_dagger_loss.push(loss_copy)
+            running_avg_dagger_loss.push(loss_copy.item())
         loss = torch.stack(losses).mean()
-        agent.grad(loss)
+        loss = agent.grad(loss)
+        agent.summary_writer.one_epoch(train_loss=loss, optimizer=agent.optimizer)
 
         agent.finish_of_episode(episode_no, batch_size)
         episode_no += batch_size

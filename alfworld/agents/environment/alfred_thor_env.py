@@ -312,6 +312,7 @@ class AlfredThorEnv(object):
             self.json_file_list = self.json_file_list[:num_eval_games]
             self.num_games = len(self.json_file_list)
             print("Evaluating with %d games" % (len(self.json_file_list)))
+        # self.json_file_list.reverse()
 
     def init_env(self, batch_size, save_action_result=False):
         self.get_env_paths()

@@ -92,7 +92,7 @@ def train():
         print("reload")
         print("=== env.index_save_train_data === ", env.index_save_train_data)
         print("=== env.json_file_list === ", len(env.json_file_list))
-        if env.index_save_train_data > len(env.json_file_list):
+        if env.index_save_train_data > len(env.json_file_list) + agent.batch_size:
             break
         obs, infos = env.reset()
         print("reload ends")

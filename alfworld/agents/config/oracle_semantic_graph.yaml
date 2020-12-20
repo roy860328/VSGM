@@ -39,3 +39,4 @@ SCENE_GRAPH:
   NORMALIZATION: False
   EMBED_TYPE: "WeightedSum"  # "WeightedSum", "SelfAttn"
   EMBED_FEATURE_SIZE: 128
+  RESULT_FEATURE: 128

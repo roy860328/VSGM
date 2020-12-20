@@ -5,6 +5,7 @@ import sys
 import yaml
 import numpy as np
 import string
+import glob
 missing_words = set()
 
 
@@ -207,12 +208,38 @@ def load_config():
         from config import cfg
         cfg.merge_from_file(args.semantic_config_file)
         config['semantic_cfg'] = cfg
+        config["general"]["save_path"] = cfg.GENERAL.save_path
     if args.sgg_config_file is not None:
         sys.path.insert(0, os.environ['GRAPH_RCNN_ROOT'])
         from lib.config import cfg
         cfg.merge_from_file(args.sgg_config_file)
         config['sgg_cfg'] = cfg
     # print(config)
+
+
+    output_dir = config["general"]["save_path"]
+    if output_dir != '.':
+        from shutil import copyfile
+        # import pdb; pdb.set_trace()
+        folder_count = len(glob.glob(os.path.join(output_dir + "*", "")))
+        if folder_count != 0:
+            folder_count = glob.glob(os.path.join(output_dir + "*", ""))
+            folder_count.sort()
+            folder_count = folder_count[-1]
+            folder_count = folder_count[len(output_dir):-1]
+            folder_count = int(folder_count) + 1
+        output_dir += str(folder_count)
+        config["general"]["save_path"] = output_dir
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        dst_file = os.path.join(output_dir, args.config_file.split('/')[-1])
+        copyfile(args.config_file, dst_file)
+        if args.semantic_config_file is not None:
+            dst_file = os.path.join(output_dir, args.semantic_config_file.split('/')[-1])
+            copyfile(args.semantic_config_file, dst_file)
+        if args.sgg_config_file is not None:
+            dst_file = os.path.join(output_dir, args.sgg_config_file.split('/')[-1])
+            copyfile(args.sgg_config_file, dst_file)
     return config
 
 

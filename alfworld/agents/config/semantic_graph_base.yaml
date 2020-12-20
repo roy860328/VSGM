@@ -4,7 +4,7 @@ dataset:
   eval_ood_data_path: '../data/json_2.1.1/valid_unseen'     # null/None to disable
   num_train_games: -1                                       # max training games (<=0 indicates full dataset)
   num_eval_games: -1                                        # max evaluation games (<=0 indicates full dataset)
-
+  presave_data_path: '../training_data/'
 pddl:
   domain: '../data/alfred.pddl'                             # PDDL domain file that defines world dynamics
 
@@ -43,7 +43,7 @@ general:
   visdom: False                                             # plot training/eval curves, run with visdom server
   task: 'alfred'
   training_method: 'dagger'                                 # 'dqn' or 'dagger'
-  save_path: '.'                                            # path to save pytorch models
+  save_path: '../exp/semantic_graph_'                                            # path to save pytorch models
   observation_pool_capacity: 3                              # k-size queue, 0 indicates no observation
   hide_init_receptacles: False                              # remove initial observation containing navigable receptacles
 

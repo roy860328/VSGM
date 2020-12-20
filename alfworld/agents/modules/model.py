@@ -54,7 +54,7 @@ class Policy(torch.nn.Module):
         elif self.vision_model_type == "maskrcnn":
             self.vision_input_dim = 1024
         elif self.vision_model_type == "sgg":
-            self.vision_input_dim = self.config['semantic_cfg'].SCENE_GRAPH.EMBED_FEATURE_SIZE
+            self.vision_input_dim = self.config['semantic_cfg'].SCENE_GRAPH.RESULT_FEATURE
         else:
             self.vision_input_dim = 1000
 
