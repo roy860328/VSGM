@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.join(os.environ['ALFRED_ROOT'], 'agents'))
 from agent import OracleSggDAggerAgent
 import modules.generic as generic
 import torch
-from eval import evaluate_vision_dagger
+from eval.evaluate_semantic_graph_dagger import evaluate_semantic_graph_dagger
 from modules.generic import HistoryScoreCache, EpisodicCountingMemory, ObjCentricEpisodicMemory
 from agents.utils.misc import extract_admissible_commands
 from agents.utils.traj_process import get_traj_train_data, get_exploration_traj_train_data
@@ -81,7 +81,7 @@ def train():
         print("reload ends")
         batch_size = agent.batch_size
         tasks = random.sample(json_file_list, k=batch_size)
-        print("tasks: ", tasks)
+        # print("tasks: ", tasks)
         save_frames_path = config['dataset']['presave_data_path']
         transition_caches = get_traj_train_data(tasks, save_frames_path)
         if agent.use_exploration_frame_feats:
@@ -90,10 +90,10 @@ def train():
                 save_frames_path
             )
 
+        report = agent.report_frequency > 0 and (episode_no % agent.report_frequency <= (episode_no - batch_size) % agent.report_frequency)
         agent.train()
         agent.init(batch_size)
         previous_dynamics = None
-        report = agent.report_frequency > 0 and (episode_no % agent.report_frequency <= (episode_no - batch_size) % agent.report_frequency)
 
         # extract exploration frame features
         '''
@@ -120,6 +120,7 @@ def train():
             running_avg_dagger_loss.push(loss_copy.item())
         loss = torch.stack(losses).mean()
         loss = agent.grad(loss)
+        print("loss: ", loss.item())
         agent.summary_writer.one_epoch(train_loss=loss, optimizer=agent.optimizer)
 
         agent.finish_of_episode(episode_no, batch_size)
@@ -133,16 +134,20 @@ def train():
         eps_per_sec = float(episode_no) / time_spent_seconds
         # evaluate
         print("Save Model")
+
+        id_eval_game_points, id_eval_game_step = 0.0, 0.0
+        ood_eval_game_points, ood_eval_game_step = 0.0, 0.0
         if agent.run_eval:
-            if id_eval_env is not None and episode_no/batch_size % 10 == 0:
-                id_eval_res = evaluate_vision_dagger(id_eval_env, agent, num_id_eval_game)
+            if id_eval_env is not None and episode_no != batch_size:
+                id_eval_res = evaluate_semantic_graph_dagger(id_eval_env, agent, num_id_eval_game)
                 id_eval_game_points, id_eval_game_step = id_eval_res['average_points'], id_eval_res['average_steps']
-            if ood_eval_env is not None and episode_no/batch_size % 10 == 0:
-                ood_eval_res = evaluate_vision_dagger(ood_eval_env, agent, num_ood_eval_game)
+            if ood_eval_env is not None and episode_no != batch_size:
+                ood_eval_res = evaluate_semantic_graph_dagger(ood_eval_env, agent, num_ood_eval_game)
                 ood_eval_game_points, ood_eval_game_step = ood_eval_res['average_points'], ood_eval_res['average_steps']
             if id_eval_game_points >= best_performance_so_far:
                 best_performance_so_far = id_eval_game_points
                 agent.save_model_to_path(output_dir + "/" + agent.experiment_tag + ".pt")
+            agent.summary_writer.eval(id_eval_game_points, id_eval_game_step, ood_eval_game_points, ood_eval_game_step)
         else:
             if running_avg_dagger_loss.get_avg() >= best_performance_so_far:
                 best_performance_so_far = running_avg_dagger_loss.get_avg()

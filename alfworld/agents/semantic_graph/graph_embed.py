@@ -90,6 +90,8 @@ class DotAttnChoseImportentNode(nn.Module):
             hidden_state = torch.zeros((1, self.bert_hidden_size))
             if self.GPU:
                 hidden_state = hidden_state.to('cuda')
+        elif hidden_state.shape[0] > 1:
+            raise "nodes only can accept one batch, hidden_state == torch.Size([1, 64])"
         # torch.Size([1, 40])
         hidden_state = self.hidden_state_to_node(hidden_state)
         # torch.Size([3])
@@ -97,8 +99,10 @@ class DotAttnChoseImportentNode(nn.Module):
 
         chose_nodes = None
         sort_index = torch.argsort(score, dim=0)
+        chose_node_count = 0
         for index in sort_index.to('cpu').numpy():
-            if index < self.NUM_CHOSE_NODE:
+            if chose_node_count < self.NUM_CHOSE_NODE:
+                chose_node_count += 1
                 node = nodes[index].unsqueeze(0)
                 if chose_nodes is None:
                     chose_nodes = node

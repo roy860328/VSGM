@@ -32,6 +32,7 @@ _C.INPUT.VERTICAL_FLIP_PROB_TRAIN = 0.0
 _C.GENERAL = CN()
 _C.GENERAL.LOAD_PRETRAINED = False
 _C.GENERAL.LOAD_PRETRAINED_PATH = ""
+_C.GENERAL.use_exploration_frame_feats = False
 _C.GENERAL.save_path = "."
 
 

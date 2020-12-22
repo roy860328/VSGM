@@ -108,7 +108,7 @@ RuntimeError: Error(s) in loading state_dict for SGG:
 When train model by OracleSggDAggerAgent.train_command_generation_recurrent_teacher_force will only use self.scene_graphs[0].
 You need to agent.reset_all_scene_graph() reset graph data every time.
 ```
-CUDA_VISIBLE_DEVICES=1 python dagger/train_sgg_vision_dagger_without_env.py config/semantic_graph_base.yaml --semantic_config_file config/hete_semantic_graph.yaml
+CUDA_VISIBLE_DEVICES=1 python dagger/train_sgg_vision_dagger_without_env.py config/hete_graph_base.yaml --semantic_config_file config/hete_semantic_graph.yaml
 ```
 
 

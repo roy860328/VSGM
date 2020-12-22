@@ -64,11 +64,13 @@ class Net(torch.nn.Module):
         '''
         # import pdb; pdb.set_trace()
         x, attributes, edge_obj_to_obj, edge_weight = \
-            data.x.clone().detach(), \
-            data.attributes.clone().detach(), \
+            data.x, \
+            data.attributes, \
             data.edge_obj_to_obj, \
             data.edge_attr
         if edge_obj_to_obj is not None:
+            x = x.clone().detach()
+            attributes = attributes.clone().detach()
             edge_obj_to_obj = edge_obj_to_obj.clone().detach()
             # torch.Size([2, 16])
             x = F.relu(self.conv1(x, edge_obj_to_obj, edge_weight))

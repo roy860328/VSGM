@@ -62,15 +62,20 @@ class Net(torch.nn.Module):
         '''
         # import pdb; pdb.set_trace()
         # x, edge_obj_to_obj, edge_weight = data.x, data.edge_obj_to_obj, data.edge_attr
-        x, edge_obj_to_obj, edge_weight = data.x.clone().detach(), data.edge_obj_to_obj, data.edge_attr
+        x, edge_obj_to_obj, edge_weight = data.x, data.edge_obj_to_obj, data.edge_attr
         if edge_obj_to_obj is not None:
+            x = x.clone().detach()
             edge_obj_to_obj = edge_obj_to_obj.clone().detach()
             x = F.relu(self.conv1(x, edge_obj_to_obj, edge_weight))
             x = F.dropout(x, training=self.training)
             x = F.relu(self.conv2(x, edge_obj_to_obj, edge_weight))
             # x = self.conv2(x, edge_obj_to_obj, edge_weight)
-        if self.cfg.SCENE_GRAPH.CHOSE_IMPORTENT_NODE:
-            chose_nodes = self.self.chose_node_module(x)
-        x = self.final_mapping(x)
-        x = torch.cat([x, chose_nodes], dim=1)
+            if self.cfg.SCENE_GRAPH.CHOSE_IMPORTENT_NODE:
+                chose_nodes = self.self.chose_node_module(x)
+            x = self.final_mapping(x)
+            x = torch.cat([x, chose_nodes], dim=1)
+        else:
+            x = torch.zeros((1, self.cfg.SCENE_GRAPH.RESULT_FEATURE))
+            if self.cfg.SCENE_GRAPH.GPU:
+                x = x.to('cuda')
         return x

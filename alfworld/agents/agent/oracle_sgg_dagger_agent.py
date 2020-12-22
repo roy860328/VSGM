@@ -95,7 +95,7 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         return store_state
 
     # visual features for state representation
-    def extract_visual_features(self, thor=None, store_state=None, hidden_state=None, env_index=0):
+    def extract_visual_features(self, thor=None, store_state=None, hidden_state=None, env_index=None):
         if thor is not None:
             store_state = self.get_env_last_event_data(thor)
         if store_state is None:
@@ -129,7 +129,7 @@ class OracleSggDAggerAgent(TextDAggerAgent):
             scene_graph = self.scene_graphs[env_index]
             rgb_image = exploration_transition_cache[i]["exploration_img"]
             if self.isORACLE:
-                sgg_meta_data = exploration_transition_cache["exploration_sgg_meta_data"]
+                sgg_meta_data = exploration_transition_cache[i]["exploration_sgg_meta_data"]
                 target = self.trans_MetaData.trans_object_meta_data_to_relation_and_attribute(sgg_meta_data)
                 scene_graph.add_oracle_local_graph_to_global_graph(rgb_image, target)
             else:
@@ -249,7 +249,7 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         if loss_list is None:
             return None
         loss = torch.stack(loss_list).mean()
-        print("loss: ", loss)
+        # print("loss: ", loss)
         if train_now:
             loss = self.grad(loss)
             return loss
@@ -279,7 +279,6 @@ class OracleSggDAggerAgent(TextDAggerAgent):
     # recurrent
     def command_generation_greedy_generation(self, observation_feats, task_desc_strings, previous_dynamics):
         with torch.no_grad():
-            # pdb.set_trace()
             # print(observation_feats to word)
             batch_size = len(observation_feats)
 

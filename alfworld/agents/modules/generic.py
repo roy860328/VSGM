@@ -209,6 +209,7 @@ def load_config():
         cfg.merge_from_file(args.semantic_config_file)
         config['semantic_cfg'] = cfg
         config["general"]["save_path"] = cfg.GENERAL.save_path
+        config["vision_dagger"]["use_exploration_frame_feats"] = cfg.GENERAL.use_exploration_frame_feats
     if args.sgg_config_file is not None:
         sys.path.insert(0, os.environ['GRAPH_RCNN_ROOT'])
         from lib.config import cfg
