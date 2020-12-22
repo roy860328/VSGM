@@ -233,6 +233,9 @@ class AlfredThorEnv(object):
         def get_exploration_frames(self):
             return self.controller.get_exploration_frames()
 
+        def get_sgg_meta_datas(self):
+            return self.controller.get_sgg_meta_datas()
+
     def __init__(self, config, train_eval="train", save_train_data=False):
         print("Initialize AlfredThorEnv...")
         self.config = config
@@ -399,3 +402,9 @@ class AlfredThorEnv(object):
         for n in range(self.batch_size):
             images.append(self.envs[n].get_exploration_frames())
         return images
+
+    def get_sgg_meta_datas(self):
+        sgg_meta_datas = []
+        for n in range(self.batch_size):
+            sgg_meta_datas.append(self.envs[n].get_sgg_meta_datas())
+        return sgg_meta_datas

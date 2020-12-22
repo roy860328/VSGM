@@ -26,6 +26,7 @@ INPUT:
 GENERAL:
   LOAD_PRETRAINED: False
   LOAD_PRETRAINED_PATH: ""
+  save_path: '../exp/save_semantic_'
 
 SCENE_GRAPH:
   GPU: False

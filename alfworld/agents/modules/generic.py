@@ -216,7 +216,6 @@ def load_config():
         config['sgg_cfg'] = cfg
     # print(config)
 
-
     output_dir = config["general"]["save_path"]
     if output_dir != '.':
         from shutil import copyfile

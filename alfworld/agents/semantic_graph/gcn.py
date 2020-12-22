@@ -30,7 +30,6 @@ class Net(torch.nn.Module):
             INPUT_FEATURE_SIZE=NODE_FEATURE_SIZE,
             EMBED_FEATURE_SIZE=EMBED_FEATURE_SIZE
         )
-        self.final_mapping = graph_embed_model(cfg)
         if cfg.SCENE_GRAPH.CHOSE_IMPORTENT_NODE:
             # nn.linear bert_hidden_size -> NODE_FEATURE_SIZE
             bert_hidden_size = config['general']['model']['block_hidden_dim']

@@ -23,6 +23,7 @@ class OracleAgent(BaseAgent):
         self.openable_points = self.get_openable_points(traj_data)
         self.use_gt_relations = use_gt_relations
         self.exploration_frames = []
+        self.sgg_meta_datas = []
         super().__init__(env, traj_data, traj_root,
                          load_receps=load_receps, debug=debug,
                          goal_desc_human_anns_prob=goal_desc_human_anns_prob)
@@ -48,6 +49,9 @@ class OracleAgent(BaseAgent):
     def get_exploration_frames(self):
         return self.exploration_frames
 
+    def get_sgg_meta_datas(self):
+        return self.sgg_meta_datas
+
     # use pre-computed openable points from ALFRED to store receptacle locations
     def explore_scene(self):
         agent_height = self.env.last_event.metadata['agent']['position']['y']
@@ -61,7 +65,12 @@ class OracleAgent(BaseAgent):
                       'horizon': point[3]}
             event = self.env.step(action)
 
+
             if event.metadata['lastActionSuccess']:
+                # sgg meta
+                sgg_meta_data = self.env.last_event.metadata['objects']
+                self.sgg_meta_datas.append(sgg_meta_data)
+                # ori code
                 self.exploration_frames.append(np.array(self.env.last_event.frame[:,:,::-1]))
                 instance_segs = np.array(self.env.last_event.instance_segmentation_frame)
                 color_to_object_id = self.env.last_event.color_to_object_id

@@ -68,46 +68,68 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         self.summary_writer = tensorboard.TensorBoardX(config["general"]["save_path"])
 
     def reset_all_scene_graph(self):
+        global_graphs = []
         for scene_graph in self.scene_graphs:
+            if scene_graph.global_graph.x is not None:
+                nodes_num = len(scene_graph.global_graph.x)
+            else:
+                nodes_num = 0
+            global_graphs.append(nodes_num)
             scene_graph.init_graph_data()
+        print("WARNING For DEBUG. \nglobal_graph nodes numbers result: \n", global_graphs)
 
     def finish_of_episode(self, episode_no, batch_size):
         super().finish_of_episode(episode_no, batch_size)
         self.reset_all_scene_graph()
 
-    def get_env_last_event_data(self, envs):
+    def get_env_last_event_data(self, thor):
+        env = thor.env
+        rgb_image = env.last_event.frame[:, :, ::-1]
+        mask_image = env.last_event.instance_segmentation_frame
+        sgg_meta_data = env.last_event.metadata['objects']
         store_state = {
-            "rgb_image": [],
-            "mask_image": [],
-            "sgg_meta_data": [],
+            "rgb_image": rgb_image,
+            "mask_image": mask_image,
+            "sgg_meta_data": sgg_meta_data,
         }
-        for i, thor in enumerate(envs):
-            env = thor.env
-            rgb_image = env.last_event.frame[:, :, ::-1]
-            mask_image = env.last_event.instance_segmentation_frame
-            sgg_meta_data = env.last_event.metadata['objects']
-            store_state["rgb_image"].append(rgb_image)
-            store_state["mask_image"].append(mask_image)
-            store_state["sgg_meta_data"].append(sgg_meta_data)
         return store_state
 
     # visual features for state representation
-    def extract_visual_features(self, envs=None, store_state=None, hidden_state=None):
-        if envs is not None:
-            store_state = self.get_env_last_event_data(envs)
+    def extract_visual_features(self, thor=None, store_state=None, hidden_state=None, env_index=0):
+        if thor is not None:
+            store_state = self.get_env_last_event_data(thor)
         if store_state is None:
             raise NotImplementedError()
 
         graph_embed_features = []
-        for i in range(len(store_state["rgb_image"])):
-            scene_graph = self.scene_graphs[i]
-            rgb_image = store_state["rgb_image"][i]
-            # mask_image = store_state["mask_image"][i]
-            # color_to_obj_id_type = {}
-            # for color, object_id in env.last_event.color_to_object_id.items():
-            #     color_to_obj_id_type[str(color)] = object_id
+        # import pdb; pdb.set_trace()
+        scene_graph = self.scene_graphs[env_index]
+        rgb_image = store_state["rgb_image"]
+        # mask_image = store_state["mask_image"][i]
+        # color_to_obj_id_type = {}
+        # for color, object_id in env.last_event.color_to_object_id.items():
+        #     color_to_obj_id_type[str(color)] = object_id
+        if self.isORACLE:
+            sgg_meta_data = store_state["sgg_meta_data"]
+            target = self.trans_MetaData.trans_object_meta_data_to_relation_and_attribute(sgg_meta_data)
+            scene_graph.add_oracle_local_graph_to_global_graph(rgb_image, target)
+        else:
+            rgb_image = rgb_image.unsqueeze(0)
+            results = self.detector(rgb_image)
+            result = results[0]
+            scene_graph.add_local_graph_to_global_graph(rgb_image, result)
+        global_graph = scene_graph.get_graph_data()
+        graph_embed_feature = self.graph_embed_model(global_graph, hidden_state=hidden_state)
+        graph_embed_features.append(graph_embed_feature)
+        return graph_embed_features, store_state
+
+    def update_exploration_data_to_global_graph(self, exploration_transition_cache, env_index):
+        import pdb; pdb.set_trace()
+        for i in range(len(exploration_transition_cache)):
+            scene_graph = self.scene_graphs[env_index]
+            rgb_image = exploration_transition_cache[i]["exploration_img"]
             if self.isORACLE:
-                sgg_meta_data = store_state["sgg_meta_data"][i]
+                sgg_meta_data = exploration_transition_cache["exploration_sgg_meta_data"]
                 target = self.trans_MetaData.trans_object_meta_data_to_relation_and_attribute(sgg_meta_data)
                 scene_graph.add_oracle_local_graph_to_global_graph(rgb_image, target)
             else:
@@ -115,10 +137,6 @@ class OracleSggDAggerAgent(TextDAggerAgent):
                 results = self.detector(rgb_image)
                 result = results[0]
                 scene_graph.add_local_graph_to_global_graph(rgb_image, result)
-            global_graph = scene_graph.get_graph_data()
-            graph_embed_feature = self.graph_embed_model(global_graph, hidden_state=hidden_state)
-            graph_embed_features.append(graph_embed_feature)
-        return graph_embed_features, store_state
 
     # without recurrency
     def train_dagger(self):
@@ -181,8 +199,12 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         self.optimizer.step()  # apply gradients
         return to_np(pred), to_np(loss)
 
+    '''
+    from train_sgg_vision_dagger_without_env.py
+    self.scene_graphs[i] only be use self.scene_graphs[0]
+    '''
     # loss
-    def train_command_generation_recurrent_teacher_force(self, store_state, seq_task_desc_strings, seq_target_strings, contains_first_step=False, train_now=True):
+    def train_command_generation_recurrent_teacher_force(self, store_state, seq_task_desc_strings, seq_target_strings, contains_first_step=False, train_now=True, env_index=None):
         # pdb.set_trace()
         loss_list = []
         previous_dynamics = None
@@ -193,7 +215,7 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         for step_no in range(len(seq_target_strings)):
             input_target_strings = [" ".join(["[CLS]"] + item.split()) for item in seq_target_strings[step_no]]
             output_target_strings = [" ".join(item.split() + ["[SEP]"]) for item in seq_target_strings[step_no]]
-            observation_feats, _ = self.extract_visual_features(store_state=store_state[step_no], hidden_state=previous_dynamics)
+            observation_feats, _ = self.extract_visual_features(store_state=store_state[step_no], hidden_state=previous_dynamics, env_index=env_index)
 
             obs = [o.to(h_td.device) for o in observation_feats]
             aggregated_obs_feat = self.aggregate_feats_seq(obs)
@@ -207,7 +229,16 @@ class OracleSggDAggerAgent(TextDAggerAgent):
             input_target = self.get_word_input(input_target_strings)
             ground_truth = self.get_word_input(output_target_strings)  # batch x target_length
             target_mask = compute_mask(input_target)  # mask of ground truth should be the same
+            # torch.Size([1, 5, 28996])
             pred = self.online_net.vision_decode(input_target, target_mask, vision_td, vision_td_mask, current_dynamics)  # batch x target_length x vocab
+            # pred_ind = torch.argmax(pred, dim=2)
+            # import pdb; pdb.set_trace()
+            # values, topk_indices = torch.topk(pred, 3, dim=2)
+            # print("\nground_truth: {}\npred: {}\noutput_target_strings: {}".format(
+            #     ground_truth.to('cpu').numpy(), values.detach().to('cpu').numpy(), output_target_strings))
+            # print("\nground_truth: {}\noutput_target_strings: {}".format(
+            #     ground_truth.to('cpu').numpy(), output_target_strings))
+            # self.one_hot_embed_to_word(topk_indices)
 
             previous_dynamics = current_dynamics
 
@@ -234,6 +265,16 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         torch.nn.utils.clip_grad_norm_(self.online_net.parameters(), self.clip_grad_norm)
         self.optimizer.step()  # apply gradients
         return to_np(loss)
+
+    def one_hot_embed_to_word(self, topk_indices):
+        batch_word_list = np.array(topk_indices.to('cpu'))
+        for batch in batch_word_list:
+            for b in batch.T:
+                res = self.tokenizer.decode(b)
+                res = res.replace("[CLS]", "").split('[SEP]')[0]
+                res = res.replace(" in / on ", " in/on ")
+                res = res.encode('utf-8')
+                print("res: ", res)
 
     # recurrent
     def command_generation_greedy_generation(self, observation_feats, task_desc_strings, previous_dynamics):

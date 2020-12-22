@@ -18,7 +18,7 @@ import torch
 from eval import evaluate_vision_dagger
 from modules.generic import HistoryScoreCache, EpisodicCountingMemory, ObjCentricEpisodicMemory
 from agents.utils.misc import extract_admissible_commands
-from agents.utils.traj_process import get_traj_train_data
+from agents.utils.traj_process import get_traj_train_data, get_exploration_traj_train_data
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import pdb
 
@@ -84,21 +84,36 @@ def train():
         print("tasks: ", tasks)
         save_frames_path = config['dataset']['presave_data_path']
         transition_caches = get_traj_train_data(tasks, save_frames_path)
+        if agent.use_exploration_frame_feats:
+            exploration_transition_caches = get_exploration_traj_train_data(
+                tasks,
+                save_frames_path
+            )
 
         agent.train()
         agent.init(batch_size)
         previous_dynamics = None
         report = agent.report_frequency > 0 and (episode_no % agent.report_frequency <= (episode_no - batch_size) % agent.report_frequency)
 
+        # extract exploration frame features
+        '''
+        # Add exploration img & meta data to GraphData
+        '''
+        if agent.use_exploration_frame_feats:
+            for env_index in range(len(exploration_transition_caches)):
+                exploration_transition_cache = exploration_transition_caches[env_index]
+                store_states = exploration_transition_cache[0]
+                agent.update_exploration_data_to_global_graph(store_states, env_index)
         losses = []
-        for transition_cache in transition_caches:
-            agent.reset_all_scene_graph()
+        for env_index in range(len(transition_caches)):
+            transition_cache = transition_caches[env_index]
             store_states, task_desc_strings, expert_actions = transition_cache[0], transition_cache[1], transition_cache[2]
             loss = agent.train_command_generation_recurrent_teacher_force(
                 store_states,
                 task_desc_strings,
                 expert_actions,
                 train_now=False,
+                env_index=env_index,
             )
             loss_copy = loss.clone().detach()
             losses.append(loss)

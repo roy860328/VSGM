@@ -40,6 +40,14 @@ object_classes = "__background__" + objects
 predicate_to_ind = "__background__" + relations
 
 ## Visual Semantic Train Data
+### Get train_sgg_vision_dagger_without_env train data
+1. use_exploration_frame_feats=False
+"task_desc_string", "expert_action", "sgg_meta_data", "rgb_image",
+```
+python dagger/save_expert_dagger.py config/save_semantic_data_base.yaml --semantic_config_file config/save_semantic_data.yaml
+```
+2. use_exploration_frame_feats=True
+"exploration_img", "exploration_sgg_meta_data"
 ```
 python dagger/save_expert_dagger.py config/save_semantic_data_base.yaml --semantic_config_file config/save_semantic_data.yaml
 ```
@@ -70,9 +78,6 @@ python semantic_graph/semantic_graph.py config/semantic_graph_base.yaml --semant
 cd $ALFRED_ROOT/agents/
 python dagger/train_sgg_vision_dagger.py config/semantic_graph_base.yaml --semantic_config_file config/oracle_semantic_graph.yaml
 ```
-```
-python dagger/train_sgg_vision_dagger_without_env.py config/save_semantic_data_base.yaml --semantic_config_file config/save_semantic_data.yaml
-```
 
 ### SGG - Test model OK
 Change $GRAPH_RCNN_ROOT/configs/attribute.yaml parameter
@@ -100,12 +105,27 @@ RuntimeError: Error(s) in loading state_dict for SGG:
 ### SGG - Train with semantic graph dagger
 
 ### Hete semantic graph
+When train model by OracleSggDAggerAgent.train_command_generation_recurrent_teacher_force will only use self.scene_graphs[0].
+You need to agent.reset_all_scene_graph() reset graph data every time.
 ```
 CUDA_VISIBLE_DEVICES=1 python dagger/train_sgg_vision_dagger_without_env.py config/semantic_graph_base.yaml --semantic_config_file config/hete_semantic_graph.yaml
 ```
 
-```
-```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ## Citations
 
 **ALFWorld**

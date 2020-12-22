@@ -140,5 +140,5 @@ vision_dagger:
   model_type: "sgg"                                      # 'resnet' (whole image features) or 'maskrcnn_whole' (whole image MaskRCNN feats) or 'maskrcnn' (top k MaskRCNN detection feats) or 'no_vision' (zero vision input)
   resnet_fc_dim: 64
   maskrcnn_top_k_boxes: 10                                  # top k box features
-  use_exploration_frame_feats: False                        # append feats from initial exploration (memory intensive!)
+  use_exploration_frame_feats: True                        # append feats from initial exploration (memory intensive!)
   sequence_aggregation_method: "average"                    # 'sum' or 'average' or 'rnn'

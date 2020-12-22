@@ -18,7 +18,7 @@ import torch
 from eval import evaluate_vision_dagger
 from modules.generic import HistoryScoreCache, EpisodicCountingMemory, ObjCentricEpisodicMemory
 from agents.utils.misc import extract_admissible_commands
-from agents.utils.traj_process import save_trajectory
+from agents.utils.traj_process import save_trajectory, save_exploration_trajectory
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import pdb
 
@@ -26,6 +26,7 @@ def train():
 
     time_1 = datetime.datetime.now()
     config = generic.load_config()
+    config['env']['thor']['save_frames_path'] = config['dataset']['presave_data_path']
     # pdb.set_trace()
     agent = OracleSggDAggerAgent(config)
     env_type = "AlfredThorEnv"
@@ -53,16 +54,6 @@ def train():
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    # visdom
-    if config["general"]["visdom"]:
-        import visdom
-        viz = visdom.Visdom()
-        reward_win, step_win = None, None
-        loss_win = None
-        viz_game_points, viz_game_step, viz_loss = [], [], []
-        viz_student_points, viz_student_step = [], []
-        viz_id_eval_game_points, viz_id_eval_step = [], []
-        viz_ood_eval_game_points, viz_ood_eval_step = [], []
 
     step_in_total = 0
     episode_no = 0
@@ -120,8 +111,12 @@ def train():
 
         # extract exploration frame features
         if agent.use_exploration_frame_feats:
+            print("trajectory must be generate first. (agent.use_exploration_frame_feats = False)")
+            print("agent.use_exploration_frame_feats = True. will merge exploration_frame ")
             exploration_frames = env.get_exploration_frames()
-            exploration_frame_feats = agent.extract_exploration_frame_feats(exploration_frames)
+            sgg_meta_datas = env.get_sgg_meta_datas()
+            save_exploration_trajectory(env.envs, exploration_frames, sgg_meta_datas)
+            continue
 
         if agent.action_space == "exhaustive":
             action_candidate_list = [extract_admissible_commands(intro, obs) for intro, obs in zip(first_sight_strings, observation_strings)]
@@ -151,15 +146,13 @@ def train():
                     expert_actions.append("look")
             # get visual features
             with torch.no_grad():
-                observation_feats, store_state = agent.extract_visual_features(envs=env.envs)
-            # add exploration features if specified
-            if agent.use_exploration_frame_feats:
-                observation_feats = [torch.cat([ef, obs], dim=0) for ef, obs in zip(exploration_frame_feats, observation_feats)]
+                store_states = []
+                for thor in env.envs:
+                    observation_feats, store_state = agent.extract_visual_features(thor=thor)
+                store_states.append(store_state)
 
             execute_actions = expert_actions
-            # agent.train_command_generation_teacher_force(observation_feats, task_desc_strings, execute_actions)
-            observation_feats = [of.detach().cpu() for of in observation_feats]
-            replay_info = [store_state, task_desc_strings, expert_actions]
+            replay_info = [store_states, task_desc_strings, expert_actions]
             transition_cache.append(replay_info)
 
             obs, _, dones, infos = env.step(execute_actions)
@@ -190,7 +183,7 @@ def train():
 
         '''
         Train with recurrent (dynamics)
-        ''' 
+        '''
         agent.reset_all_scene_graph()
         store_states = [replay_info[0] for replay_info in transition_cache]
         task_desc_strings = [replay_info[1] for replay_info in transition_cache]
