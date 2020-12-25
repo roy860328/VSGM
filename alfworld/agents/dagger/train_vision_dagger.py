@@ -178,11 +178,6 @@ def train():
             observation_feats = [of.detach().cpu() for of in observation_feats]
             replay_info = [observation_feats, task_desc_strings, action_candidate_list, expert_actions, expert_indices]
             transition_cache.append(replay_info)
-            # pdb.set_trace()
-            # print("obs: {}".format(obs))
-            # print("execute_actions: {}".format([a.encode('utf-8') for a in execute_actions]))
-            # print("infos: {}".format(infos))
-            # print("expert_actions: {}".format(expert_actions))
             obs, _, dones, infos = env.step(execute_actions)
             scores = [float(item) for item in infos["won"]]
             dones = [float(item) for item in dones]

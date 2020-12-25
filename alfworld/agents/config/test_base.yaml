@@ -4,7 +4,7 @@ dataset:
   eval_ood_data_path: '../data/json_2.1.1/valid_unseen'     # null/None to disable
   num_train_games: -1                                       # max training games (<=0 indicates full dataset)
   num_eval_games: -1                                        # max evaluation games (<=0 indicates full dataset)
-
+  presave_data_path: '../training_data/'
 pddl:
   domain: '../data/alfred.pddl'                             # PDDL domain file that defines world dynamics
 
@@ -26,7 +26,7 @@ env:
     screen_width: 300                                       # width of THOR window
     screen_height: 300                                      # height of THOR window
     smooth_nav: True                                       # smooth rotations, looks, and translations during navigation (very slow)
-    save_frames_to_disk: True                              # save frame PNGs to disk (useful for making videos)
+    save_frames_to_disk: False                              # save frame PNGs to disk (useful for making videos)
     save_frames_path: '../videos/'                          # path to save frame PNGs
 
 controller:
@@ -43,12 +43,12 @@ general:
   visdom: False                                             # plot training/eval curves, run with visdom server
   task: 'alfred'
   training_method: 'dagger'                                 # 'dqn' or 'dagger'
-  save_path: '.'                                            # path to save pytorch models
+  save_path: '../exp/semantic_graph_'                                            # path to save pytorch models
   observation_pool_capacity: 3                              # k-size queue, 0 indicates no observation
   hide_init_receptacles: False                              # remove initial observation containing navigable receptacles
 
   training:
-    batch_size: 10
+    batch_size: 3
     max_episode: 50000
     smoothing_eps: 0.1
     optimizer:
@@ -57,13 +57,13 @@ general:
 
   evaluate:
     run_eval: True
-    batch_size: 5
+    batch_size: 2
     env:
       type: "AlfredTWEnv"
 
   checkpoint:
     report_frequency: 1000                                  # report every N episode
-    experiment_tag: 'test_visual'                                  # name of experiment
+    experiment_tag: 'semantic_graph'                                  # name of experiment
     load_pretrained: False                                  # during test, enable this so that the agent load your pretrained model
     load_from_tag: 'runs/pretrained_checkpoint_ood'                   # name of pre-trained model to load in save_path
 
@@ -98,7 +98,7 @@ rl:
     replay_memory_capacity: 500000                          # adjust this depending on your RAM size
     replay_memory_priority_fraction: 0.5
     update_per_k_game_steps: 5
-    replay_batch_size: 64
+    replay_batch_size: 6
     multi_step: 3
     replay_sample_history_length: 4
     replay_sample_update_from: 2
@@ -131,13 +131,13 @@ dagger:
 
   replay:
     replay_memory_capacity: 500000
-    update_per_k_game_steps: 5
-    replay_batch_size: 64
+    update_per_k_game_steps: 2
+    replay_batch_size: 2
     replay_sample_history_length: 4
     replay_sample_update_from: 2
 
 vision_dagger:
-  model_type: "resnet"                                      # 'resnet' (whole image features) or 'maskrcnn_whole' (whole image MaskRCNN feats) or 'maskrcnn' (top k MaskRCNN detection feats) or 'no_vision' (zero vision input)
+  model_type: "sgg"                                      # 'resnet' (whole image features) or 'maskrcnn_whole' (whole image MaskRCNN feats) or 'maskrcnn' (top k MaskRCNN detection feats) or 'no_vision' (zero vision input)
   resnet_fc_dim: 64
   maskrcnn_top_k_boxes: 10                                  # top k box features
   use_exploration_frame_feats: False                        # append feats from initial exploration (memory intensive!)

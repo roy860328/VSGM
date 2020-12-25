@@ -42,13 +42,13 @@ def evaluate_semantic_graph_dagger(env, agent, num_games, debug=False):
 
             # extract exploration frame features
             if agent.use_exploration_frame_feats:
-                store_states = []
                 exploration_frames = env.get_exploration_frames()
                 exploration_sgg_meta_datas = env.get_sgg_meta_datas()
                 for env_index in range(len(exploration_frames)):
                     exploration_frame = exploration_frames[env_index]
                     exploration_sgg_meta_data = exploration_sgg_meta_datas[env_index]
-                    for one_episode_frames, one_episode_sgg_meta_data in exploration_frame, exploration_sgg_meta_data:
+                    store_states = []
+                    for one_episode_frames, one_episode_sgg_meta_data in zip(exploration_frame, exploration_sgg_meta_data):
                         store_state = {
                             "exploration_img": one_episode_frames,
                             "exploration_sgg_meta_data": one_episode_sgg_meta_data

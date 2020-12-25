@@ -339,11 +339,13 @@ class AlfredThorEnv(object):
 
         if self.train_eval == 'train' and not self.save_train_data:
             tasks = random.sample(self.json_file_list, k=batch_size)
+        # for save_expert_dagger.py
         elif self.save_train_data:
             tasks = self.json_file_list[self.index_save_train_data:self.index_save_train_data + batch_size]
             if len(tasks) < batch_size:
                 tasks = tasks + self.json_file_list[:batch_size-len(tasks)]
             self.index_save_train_data += batch_size
+        # for eval
         else:
             if len(self.json_file_list)-batch_size > batch_size:
                 tasks = [self.json_file_list.pop(random.randrange(len(self.json_file_list))) for _ in range(batch_size)]

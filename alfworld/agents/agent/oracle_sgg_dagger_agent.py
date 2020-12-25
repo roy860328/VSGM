@@ -124,19 +124,22 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         return graph_embed_features, store_state
 
     def update_exploration_data_to_global_graph(self, exploration_transition_cache, env_index):
-        import pdb; pdb.set_trace()
+        print("=== update_exploration_data_to_global_graph ===")
+        scene_graph = self.scene_graphs[env_index]
         for i in range(len(exploration_transition_cache)):
-            scene_graph = self.scene_graphs[env_index]
             rgb_image = exploration_transition_cache[i]["exploration_img"]
             if self.isORACLE:
                 sgg_meta_data = exploration_transition_cache[i]["exploration_sgg_meta_data"]
                 target = self.trans_MetaData.trans_object_meta_data_to_relation_and_attribute(sgg_meta_data)
                 scene_graph.add_oracle_local_graph_to_global_graph(rgb_image, target)
+                print(len(sgg_meta_data))
+                print(self.scene_graphs[env_index].global_graph.x.shape)
             else:
                 rgb_image = rgb_image.unsqueeze(0)
                 results = self.detector(rgb_image)
                 result = results[0]
                 scene_graph.add_local_graph_to_global_graph(rgb_image, result)
+        # import pdb; pdb.set_trace()
 
     # without recurrency
     def train_dagger(self):
@@ -158,7 +161,45 @@ class OracleSggDAggerAgent(TextDAggerAgent):
             batches.append(batch)
 
         if self.action_space == "generation":
-            return self.train_command_generation_recurrent_teacher_force([batch.observation_list for batch in batches], [batch.task_list for batch in batches], [batch.target_list for batch in batches], contains_first_step)
+            self.reset_all_scene_graph()
+            losses = []
+            b_store_states, b_task_desc_strings, b_expert_actions = \
+                [batch.observation_list for batch in batches],\
+                [batch.task_list for batch in batches],\
+                [batch.target_list for batch in batches],
+            if self.use_exploration_frame_feats:
+                b_exploration_data = [batch.exploration_data for batch in batches]
+            # import pdb; pdb.set_trace()
+            # len(store_states[0]) = 64 = self.dagger_replay_batch_size
+            for replay_batch_index in range(len(b_store_states[0])):
+                # len(store_states) = 4 = self.dagger_replay_sample_history_length
+                store_states, task_desc_strings, expert_actions = [], [], []
+                for history_length in range(len(b_store_states)):
+                    store_states.append(b_store_states[history_length][replay_batch_index])
+                    task_desc_strings.append([b_task_desc_strings[history_length][replay_batch_index]])
+                    expert_actions.append([b_expert_actions[history_length][replay_batch_index]])
+                env_index = replay_batch_index % len(self.scene_graphs)
+                if env_index == 0:
+                    self.reset_all_scene_graph()
+                # exploration_data
+                if self.use_exploration_frame_feats:
+                    self.update_exploration_data_to_global_graph(
+                        b_exploration_data[0][replay_batch_index],
+                        env_index
+                    )
+                # train model
+                loss = self.train_command_generation_recurrent_teacher_force(
+                    store_states,
+                    task_desc_strings,
+                    expert_actions,
+                    train_now=False,
+                    env_index=env_index,
+                )
+                losses.append(loss)
+            loss = torch.stack(losses).mean()
+            loss = self.grad(loss)
+            print("loss: ", loss.item())
+            self.summary_writer.one_epoch(train_loss=loss, optimizer=self.optimizer)
         else:
             raise NotImplementedError()
 
@@ -220,6 +261,7 @@ class OracleSggDAggerAgent(TextDAggerAgent):
             obs = [o.to(h_td.device) for o in observation_feats]
             aggregated_obs_feat = self.aggregate_feats_seq(obs)
             h_obs = self.online_net.vision_fc(aggregated_obs_feat)
+            # import pdb; pdb.set_trace()
             vision_td = torch.cat((h_obs, h_td_mean), dim=1) # batch x k boxes x hid
             vision_td_mask = torch.ones((batch_size, h_obs.shape[1]+h_td_mean.shape[1])).to(h_td_mean.device)
 

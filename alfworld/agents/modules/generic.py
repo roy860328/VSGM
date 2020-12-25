@@ -207,6 +207,7 @@ def load_config():
     if args.semantic_config_file is not None:
         from config import cfg
         cfg.merge_from_file(args.semantic_config_file)
+        cfg.GENERAL.save_path = cfg.GENERAL.save_path + sys.argv[0].split("/")[-1] + "_"
         config['semantic_cfg'] = cfg
         config["general"]["save_path"] = cfg.GENERAL.save_path
         config["vision_dagger"]["use_exploration_frame_feats"] = cfg.GENERAL.use_exploration_frame_feats

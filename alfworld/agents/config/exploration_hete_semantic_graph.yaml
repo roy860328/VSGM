@@ -27,7 +27,7 @@ GENERAL:
   LOAD_PRETRAINED: False
   LOAD_PRETRAINED_PATH: ""
   use_exploration_frame_feats: True
-  save_path: '../exp/hete_semantic_'
+  save_path: '../exp/exploration_hete_semantic_'
 
 SCENE_GRAPH:
   GPU: True
@@ -38,6 +38,7 @@ SCENE_GRAPH:
   MODEL: "hete_gcn"
   GraphData: "HeteGraphData"
   EMBED_TYPE: "WeightedSum"  # "WeightedSum", "SelfAttn"
+
   NODE_FEATURE_SIZE: 300       # 300
   NODE_MIDDEL_FEATURE_SIZE: 16 # 300 -> 16
   NODE_OUT_FEATURE_SIZE: 16    # 16+24 -> 16

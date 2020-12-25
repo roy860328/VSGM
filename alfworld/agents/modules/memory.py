@@ -8,7 +8,7 @@ import torch
 # a snapshot of state to be stored in replay memory
 Transition = namedtuple('Transition', ('observation_list', 'task_list', 'action_candidate_list', 'chosen_indices', 'reward', 'count_reward', 'novel_object_reward'))
 # a snapshot of state to be stored in replay memory for question answering
-dagger_transition = namedtuple('dagger_transition', ('observation_list', 'task_list', 'action_candidate_list', 'target_list', 'target_indices'))
+dagger_transition = namedtuple('dagger_transition', ('observation_list', 'task_list', 'action_candidate_list', 'target_list', 'target_indices', 'exploration_data'))
 
 
 class PrioritizedReplayMemory(object):
@@ -284,13 +284,18 @@ class DaggerReplayMemory(object):
         # replay memory
         self.capacity = capacity
         self.memory = []
+        self.exploration_data = False
 
     def push(self, t):
         """Saves a transition."""
-
+        if len(t[0]) > 5:
+            self.exploration_data = True
         trajectory = []
         for i in range(len(t)):
-            trajectory.append(dagger_transition(t[i][0], t[i][1], t[i][2], t[i][3], t[i][4]))
+            if self.exploration_data:
+                trajectory.append(dagger_transition(t[i][0], t[i][1], t[i][2], t[i][3], t[i][4], t[i][5]))
+            else:
+                trajectory.append(dagger_transition(t[i][0], t[i][1], t[i][2], t[i][3], t[i][4]))
         self.memory.append(trajectory)
         if len(self.memory) > self.capacity:
             remove_id = np.random.randint(self.capacity)
@@ -328,7 +333,11 @@ class DaggerReplayMemory(object):
                     continue
                 head = np.random.randint(1, len(trajectory) - sample_history_length + 1)
             for i in range(sample_history_length):
-                res[i].append(trajectory[head + i])
+                traj = trajectory[head + i]
+                # exploration_data
+                if i == 0 and self.exploration_data:
+                    traj = traj._replace(exploration_data=trajectory[0].exploration_data)
+                res[i].append(traj)
         if len(res) == 0:
             return None, None
         return res, contains_first_step
