@@ -30,6 +30,8 @@ _C.INPUT.VERTICAL_FLIP_PROB_TRAIN = 0.0
 
 
 _C.GENERAL = CN()
+_C.GENERAL.PRINT_DEBUG = True
+_C.GENERAL.SAVE_EVAL_FRAME = False
 _C.GENERAL.LOAD_PRETRAINED = False
 _C.GENERAL.LOAD_PRETRAINED_PATH = ""
 _C.GENERAL.use_exploration_frame_feats = False
@@ -39,6 +41,7 @@ _C.GENERAL.save_path = "."
 _C.SCENE_GRAPH = CN()
 _C.SCENE_GRAPH.GPU = True
 _C.SCENE_GRAPH.ORACLE = True
+_C.SCENE_GRAPH.ANALYZE_GRAPH = False
 _C.SCENE_GRAPH.GRAPH_RESULT_PATH = "/home/alfworld/global_graph/"
 _C.SCENE_GRAPH.OBJ_NAME_EMBEDDING = "word_embed/object_alfworld.csv"
 _C.SCENE_GRAPH.MODEL = "gcn"

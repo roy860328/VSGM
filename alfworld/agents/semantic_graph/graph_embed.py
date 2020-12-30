@@ -70,12 +70,13 @@ class DotAttn(nn.Module):
 
 
 class DotAttnChoseImportentNode(nn.Module):
-    def __init__(self, bert_hidden_size, NODE_FEATURE_SIZE, NUM_CHOSE_NODE, GPU):
+    def __init__(self, bert_hidden_size, NODE_FEATURE_SIZE, NUM_CHOSE_NODE, GPU, PRINT_DEBUG):
         super().__init__()
         self.NUM_CHOSE_NODE = NUM_CHOSE_NODE
         self.bert_hidden_size = bert_hidden_size
         self.OUTPUT_SHAPE = NODE_FEATURE_SIZE * NUM_CHOSE_NODE
         self.GPU = GPU
+        self.PRINT_DEBUG = PRINT_DEBUG
         # 64 -> 40
         self.hidden_state_to_node = nn.Linear(bert_hidden_size, NODE_FEATURE_SIZE)
 
@@ -86,7 +87,8 @@ class DotAttnChoseImportentNode(nn.Module):
         '''
         # import pdb; pdb.set_trace()
         if hidden_state is None:
-            print("WARNING hidden_state is None")
+            if self.PRINT_DEBUG:
+                print("WARNING hidden_state is None")
             hidden_state = torch.zeros((1, self.bert_hidden_size))
             if self.GPU:
                 hidden_state = hidden_state.to('cuda')
@@ -97,10 +99,13 @@ class DotAttnChoseImportentNode(nn.Module):
         # torch.Size([3])
         score = self.softmax(nodes, hidden_state)
 
+        '''
+        choose nodes
+        '''
         chose_nodes = None
-        sort_index = torch.argsort(score, dim=0)
+        sort_nodes_index = torch.argsort(score, dim=0, descending=True).to('cpu').numpy()
         chose_node_count = 0
-        for index in sort_index.to('cpu').numpy():
+        for index in sort_nodes_index:
             if chose_node_count < self.NUM_CHOSE_NODE:
                 chose_node_count += 1
                 node = nodes[index].unsqueeze(0)
@@ -114,7 +119,10 @@ class DotAttnChoseImportentNode(nn.Module):
             if self.GPU:
                 tensor_zeros = tensor_zeros.to('cuda')
             chose_nodes = torch.cat((chose_nodes, tensor_zeros), dim=1)
-        return chose_nodes
+        dict_ANALYZE_GRAPH = {}
+        dict_ANALYZE_GRAPH["score"] = score.clone().detach().to('cpu')
+        dict_ANALYZE_GRAPH["sort_nodes_index"] = sort_nodes_index[:self.NUM_CHOSE_NODE+5]
+        return chose_nodes, dict_ANALYZE_GRAPH
 
     def softmax(self, nodes, hidden_state):
         '''

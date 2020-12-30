@@ -349,7 +349,7 @@ class BaseAgent:
         obs_encoding_sequence, obs_mask = model.encode_text(input_obs)
         return obs_encoding_sequence, obs_mask
 
-    def finish_of_episode(self, episode_no, batch_size):
+    def finish_of_episode(self, episode_no, batch_size, decay_lr=True):
         # fraction_assist annealing
         self.fraction_assist = self.fraction_assist_scheduler.value(episode_no)
         self.fraction_assist = max(self.fraction_assist, 0.0)
@@ -357,10 +357,11 @@ class BaseAgent:
         # fraction_random annealing
         self.fraction_random = self.fraction_random_scheduler.value(episode_no)
         self.fraction_random = max(self.fraction_random, 0.0)
-        for param_group in self.optimizer.param_groups:
-            param_group['lr'] = self.config['general']['training']['optimizer']['learning_rate'] * self.fraction_assist
-            print("lr: ", param_group['lr'])
-            break
+        if decay_lr:
+            for param_group in self.optimizer.param_groups:
+                param_group['lr'] = self.config['general']['training']['optimizer']['learning_rate'] * self.fraction_assist
+                print("lr: ", param_group['lr'])
+                break
         # Update target network
         if (episode_no + batch_size) % self.target_net_update_frequency <= episode_no % self.target_net_update_frequency:
             self.update_target_net()

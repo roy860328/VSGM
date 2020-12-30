@@ -44,7 +44,14 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         # Semantic graph create
         self.cfg_semantic = config['semantic_cfg']
         self.isORACLE = self.cfg_semantic.SCENE_GRAPH.ORACLE
-        self.graph_embed_model = importlib.import_module(self.cfg_semantic.SCENE_GRAPH.MODEL).Net(self.cfg_semantic, config=config)
+        self.ANALYZE_GRAPH = self.cfg_semantic.SCENE_GRAPH.ANALYZE_GRAPH
+        self.PRINT_DEBUG = self.cfg_semantic.GENERAL.PRINT_DEBUG
+        self.graph_embed_model = importlib.import_module(self.cfg_semantic.SCENE_GRAPH.MODEL)
+        self.graph_embed_model = self.graph_embed_model.Net(
+            self.cfg_semantic,
+            config=config,
+            PRINT_DEBUG=self.PRINT_DEBUG
+            )
         if self.use_gpu:
             self.graph_embed_model.cuda()
         self.scene_graphs = []
@@ -76,10 +83,11 @@ class OracleSggDAggerAgent(TextDAggerAgent):
                 nodes_num = 0
             global_graphs.append(nodes_num)
             scene_graph.init_graph_data()
-        print("WARNING For DEBUG. \nglobal_graph nodes numbers result: \n", global_graphs)
+        if self.PRINT_DEBUG:
+            print("WARNING For DEBUG. \nglobal_graph nodes numbers result: \n", global_graphs)
 
-    def finish_of_episode(self, episode_no, batch_size):
-        super().finish_of_episode(episode_no, batch_size)
+    def finish_of_episode(self, episode_no, batch_size, decay_lr=False):
+        super().finish_of_episode(episode_no, batch_size, decay_lr=decay_lr)
         self.reset_all_scene_graph()
 
     def get_env_last_event_data(self, thor):
@@ -119,12 +127,16 @@ class OracleSggDAggerAgent(TextDAggerAgent):
             result = results[0]
             scene_graph.add_local_graph_to_global_graph(rgb_image, result)
         global_graph = scene_graph.get_graph_data()
-        graph_embed_feature = self.graph_embed_model(global_graph, hidden_state=hidden_state)
+        graph_embed_feature, dict_ANALYZE_GRAPH = self.graph_embed_model(global_graph, hidden_state=hidden_state)
         graph_embed_features.append(graph_embed_feature)
-        return graph_embed_features, store_state
+        dict_objectIds_to_score = []
+        if self.ANALYZE_GRAPH:
+            dict_objectIds_to_score = scene_graph.analyze_graph(dict_ANALYZE_GRAPH)
+        return graph_embed_features, store_state, dict_objectIds_to_score
 
     def update_exploration_data_to_global_graph(self, exploration_transition_cache, env_index):
-        print("=== update_exploration_data_to_global_graph ===")
+        if self.PRINT_DEBUG:
+            print("=== update_exploration_data_to_global_graph ===")
         scene_graph = self.scene_graphs[env_index]
         for i in range(len(exploration_transition_cache)):
             rgb_image = exploration_transition_cache[i]["exploration_img"]
@@ -132,8 +144,8 @@ class OracleSggDAggerAgent(TextDAggerAgent):
                 sgg_meta_data = exploration_transition_cache[i]["exploration_sgg_meta_data"]
                 target = self.trans_MetaData.trans_object_meta_data_to_relation_and_attribute(sgg_meta_data)
                 scene_graph.add_oracle_local_graph_to_global_graph(rgb_image, target)
-                print(len(sgg_meta_data))
-                print(self.scene_graphs[env_index].global_graph.x.shape)
+                # print(len(sgg_meta_data))
+                # print(self.scene_graphs[env_index].global_graph.x.shape)
             else:
                 rgb_image = rgb_image.unsqueeze(0)
                 results = self.detector(rgb_image)
@@ -147,44 +159,84 @@ class OracleSggDAggerAgent(TextDAggerAgent):
 
     # with recurrency
     def train_dagger_recurrent(self):
+        '''
+            if len(self.dagger_memory) < self.dagger_replay_batch_size:
+                return None
+            # self.dagger_replay_batch_size, self.dagger_replay_sample_history_length = 64, 4
+            sequence_of_transitions, contains_first_step = self.dagger_memory.sample_sequence(self.dagger_replay_batch_size, self.dagger_replay_sample_history_length)
+            if sequence_of_transitions is None:
+                return None
 
+            batches = []
+            for transitions in sequence_of_transitions:
+                batch = memory.dagger_transition(*zip(*transitions))
+                batches.append(batch)
+
+            if self.action_space == "generation":
+                self.reset_all_scene_graph()
+                losses = []
+                b_store_states, b_task_desc_strings, b_expert_actions = \
+                    [batch.observation_list for batch in batches],\
+                    [batch.task_list for batch in batches],\
+                    [batch.target_list for batch in batches],
+                if self.use_exploration_frame_feats:
+                    b_exploration_data = [batch.exploration_data for batch in batches]
+                # import pdb; pdb.set_trace()
+                # len(store_states[0]) = 64 = self.dagger_replay_batch_size
+                for replay_batch_index in range(len(b_store_states[0])):
+                    # len(store_states) = 4 = self.dagger_replay_sample_history_length
+                    store_states, task_desc_strings, expert_actions = [], [], []
+                    for history_length in range(len(b_store_states)):
+                        store_states.append(b_store_states[history_length][replay_batch_index])
+                        task_desc_strings.append([b_task_desc_strings[history_length][replay_batch_index]])
+                        expert_actions.append([b_expert_actions[history_length][replay_batch_index]])
+                    env_index = replay_batch_index % len(self.scene_graphs)
+                    if env_index == 0:
+                        self.reset_all_scene_graph()
+                    # exploration_data
+                    if self.use_exploration_frame_feats:
+                        self.update_exploration_data_to_global_graph(
+                            b_exploration_data[0][replay_batch_index],
+                            env_index
+                        )
+                    # train model
+                    loss = self.train_command_generation_recurrent_teacher_force(
+                        store_states,
+                        task_desc_strings,
+                        expert_actions,
+                        train_now=False,
+                        env_index=env_index,
+                    )
+                    losses.append(loss)
+                loss = torch.stack(losses).mean()
+                loss = self.grad(loss)
+                print("loss: ", loss.item())
+                self.summary_writer.training_loss(train_loss=loss, optimizer=self.optimizer)
+            else:
+                raise NotImplementedError()
+        '''
         if len(self.dagger_memory) < self.dagger_replay_batch_size:
             return None
-        # self.dagger_replay_batch_size, self.dagger_replay_sample_history_length = 64, 4
-        sequence_of_transitions, contains_first_step = self.dagger_memory.sample_sequence(self.dagger_replay_batch_size, self.dagger_replay_sample_history_length)
+        sequence_of_transitions = self.dagger_memory.sample_sequence_to_end(self.dagger_replay_batch_size, self.dagger_replay_sample_history_length)
         if sequence_of_transitions is None:
             return None
 
-        batches = []
-        for transitions in sequence_of_transitions:
-            batch = memory.dagger_transition(*zip(*transitions))
-            batches.append(batch)
 
         if self.action_space == "generation":
             self.reset_all_scene_graph()
             losses = []
-            b_store_states, b_task_desc_strings, b_expert_actions = \
-                [batch.observation_list for batch in batches],\
-                [batch.task_list for batch in batches],\
-                [batch.target_list for batch in batches],
-            if self.use_exploration_frame_feats:
-                b_exploration_data = [batch.exploration_data for batch in batches]
-            # import pdb; pdb.set_trace()
-            # len(store_states[0]) = 64 = self.dagger_replay_batch_size
-            for replay_batch_index in range(len(b_store_states[0])):
-                # len(store_states) = 4 = self.dagger_replay_sample_history_length
-                store_states, task_desc_strings, expert_actions = [], [], []
-                for history_length in range(len(b_store_states)):
-                    store_states.append(b_store_states[history_length][replay_batch_index])
-                    task_desc_strings.append([b_task_desc_strings[history_length][replay_batch_index]])
-                    expert_actions.append([b_expert_actions[history_length][replay_batch_index]])
+            for replay_batch_index in range(len(sequence_of_transitions)):
+                sequence_of_transition = sequence_of_transitions[replay_batch_index]
+                store_states = [transition[0] for transition in sequence_of_transition]
+                task_desc_strings = [[transition[1]] for transition in sequence_of_transition]
+                expert_actions = [[transition[3]] for transition in sequence_of_transition]
                 env_index = replay_batch_index % len(self.scene_graphs)
                 if env_index == 0:
                     self.reset_all_scene_graph()
                 # exploration_data
                 if self.use_exploration_frame_feats:
                     self.update_exploration_data_to_global_graph(
-                        b_exploration_data[0][replay_batch_index],
+                        sequence_of_transition[0].exploration_data,
                         env_index
                     )
                 # train model
@@ -198,8 +250,9 @@ class OracleSggDAggerAgent(TextDAggerAgent):
                 losses.append(loss)
             loss = torch.stack(losses).mean()
             loss = self.grad(loss)
-            print("loss: ", loss.item())
-            self.summary_writer.one_epoch(train_loss=loss, optimizer=self.optimizer)
+            if self.PRINT_DEBUG:
+                print("loss: ", loss.item())
+            self.summary_writer.training_loss(train_loss=loss, optimizer=self.optimizer)
         else:
             raise NotImplementedError()
 
@@ -246,7 +299,11 @@ class OracleSggDAggerAgent(TextDAggerAgent):
     '''
     # loss
     def train_command_generation_recurrent_teacher_force(self, store_state, seq_task_desc_strings, seq_target_strings, contains_first_step=False, train_now=True, env_index=None):
-        # pdb.set_trace()
+        '''
+        store_state: list dict (one batch size), store_state[0].keys() dict_keys(['rgb_image', 'mask_image', 'sgg_meta_data'])
+        seq_task_desc_strings: list list (n batch size), [['[SEP] put a candle in cabinet.'], ['[SEP] put a candle in cabinet.'], ['[SEP] put a candle in cabinet.'], ['[SEP] put a candle in cabinet.'], ['[SEP] put a candle in cabinet.'], ['[SEP] put a candle in cabinet.']]
+        seq_target_strings: list list (n batch size), [['go to toilet 1'], ['take candle 1 from toilet 1'], ['go to cabinet 3'], ['open cabinet 3'], ['put candle 1 in/on cabinet 3'], ['close cabinet 3']]
+        '''
         loss_list = []
         previous_dynamics = None
         batch_size = len(seq_target_strings[0])
@@ -256,7 +313,10 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         for step_no in range(len(seq_target_strings)):
             input_target_strings = [" ".join(["[CLS]"] + item.split()) for item in seq_target_strings[step_no]]
             output_target_strings = [" ".join(item.split() + ["[SEP]"]) for item in seq_target_strings[step_no]]
-            observation_feats, _ = self.extract_visual_features(store_state=store_state[step_no], hidden_state=previous_dynamics, env_index=env_index)
+            observation_feats, _, _ = self.extract_visual_features(
+                store_state=store_state[step_no],
+                hidden_state=previous_dynamics,
+                env_index=env_index)
 
             obs = [o.to(h_td.device) for o in observation_feats]
             aggregated_obs_feat = self.aggregate_feats_seq(obs)

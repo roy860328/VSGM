@@ -5,7 +5,7 @@ from torch_geometric.data import Data
 from collections import defaultdict
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
-sys.path.insert(0, os.path.join(os.environ['ALFRED_ROOT'], 'agents'))
+sys.path.insert(0, os.path.join(os.environ['ALFRED_ROOT']))
 from agents.semantic_graph import utils
 import importlib
 
@@ -27,6 +27,8 @@ class GraphData(Data):
         # list[0] = x[0] label
         # [15, 50, 85, 24, 45, 52, 30, 102, 10]
         self.list_node_obj_cls = []
+        # edge
+        self.edge_obj_to_obj = None
         # dict_keys([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105])
         # self.obj_cls_to_features[1].shape 
         # torch.Size([300])
@@ -139,7 +141,6 @@ class HeteGraphData(GraphData):
                                             x=None, edge_index=None, edge_attr=None, y=None,
                                             pos=None, normal=None, face=None, **kwargs)
         self.attributes = None
-        self.edge_obj_to_obj = None
 
     def __inc__(self, key, value):
         increasing_funcs = ["edge_obj_to_obj"]
@@ -268,6 +269,22 @@ class SceneGraph(object):
 
     def get_graph_data(self):
         return self.global_graph
+
+    def analyze_graph(self, dict_ANALYZE_GRAPH):
+        '''
+        dict_ANALYZE_GRAPH = {
+            "score": score.clone().detach().to('cpu'),
+            "sort_nodes_index": sort_nodes_index.clone().detach().to('cpu'),
+        }
+        '''
+        dict_objectIds_to_score = {}
+        try:
+            for nodes_index in dict_ANALYZE_GRAPH["sort_nodes_index"]:
+                objectIds = self.global_graph.ind_to_obj_id[nodes_index]
+                dict_objectIds_to_score[objectIds] = dict_ANALYZE_GRAPH["score"][nodes_index]
+        except Exception as e:
+            pass
+        return dict_objectIds_to_score
 
     def save_graph_data(self):
         if not os.path.exists(self.GRAPH_RESULT_PATH):

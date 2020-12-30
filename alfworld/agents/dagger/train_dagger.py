@@ -220,7 +220,7 @@ def train():
                 running_avg_game_steps.push(np.sum(still_running_mask_np, 0)[b])
 
         # finish game
-        agent.finish_of_episode(episode_no, batch_size)
+        agent.finish_of_episode(episode_no, batch_size, decay_lr=True)
         episode_no += batch_size
 
         if not report:

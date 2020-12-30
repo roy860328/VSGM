@@ -7,7 +7,7 @@ import graph_embed
 
 class Net(torch.nn.Module):
     """docstring for Net"""
-    def __init__(self, cfg, config=None):
+    def __init__(self, cfg, config=None, PRINT_DEBUG=False):
         super(Net, self).__init__()
         input_size = cfg.SCENE_GRAPH.NODE_FEATURE_SIZE
         middle_size = cfg.SCENE_GRAPH.NODE_MIDDEL_FEATURE_SIZE
@@ -38,7 +38,8 @@ class Net(torch.nn.Module):
             self.chose_node_module = graph_embed.DotAttnChoseImportentNode(
                 bert_hidden_size,
                 NODE_FEATURE_SIZE,
-                NUM_CHOSE_NODE
+                NUM_CHOSE_NODE,
+                PRINT_DEBUG=PRINT_DEBUG
             )
 
     def forward(self, data, *args):

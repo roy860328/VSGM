@@ -68,13 +68,13 @@ def evaluate_semantic_graph_dagger(env, agent, num_games, debug=False):
 
             for step_no in range(agent.max_nb_steps_per_episode):
                 # get visual features
-                observation_feats = None
+                observation_feats, dict_objectIds_to_scores = None, []
                 for env_index in range(len(env.envs)):
                     if previous_dynamics is not None:
                         hidden_state = previous_dynamics[env_index].unsqueeze(0)
                     else:
                         hidden_state = None
-                    observation_feat, store_state = agent.extract_visual_features(
+                    observation_feat, store_state, dict_objectIds_to_score = agent.extract_visual_features(
                         thor=env.envs[env_index],
                         hidden_state=hidden_state,
                         env_index=env_index
@@ -83,6 +83,7 @@ def evaluate_semantic_graph_dagger(env, agent, num_games, debug=False):
                         observation_feats = observation_feat
                     else:
                         observation_feats.extend(observation_feat)
+                    dict_objectIds_to_scores.append(dict_objectIds_to_score)
 
                 # predict actions
                 if agent.action_space == "generation":
@@ -96,7 +97,7 @@ def evaluate_semantic_graph_dagger(env, agent, num_games, debug=False):
 
                 obs, _, dones, infos = env.step(execute_actions)
                 scores = [float(item) for item in infos["won"]]
-                gcs =[float(item) for item in infos["goal_condition_success_rate"]] if "goal_condition_success_rate" in infos else [0.0]*batch_size
+                gcs = [float(item) for item in infos["goal_condition_success_rate"]] if "goal_condition_success_rate" in infos else [0.0]*batch_size
                 dones = [float(item) for item in dones]
 
                 if debug:
@@ -109,6 +110,14 @@ def evaluate_semantic_graph_dagger(env, agent, num_games, debug=False):
                     action_candidate_list = list(infos["admissible_commands"])
                 action_candidate_list = agent.preprocess_action_candidates(action_candidate_list)
                 previous_dynamics = current_dynamics
+                if agent.ANALYZE_GRAPH:
+                    expert_actions = []
+                    for b in range(batch_size):
+                        next_action = "None"
+                        if "expert_plan" in infos and len(infos["expert_plan"][b]) > 0:
+                            next_action = infos["expert_plan"][b][0]
+                        expert_actions.append(next_action)
+                    env.store_analyze_graph(dict_objectIds_to_scores, expert_actions, execute_actions)
 
                 if step_no == agent.max_nb_steps_per_episode - 1:
                     # terminate the game because DQN requires one extra step
@@ -139,7 +148,9 @@ def evaluate_semantic_graph_dagger(env, agent, num_games, debug=False):
                 res_info.append("/".join(game_names[i].split("/")[-3:-1]) + ", score: " + str(game_points[i]) + ", step: " + str(game_steps[i]))
 
             # finish game
-            agent.finish_of_episode(episode_no, batch_size)
+            if agent.ANALYZE_GRAPH:
+                env.one_episode_analyze_graph_end(game_points, game_gcs)
+            agent.finish_of_episode(episode_no, batch_size, decay_lr=False)
             episode_no += batch_size
 
             if not report:

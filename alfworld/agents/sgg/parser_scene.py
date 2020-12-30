@@ -67,7 +67,6 @@ def get_transform(cfg, train):
     # return T.Compose(transforms)
     min_size = cfg.INPUT.MIN_SIZE_TRAIN
     max_size = cfg.INPUT.MAX_SIZE_TRAIN
-    flip_horizontal_prob = 0.5  # cfg.INPUT.FLIP_PROB_TRAIN
     flip_vertical_prob = cfg.INPUT.VERTICAL_FLIP_PROB_TRAIN
     brightness = cfg.INPUT.BRIGHTNESS
     contrast = cfg.INPUT.CONTRAST
@@ -75,9 +74,9 @@ def get_transform(cfg, train):
     hue = cfg.INPUT.HUE
     to_bgr255 = cfg.INPUT.TO_BGR255
 
-    normalize_transform = T.Normalize(
-        mean=cfg.INPUT.PIXEL_MEAN, std=cfg.INPUT.PIXEL_STD, to_bgr255=to_bgr255
-    )
+    # normalize_transform = T.Normalize(
+    #     mean=cfg.INPUT.PIXEL_MEAN, std=cfg.INPUT.PIXEL_STD, to_bgr255=to_bgr255
+    # )
     color_jitter = T.ColorJitter(
         brightness=brightness,
         contrast=contrast,
@@ -90,7 +89,7 @@ def get_transform(cfg, train):
             color_jitter,
             T.Resize(min_size, max_size),
             T.ToTensor(),
-            normalize_transform,
+            # normalize_transform,
         ]
     )
     return transform

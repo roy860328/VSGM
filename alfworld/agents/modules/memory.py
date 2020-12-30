@@ -295,7 +295,7 @@ class DaggerReplayMemory(object):
             if self.exploration_data:
                 trajectory.append(dagger_transition(t[i][0], t[i][1], t[i][2], t[i][3], t[i][4], t[i][5]))
             else:
-                trajectory.append(dagger_transition(t[i][0], t[i][1], t[i][2], t[i][3], t[i][4]))
+                trajectory.append(dagger_transition(t[i][0], t[i][1], t[i][2], t[i][3], t[i][4], []))
         self.memory.append(trajectory)
         if len(self.memory) > self.capacity:
             remove_id = np.random.randint(self.capacity)
@@ -341,6 +341,26 @@ class DaggerReplayMemory(object):
         if len(res) == 0:
             return None, None
         return res, contains_first_step
+
+    def sample_sequence_to_end(self, batch_size, sample_history_length):
+        how_many = min(batch_size, len(self.memory))
+        res = []
+
+        random_number = np.random.uniform(low=0.0, high=1.0, size=(1,))
+        contains_first_step = random_number[0] < 0.05  # hard coded here. So 5% of the sampled batches will have first step
+
+        for _ in range(how_many):
+            trajectory_id = np.random.randint(len(self.memory))
+            trajectory = self.memory[trajectory_id]
+            if contains_first_step:
+                head = 0
+            else:
+                trajectory_start_id = np.random.randint(len(trajectory))
+                head = trajectory_start_id
+            traj = trajectory[head:head+sample_history_length]
+            traj[0] = traj[0]._replace(exploration_data=trajectory[0].exploration_data)
+            res.append(traj)
+        return res
 
     def __len__(self):
         return len(self.memory)

@@ -34,7 +34,7 @@ class AlfredThorEnv(object):
             Thread.__init__(self)
             self.action_queue = queue
             self.mask_rcnn = None
-            self.env =  None
+            self.env = None
             self.train_eval = train_eval
             self.controller_type = "oracle"
             self.save_action_result = save_action_result
@@ -105,14 +105,14 @@ class AlfredThorEnv(object):
 
             # initialize to start position
             self.env.step(dict(self.traj_data['scene']['init_action']))            # print goal instr
-            task_desc = get_templated_task_desc(self.traj_data)
-            print("Task: %s" % task_desc)
-            # print("Task: %s" % (self.traj_data['turk_annotations']['anns'][0]['task_desc']))
+            self.task_desc = get_templated_task_desc(self.traj_data)
+            print("Task: %s" % self.task_desc)
+            # print("Task: %s" % (self.traj_data['turk_annotations']['anns'][0]['self.task_desc']))
             if not os.path.exists(self.env.save_frames_path):
                 os.makedirs(self.env.save_frames_path)
             txt_file = os.path.join(self.env.save_frames_path, 'action.txt')
             with open(txt_file, 'a+') as f:
-                f.write("Task: %s\r\n" % str(task_desc))
+                f.write("Task: %s\r\n" % str(self.task_desc))
             # setup task for reward
             class args: pass
             args.reward_config = os.path.join(os.environ['ALFRED_ROOT'], 'agents/config/rewards.json')
@@ -410,3 +410,44 @@ class AlfredThorEnv(object):
         for n in range(self.batch_size):
             sgg_meta_datas.append(self.envs[n].get_sgg_meta_datas())
         return sgg_meta_datas
+
+    def store_analyze_graph(self, dict_objectIds_to_scores, expert_actions, agent_actions):
+        for n in range(self.batch_size):
+            Thor = self.envs[n]
+            dict_objectIds_to_score = dict_objectIds_to_scores[n]
+            expert_action = expert_actions[n]
+            agent_action = agent_actions[n]
+            save_frames_path = Thor.env.save_frames_path
+            txt_file = os.path.join(save_frames_path, 'analyze_graph.txt')
+            with open(txt_file, 'a+') as f:
+                f.write("objectIds_to_score: %s\r\n" % str(dict_objectIds_to_score))
+                f.write("action: %s\r\n" % str(agent_action).encode('utf-8'))
+                f.write("expert: %s\r\n" % str(expert_action))
+
+    def one_episode_analyze_graph_end(self, game_points, game_gcs):
+        for n in range(self.batch_size):
+            Thor = self.envs[n]
+            game_point = game_points[n]
+            game_gc = game_gcs[n]
+            save_frames_path = Thor.env.save_frames_path
+            txt_file = os.path.join(save_frames_path, 'analyze_graph.txt')
+            with open(txt_file, 'a+') as f:
+                f.write("game_point: %s\r\n" % str(game_point))
+                f.write("game_gc: %s\r\n" % str(game_gc))
+                f.write("======== One Episode END =======\n\n\n\n\n\n")
+            # save easy result
+            analyze_graph_path = self.config['env']['thor']['save_frames_path']
+            result = {
+                "save_frames_path": save_frames_path,
+                "task_desc": Thor.task_desc,
+                "game_point": game_point,
+                "game_gc": game_gc,
+            }
+            # successs case
+            if game_point > 0 or game_gc > 0:
+                episode_file_path = os.path.join(analyze_graph_path, self.train_eval + "success.txt")
+            # fail case
+            else:
+                episode_file_path = os.path.join(analyze_graph_path, self.train_eval + "fail.txt")
+            with open(episode_file_path, 'a+') as f:
+                f.write("episode: %s\r\n" % str(result))

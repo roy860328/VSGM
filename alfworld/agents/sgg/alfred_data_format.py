@@ -87,11 +87,18 @@ class TransMetaData():
         }
         return dict_obj_rel_attr
 
-    def trans_meta_data_to_sgg(self, img, mask, color_to_object, data_obj_relation_attribute):
+    def trans_meta_data_to_sgg(self, mask, color_to_object, data_obj_relation_attribute):
         masks, boxes, boxes_labels, boxes_id = parser_scene.transfer_mask_semantic_to_bbox_label(
-            mask, color_to_object, self.object_classes, data_obj_relation_attribute)
+            mask,
+            color_to_object,
+            self.object_classes,
+            data_obj_relation_attribute
+        )
         dict_obj_rel_attr = self.trans_object_meta_data_to_relation_and_attribute(
-            data_obj_relation_attribute, boxes_id, boxes_labels)
+            data_obj_relation_attribute,
+            boxes_id,
+            boxes_labels
+        )
         sgg_data = dict_obj_rel_attr
         sgg_data["boxes"] = boxes
         sgg_data["objectIds"] = boxes_id
@@ -186,7 +193,10 @@ class AlfredDataset(Dataset):
         mask = np.array(mask)
 
         sgg_data = self.trans_meta_data.trans_meta_data_to_sgg(
-            img, mask, color_to_object, data_obj_relation_attribute)
+            mask,
+            color_to_object,
+            data_obj_relation_attribute
+        )
         boxes = sgg_data["boxes"]
         labels = sgg_data["labels"]
         obj_relations = sgg_data["pred_labels"]
@@ -221,8 +231,9 @@ def main(cfg):
     # train on the GPU or on the CPU, if a GPU is not available
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
+    # import pdb; pdb.set_trace()
     # our dataset has two classes only - background and person
-    num_classes = len(parser_scene.get_object_classes(cfg.object_types))+1
+    num_classes = len(parser_scene.get_object_classes(cfg.ALFREDTEST.object_types))+1
     # use our dataset and defined transformations
     dataset = AlfredDataset(cfg)
     for i in range(100):
@@ -251,4 +262,4 @@ def get_dataset(cfg, transform=None):
 if __name__ == "__main__":
     import modules.generic as generic
     cfg = generic.load_config()
-    main(cfg)
+    main(cfg['semantic_cfg'])

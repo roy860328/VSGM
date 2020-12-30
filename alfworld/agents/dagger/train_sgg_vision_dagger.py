@@ -34,6 +34,7 @@ def train():
     id_eval_env, num_id_eval_game = None, 0
     ood_eval_env, num_ood_eval_game = None, 0
     if agent.run_eval:
+        config['env']['thor']['save_frames_to_disk'] = config['semantic_cfg'].GENERAL.SAVE_EVAL_FRAME
         # in distribution
         if config['dataset']['eval_id_data_path'] is not None:
             alfred_env = getattr(importlib.import_module("environment"), env_type)(config, train_eval="eval_in_distribution")
@@ -144,6 +145,7 @@ def train():
         transition_cache = []
         still_running_mask = []
         sequence_game_points = []
+        goal_condition_points = []
         print_actions = []
         # 1000>0, 0%1000<=(0-1)%1000
         report = agent.report_frequency > 0 and (episode_no % agent.report_frequency <= (episode_no - batch_size) % agent.report_frequency)
@@ -151,13 +153,13 @@ def train():
 
         for step_no in range(agent.max_nb_steps_per_episode):
             with torch.no_grad():
-                observation_feats, store_states = None, []
+                observation_feats, store_states, dict_objectIds_to_scores = None, [], []
                 for env_index in range(len(env.envs)):
                     if previous_dynamics is not None:
                         hidden_state = previous_dynamics[env_index].unsqueeze(0)
                     else:
                         hidden_state = None
-                    observation_feat, store_state = agent.extract_visual_features(
+                    observation_feat, store_state, dict_objectIds_to_score = agent.extract_visual_features(
                         thor=env.envs[env_index],
                         hidden_state=hidden_state,
                         env_index=env_index
@@ -167,6 +169,7 @@ def train():
                     else:
                         observation_feats.extend(observation_feat)
                     store_states.append(store_state)
+                    dict_objectIds_to_scores.append(dict_objectIds_to_score)
 
             # predict actions
             if agent.action_space == "generation":
@@ -205,7 +208,10 @@ def train():
             replay_info = [store_states, task_desc_strings, action_candidate_list, expert_actions, expert_indices]
             transition_cache.append(replay_info)
             obs, _, dones, infos = env.step(execute_actions)
+            # won:  [False, False]
+            # goal_condition_success_rate:  [0.0, 0.0]
             scores = [float(item) for item in infos["won"]]
+            gcs = [float(item) for item in infos["goal_condition_success_rate"]] if "goal_condition_success_rate" in infos else [0.0]*batch_size
             dones = [float(item) for item in dones]
 
             if action_space == "exhaustive":
@@ -214,6 +220,8 @@ def train():
                 action_candidate_list = list(infos["admissible_commands"])
             action_candidate_list = agent.preprocess_action_candidates(action_candidate_list)
             previous_dynamics = current_dynamics
+            # if agent.ANALYZE_GRAPH:
+            #     env.store_analyze_graph(dict_objectIds_to_scores, expert_actions, agent_actions)
 
             if step_no == agent.max_nb_steps_per_episode - 1:
                 # terminate the game because DQN requires one extra step
@@ -225,6 +233,7 @@ def train():
             step_rewards = [float(curr) - float(prev) for curr, prev in zip(scores, prev_rewards)]  # list of float
             prev_rewards = scores
             sequence_game_points.append(step_rewards)
+            goal_condition_points.append(gcs)
             still_running_mask.append(still_running)
             print_actions.append(execute_actions[0] if still_running[0] else "--")
             '''
@@ -242,6 +251,16 @@ def train():
 
         still_running_mask_np = np.array(still_running_mask)
         game_points_np = np.array(sequence_game_points) * still_running_mask_np  # step x batch
+
+        # won:  [True, False]
+        # goal_condition_success_rate:  [1.0, 0.0]
+        game_points = np.max(np.array(sequence_game_points), 0).tolist()  # batch
+        game_gcs = np.max(np.array(goal_condition_points), 0).tolist() # batch
+        for i in range(batch_size):
+            agent.summary_writer.one_epoch(
+                game_point=game_points[i],
+                game_gc=game_gcs[i]
+            )
 
         if not report:
             # pdb.set_trace()
@@ -268,7 +287,9 @@ def train():
                 running_avg_game_steps.push(np.sum(still_running_mask_np, 0)[b])
 
         # finish game
-        agent.finish_of_episode(episode_no, batch_size)
+        agent.finish_of_episode(episode_no, batch_size, decay_lr=True)
+        # if agent.ANALYZE_GRAPH:
+        #     env.one_episode_analyze_graph_end()
         episode_no += batch_size
         print("episode_no: ", episode_no)
 
@@ -284,24 +305,34 @@ def train():
         # evaluate
         print("Save Model")
         # pdb.set_trace()
-        id_eval_game_points, id_eval_game_step = 0.0, 0.0
-        ood_eval_game_points, ood_eval_game_step = 0.0, 0.0
+        id_eval_game_points, id_eval_game_step, id_eval_game_goal_condition_points = 0.0, 0.0, 0.0
+        ood_eval_game_points, ood_eval_game_step, ood_eval_game_goal_condition_points = 0.0, 0.0, 0.0
         if agent.run_eval:
             if id_eval_env is not None and episode_no != batch_size:
                 id_eval_res = evaluate_semantic_graph_dagger(id_eval_env, agent, num_id_eval_game)
                 id_eval_game_points, id_eval_game_step = id_eval_res['average_points'], id_eval_res['average_steps']
+                id_eval_game_goal_condition_points = id_eval_res['average_goal_condition_points']
             if ood_eval_env is not None and episode_no != batch_size:
                 ood_eval_res = evaluate_semantic_graph_dagger(ood_eval_env, agent, num_ood_eval_game)
                 ood_eval_game_points, ood_eval_game_step = ood_eval_res['average_points'], ood_eval_res['average_steps']
+                ood_eval_game_goal_condition_points = ood_eval_res['average_goal_condition_points']
             if id_eval_game_points >= best_performance_so_far:
                 best_performance_so_far = id_eval_game_points
                 agent.save_model_to_path(output_dir + "/" + agent.experiment_tag + ".pt")
-            agent.summary_writer.eval(id_eval_game_points, id_eval_game_step, ood_eval_game_points, ood_eval_game_step)
+            agent.summary_writer.eval(
+                id_eval_game_points,
+                id_eval_game_step,
+                id_eval_game_goal_condition_points,
+                ood_eval_game_points,
+                ood_eval_game_step,
+                ood_eval_game_goal_condition_points
+            )
         else:
             if running_avg_student_points.get_avg() >= best_performance_so_far:
                 best_performance_so_far = running_avg_student_points.get_avg()
                 agent.save_model_to_path(output_dir + "/" + agent.experiment_tag + ".pt")
         print("Save Model end")
+        agent.dagger_replay_sample_history_length += 1
 
         # plot using visdom
         if config["general"]["visdom"]:
@@ -400,8 +431,11 @@ def train():
                          "train student steps": str(running_avg_student_steps.get_avg()),
                          "id eval game points": str(id_eval_game_points),
                          "id eval steps": str(id_eval_game_step),
+                         "id_eval_game_goal_condition_points": str(id_eval_game_goal_condition_points),
                          "ood eval game points": str(ood_eval_game_points),
-                         "ood eval steps": str(ood_eval_game_step)})
+                         "ood eval steps": str(ood_eval_game_step),
+                         "ood_eval_game_goal_condition_points": str(ood_eval_game_goal_condition_points),
+                         })
         with open(output_dir + "/" + json_file_name + '.json', 'a+') as outfile:
             outfile.write(_s + '\n')
             outfile.flush()

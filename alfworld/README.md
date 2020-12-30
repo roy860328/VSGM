@@ -29,9 +29,9 @@ infos: {'admissible_commands': [['go to countertop 1', 'go to coffeemachine 1', 
 ```
 
 # Visual Semantic
-agents/sgg/*
-agents/semantic_graph/*
-config setting
+$ALFRED_ROOT/agents/sgg/*
+$ALFRED_ROOT/agents/semantic_graph/*
+$ALFRED_ROOT/config setting
 ```
 vision_dagger:
   model_type: "sgg"
@@ -102,7 +102,15 @@ RuntimeError: Error(s) in loading state_dict for SGG:
         Unexpected key(s) in state_dict: "rel_heads.rel_predictor.pred_feature_extractor.head.layer4.0.downsample.0.weight", "rel_heads.rel_predictor.pred_feature_extractor.head.layer4.0.downsample.1.weight", "rel_heads.rel_predictor.pred_feature_extractor.head.layer4.0.downsample.1.bias"
 ```
 
-### SGG - Train with semantic graph dagger
+### Train with semantic graph dagger
+- ANALYZE_GRAPH
+```
+_C.SCENE_GRAPH.ANALYZE_GRAPH = True
+dict_ANALYZE_GRAPH = {
+    "score": score.clone().detach().to('cpu'),
+    "sort_nodes_index": sort_nodes_index.clone().detach().to('cpu'),
+}
+```
 
 ### Hete semantic graph
 #### train_sgg_vision_dagger_without_env
@@ -122,6 +130,10 @@ CUDA_VISIBLE_DEVICES=1 python dagger/train_sgg_vision_dagger.py config/hete_grap
 CUDA_VISIBLE_DEVICES=1 python dagger/train_sgg_vision_dagger.py config/hete_graph_base.yaml --semantic_config_file config/exploration_hete_semantic_graph.yaml
 ```
 
+## Analyze Graph
+```
+CUDA_VISIBLE_DEVICES=1 python dagger/train_sgg_vision_dagger.py config/analyze_base.yaml --semantic_config_file config/analyze_semantic_graph.yaml
+```
 
 
 

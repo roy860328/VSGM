@@ -8,7 +8,7 @@ import graph_embed
 # https://github.com/rusty1s/pytorch_geometric/issues/1083
 class Net(torch.nn.Module):
     """docstring for Net"""
-    def __init__(self, cfg, config=None):
+    def __init__(self, cfg, config=None, PRINT_DEBUG=False):
         super(Net, self).__init__()
         input_size = cfg.SCENE_GRAPH.NODE_FEATURE_SIZE
         middle_size = cfg.SCENE_GRAPH.NODE_MIDDEL_FEATURE_SIZE
@@ -40,7 +40,8 @@ class Net(torch.nn.Module):
                 bert_hidden_size,
                 NODE_FEATURE_SIZE,
                 NUM_CHOSE_NODE,
-                cfg.SCENE_GRAPH.GPU
+                cfg.SCENE_GRAPH.GPU,
+                PRINT_DEBUG=PRINT_DEBUG
             )
 
     def forward(self, data, hidden_state=None):
@@ -68,6 +69,7 @@ class Net(torch.nn.Module):
             data.attributes, \
             data.edge_obj_to_obj, \
             data.edge_attr
+        dict_ANALYZE_GRAPH = None
         if edge_obj_to_obj is not None:
             x = x.clone().detach()
             attributes = attributes.clone().detach()
@@ -82,7 +84,7 @@ class Net(torch.nn.Module):
             x = torch.cat([x, attributes], dim=1)
             if self.cfg.SCENE_GRAPH.CHOSE_IMPORTENT_NODE:
                 # torch.Size([1, 400])
-                chose_nodes = self.chose_node_module(x, hidden_state)
+                chose_nodes, dict_ANALYZE_GRAPH = self.chose_node_module(x, hidden_state)
 
             # torch.Size([1, 128])
             x = self.final_mapping(x)
@@ -93,4 +95,4 @@ class Net(torch.nn.Module):
             x = torch.zeros((1, self.cfg.SCENE_GRAPH.RESULT_FEATURE))
             if self.cfg.SCENE_GRAPH.GPU:
                 x = x.to('cuda')
-        return x
+        return x, dict_ANALYZE_GRAPH
