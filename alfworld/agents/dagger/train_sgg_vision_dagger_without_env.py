@@ -94,39 +94,40 @@ def train():
         report = agent.report_frequency > 0 and (episode_no % agent.report_frequency <= (episode_no - batch_size) % agent.report_frequency)
         agent.train()
         agent.init(batch_size)
-        previous_dynamics = None
 
         # extract exploration frame features
         '''
         # Add exploration img & meta data to GraphData
         '''
-        if agent.use_exploration_frame_feats:
-            for env_index in range(len(exploration_transition_caches)):
-                exploration_transition_cache = exploration_transition_caches[env_index]
-                store_states = exploration_transition_cache[0]
-                agent.update_exploration_data_to_global_graph(store_states, env_index)
-        losses = []
-        for env_index in range(len(transition_caches)):
-            transition_cache = transition_caches[env_index]
-            store_states, task_desc_strings, expert_actions = transition_cache[0], transition_cache[1], transition_cache[2]
-            head = np.random.randint(len(store_states))
-            loss = agent.train_command_generation_recurrent_teacher_force(
-                store_states[head:head + agent.dagger_replay_sample_history_length],
-                task_desc_strings[head:head + agent.dagger_replay_sample_history_length],
-                expert_actions[head:head + agent.dagger_replay_sample_history_length],
-                train_now=False,
-                env_index=env_index,
+        for loop in range(batch_size):
+            if agent.use_exploration_frame_feats:
+                for env_index in range(len(exploration_transition_caches)):
+                    exploration_transition_cache = exploration_transition_caches[env_index]
+                    store_states = exploration_transition_cache[0]
+                    agent.update_exploration_data_to_global_graph(store_states, env_index)
+            losses = []
+            for env_index in range(len(transition_caches)):
+                transition_cache = transition_caches[env_index]
+                store_states, task_desc_strings, expert_actions = transition_cache[0], transition_cache[1], transition_cache[2]
+                head = np.random.randint(len(store_states))
+                loss = agent.train_command_generation_recurrent_teacher_force(
+                    store_states[head:head + agent.dagger_replay_sample_history_length],
+                    task_desc_strings[head:head + agent.dagger_replay_sample_history_length],
+                    expert_actions[head:head + agent.dagger_replay_sample_history_length],
+                    train_now=False,
+                    env_index=env_index,
+                )
+                loss_copy = loss.clone().detach()
+                losses.append(loss)
+                running_avg_dagger_loss.push(loss_copy.item())
+            loss = torch.stack(losses).mean()
+            loss = agent.grad(loss)
+            print("loss: ", loss.item())
+            agent.summary_writer.training_loss(
+                train_loss=loss,
+                optimizer=agent.optimizer
             )
-            loss_copy = loss.clone().detach()
-            losses.append(loss)
-            running_avg_dagger_loss.push(loss_copy.item())
-        loss = torch.stack(losses).mean()
-        loss = agent.grad(loss)
-        print("loss: ", loss.item())
-        agent.summary_writer.training_loss(
-            train_loss=loss,
-            optimizer=agent.optimizer
-        )
+            agent.reset_all_scene_graph()
 
         agent.finish_of_episode(episode_no, batch_size, decay_lr=True)
         episode_no += batch_size
@@ -167,6 +168,7 @@ def train():
                 best_performance_so_far = running_avg_dagger_loss.get_avg()
                 agent.save_model_to_path(output_dir + "/" + agent.experiment_tag + ".pt")
         print("Save Model end")
+        print("dagger_replay_sample_history_length: ", agent.dagger_replay_sample_history_length)
         agent.dagger_replay_sample_history_length += 1
 
         # write accuracies down into file

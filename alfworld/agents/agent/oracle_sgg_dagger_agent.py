@@ -221,7 +221,6 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         if sequence_of_transitions is None:
             return None
 
-
         if self.action_space == "generation":
             self.reset_all_scene_graph()
             losses = []

@@ -331,8 +331,9 @@ def train():
             if running_avg_student_points.get_avg() >= best_performance_so_far:
                 best_performance_so_far = running_avg_student_points.get_avg()
                 agent.save_model_to_path(output_dir + "/" + agent.experiment_tag + ".pt")
-        print("Save Model end")
         agent.dagger_replay_sample_history_length += 1
+        print("Save Model end")
+        print("dagger_replay_sample_history_length: ", agent.dagger_replay_sample_history_length)
 
         # plot using visdom
         if config["general"]["visdom"]:

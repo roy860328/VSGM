@@ -48,15 +48,15 @@ general:
   hide_init_receptacles: False                              # remove initial observation containing navigable receptacles
 
   training:
-    batch_size: 10
-    max_episode: 50000
+    batch_size: 64
+    max_episode: 500000
     smoothing_eps: 0.1
     optimizer:
       learning_rate: 0.001
       clip_grad_norm: 5
 
   evaluate:
-    run_eval: True
+    run_eval: False
     batch_size: 10
     env:
       type: "AlfredTWEnv"
@@ -131,8 +131,8 @@ dagger:
 
   replay:
     replay_memory_capacity: 500000
-    update_per_k_game_steps: 2
-    replay_batch_size: 2
+    update_per_k_game_steps: 5
+    replay_batch_size: 64
     replay_sample_history_length: 4
     replay_sample_update_from: 2
 
