@@ -25,6 +25,7 @@ INPUT:
 
 GENERAL:
   PRINT_DEBUG: False
+  ANALYZE_GRAPH: True
   LOAD_PRETRAINED: False
   LOAD_PRETRAINED_PATH: ""
   use_exploration_frame_feats: True
@@ -33,12 +34,11 @@ GENERAL:
 SCENE_GRAPH:
   GPU: True
   ORACLE: True
-  ANALYZE_GRAPH: True
   OBJ_NAME_EMBEDDING: "word_embed/object_alfworld.csv"
   GRAPH_RESULT_PATH: "/home/alfworld/global_graph/"
   SAME_VISION_FEATURE_THRESHOLD: 0.7
   MODEL: "hete_gcn"
-  GraphData: "HeteGraphData"
+  GraphData: "HeteGraphData"  # "HeteGraphData", "GraphData"
   EMBED_TYPE: "WeightedSum"  # "WeightedSum", "SelfAttn"
 
   NODE_FEATURE_SIZE: 300       # 300

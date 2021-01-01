@@ -105,7 +105,7 @@ RuntimeError: Error(s) in loading state_dict for SGG:
 ### Train with semantic graph dagger
 - ANALYZE_GRAPH
 ```
-_C.SCENE_GRAPH.ANALYZE_GRAPH = True
+_C.GENERAL.ANALYZE_GRAPH = True
 dict_ANALYZE_GRAPH = {
     "score": score.clone().detach().to('cpu'),
     "sort_nodes_index": sort_nodes_index.clone().detach().to('cpu'),

@@ -77,10 +77,13 @@ class GraphData(Data):
         return the index of the node
         '''
         # shape : 300 + 23
+        isFeatureChange = False
         feature = self._cat_feature_and_wore_embed(obj_cls, feature)
         ind = self.obj_id_to_ind[obj_id]
+        if not torch.equal(self.x[ind], feature):
+            isFeatureChange = True
         self.x[ind] = feature
-        return ind
+        return ind, isFeatureChange
 
     def update_relation(self, node_src, node_dst, relation):
         '''
@@ -182,11 +185,14 @@ class HeteGraphData(GraphData):
     def update_node(self, obj_cls, feature, obj_id):
         '''
         '''
+        isFeatureChange = False
         ind = self.obj_id_to_ind[obj_id]
         if self.GPU:
             feature = feature.cuda()
+        if not torch.equal(self.attributes[ind][:-1], feature):
+            isFeatureChange = True
         self.attributes[ind][:-1] = feature
-        return ind
+        return ind, isFeatureChange
 
     def update_relation(self, node_src, node_dst, relation):
         '''
@@ -225,17 +231,23 @@ class HeteGraphData(GraphData):
         else:
             raise NotImplementedError
 
+
 class SceneGraph(object):
     """docstring for SceneGraph"""
 
     def __init__(self, cfg):
         super(SceneGraph, self).__init__()
+        #
         self.cfg = cfg
         self.isORACLE = cfg.SCENE_GRAPH.ORACLE
         self.GPU = cfg.SCENE_GRAPH.GPU
+        self.GRAPH_RESULT_PATH = cfg.SCENE_GRAPH.GRAPH_RESULT_PATH
+        # self.EMBED_CURRENT_STATE = self.cfg_semantic.SCENE_GRAPH.EMBED_CURRENT_STATE
+        # self.EMBED_HISTORY_CHANGED_NODES = self.cfg_semantic.SCENE_GRAPH.EMBED_HISTORY_CHANGED_NODES
+        # vision
         self.VISION_FEATURE_SIZE = cfg.SCENE_GRAPH.VISION_FEATURE_SIZE
         self.SAME_VISION_FEATURE_THRESHOLD = cfg.SCENE_GRAPH.SAME_VISION_FEATURE_THRESHOLD
-        self.GRAPH_RESULT_PATH = cfg.SCENE_GRAPH.GRAPH_RESULT_PATH
+        # graph
         self.obj_cls_name_to_features = self._get_obj_cls_name_to_features()
         self.init_graph_data()
 
@@ -246,7 +258,16 @@ class SceneGraph(object):
             self.cfg.SCENE_GRAPH.GraphData
             )
         self.global_graph = graphdata(self.obj_cls_name_to_features, self.GPU)
+        self.current_state_graph = graphdata(self.obj_cls_name_to_features, self.GPU)
+        self.history_changed_nodes_graph = graphdata(self.obj_cls_name_to_features, self.GPU)
 
+    def init_current_state_data(self):
+        graphdata = getattr(
+            importlib.import_module(
+                'agents.semantic_graph.semantic_graph'),
+            self.cfg.SCENE_GRAPH.GraphData
+            )
+        self.current_state_graph = graphdata(self.obj_cls_name_to_features, self.GPU)
 
     def _get_obj_cls_name_to_features(self):
         def get_feature(csv_nodes_data):
@@ -269,6 +290,12 @@ class SceneGraph(object):
 
     def get_graph_data(self):
         return self.global_graph
+
+    def get_history_changed_nodes_graph_data(self):
+        return self.history_changed_nodes_graph
+
+    def get_current_state_graph_data(self):
+        return self.current_state_graph
 
     def analyze_graph(self, dict_ANALYZE_GRAPH):
         '''
@@ -310,12 +337,15 @@ class SceneGraph(object):
         return cosine_similarity(feature1.reshape(1, -1), feature2.reshape(1, -1))
 
     def add_oracle_local_graph_to_global_graph(self, img, target):
-        current_frame_obj_cls_to_node_index = []
+        self.init_current_state_data()
         tar_ids = target["objectIds"]
         obj_clses = target["labels"].numpy().astype(int)
         obj_attributes = target["attributes"]
         # other way to process (index 4 is out of bounds for dimension 0 with size 4)
         obj_relations = target["relation_labels"].numpy().astype(int)
+        global_graph_current_frame_obj_cls_to_node_index = []
+        current_state_graph_current_frame_obj_cls_to_node_index = []
+
         '''
         tar_ids : ['Fridge|-01.50|+00.00|-00.70', 'Bread|+00.40|+00.96|+00.11|BreadSliced_6', 'Mug|-01.28|+01.01|-01.64', 'Microwave|-01.23|+00.90|-01.68', 'Cabinet|-00.84|+00.47|-01.67', 'CounterTop|+00.23|+00.95|-02.00', 'Drawer|-00.82|+00.75|-01.69']
         obj_cls : tensor(24.), object class index
@@ -324,19 +354,35 @@ class SceneGraph(object):
             obj_cls, obj_attribute = \
                 obj_clses[i], obj_attributes[i]
             isFindNode = self.global_graph.search_node(obj_id=tar_id)
+            # check node
             if isFindNode:
-                ind = self.global_graph.update_node(obj_cls, obj_attribute, tar_id)
+                ind, isFeatureChange = self.global_graph.update_node(obj_cls, obj_attribute, tar_id)
+                # EMBED_HISTORY_CHANGED_NODES
+                if isFeatureChange:
+                    self.history_changed_nodes_graph.add_node(obj_cls, obj_attribute, tar_id)
             else:
                 ind = self.global_graph.add_node(obj_cls, obj_attribute, tar_id)
+            # EMBED_CURRENT_STATE
+            current_state_node_ind = self.current_state_graph.add_node(obj_cls, obj_attribute, tar_id)
             # [317, 318, 148, 149, 150, 151, 152, 319, 320, 321, 322, 154, 323, 155, 157, 158, 159, 160, 161, 324]
-            current_frame_obj_cls_to_node_index.append(ind)
+            global_graph_current_frame_obj_cls_to_node_index.append(ind)
+            current_state_graph_current_frame_obj_cls_to_node_index.append(current_state_node_ind)
+        # relation
         for obj_relation_triplet in obj_relations:
             src_obj_ind, dst_obj_ind, relation = obj_relation_triplet
-            src_node_ind = current_frame_obj_cls_to_node_index[src_obj_ind]
-            dst_node_ind = current_frame_obj_cls_to_node_index[dst_obj_ind]
+            src_node_ind = global_graph_current_frame_obj_cls_to_node_index[src_obj_ind]
+            dst_node_ind = global_graph_current_frame_obj_cls_to_node_index[dst_obj_ind]
             self.global_graph.update_relation(src_node_ind, dst_node_ind, relation)
+        # relation
+        # EMBED_CURRENT_STATE
+        for obj_relation_triplet in obj_relations:
+            src_obj_ind, dst_obj_ind, relation = obj_relation_triplet
+            src_node_ind = current_state_graph_current_frame_obj_cls_to_node_index[src_obj_ind]
+            dst_node_ind = current_state_graph_current_frame_obj_cls_to_node_index[dst_obj_ind]
+            self.current_state_graph.update_relation(src_node_ind, dst_node_ind, relation)
 
     def add_local_graph_to_global_graph(self, img, sgg_results):
+        self.init_current_state_data()
         current_frame_obj_cls_to_node_index = []
         obj_clses = sgg_results["labels"].numpy().astype(int)
         obj_features = sgg_results["features"]
@@ -349,10 +395,11 @@ class SceneGraph(object):
             feature = torch.cat([obj_feature, obj_attribute], dim=0)
             obj_id = self.compare_existing_node(obj_cls, feature, compare_feature_len=self.VISION_FEATURE_SIZE)
             if obj_id is not None:
-                ind = self.global_graph.update_node(obj_cls, feature, obj_id)
+                ind, isFeatureChange = self.global_graph.update_node(obj_cls, feature, obj_id)
             else:
                 ind = self.global_graph.add_node(obj_cls, feature)
             current_frame_obj_cls_to_node_index.append(ind)
+
         for i, max_relation in enumerate(torch.argmax(obj_relations_scores, dim=1).numpy()):
             if max_relation == 1:
                 src_obj_ind, dst_obj_ind = obj_relations_idx_pairs[i]

@@ -43,9 +43,12 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         '''
         # Semantic graph create
         self.cfg_semantic = config['semantic_cfg']
-        self.isORACLE = self.cfg_semantic.SCENE_GRAPH.ORACLE
-        self.ANALYZE_GRAPH = self.cfg_semantic.SCENE_GRAPH.ANALYZE_GRAPH
+        self.ANALYZE_GRAPH = self.cfg_semantic.GENERAL.ANALYZE_GRAPH
         self.PRINT_DEBUG = self.cfg_semantic.GENERAL.PRINT_DEBUG
+        self.isORACLE = self.cfg_semantic.SCENE_GRAPH.ORACLE
+        self.EMBED_CURRENT_STATE = self.cfg_semantic.SCENE_GRAPH.EMBED_CURRENT_STATE
+        self.EMBED_HISTORY_CHANGED_NODES = self.cfg_semantic.SCENE_GRAPH.EMBED_HISTORY_CHANGED_NODES
+        # model
         self.graph_embed_model = importlib.import_module(self.cfg_semantic.SCENE_GRAPH.MODEL)
         self.graph_embed_model = self.graph_embed_model.Net(
             self.cfg_semantic,
@@ -77,13 +80,24 @@ class OracleSggDAggerAgent(TextDAggerAgent):
     def reset_all_scene_graph(self):
         global_graphs = []
         for scene_graph in self.scene_graphs:
-            if scene_graph.global_graph.x is not None:
-                nodes_num = len(scene_graph.global_graph.x)
-            else:
-                nodes_num = 0
-            global_graphs.append(nodes_num)
+            if self.PRINT_DEBUG:
+                num_nodes_global_graph, num_nodes_current_state_graph, num_nodes_history_changed_nodes_graph = 0, 0, 0
+                if scene_graph.global_graph.x is not None:
+                    num_nodes_global_graph = len(scene_graph.global_graph.x)
+                if scene_graph.current_state_graph.x is not None:
+                    num_nodes_current_state_graph = len(scene_graph.current_state_graph.x)
+                if scene_graph.history_changed_nodes_graph.x is not None:
+                    num_nodes_history_changed_nodes_graph = len(scene_graph.history_changed_nodes_graph.x)
+                global_graphs.append(
+                    (
+                        num_nodes_global_graph,
+                        num_nodes_current_state_graph,
+                        num_nodes_history_changed_nodes_graph
+                    )
+                )
             scene_graph.init_graph_data()
         if self.PRINT_DEBUG:
+            # [(26, 13, 0), (80, 10, 2), (72, 4, 2), (25, 7, 1), (30, 5, 3), (27, 5, 1), (59, 14, 4), (30, 9, 1), (31, 6, 3), (61, 6, 0), (32, 4, 2), (36, 5, 2), (44, 14, 1), (19, 2, 2), (73, 15, 1), (77, 8, 4), (56, 9, 2), (59, 10, 4), (72, 5, 1), (16, 3, 0), (40, 13, 2), (22, 4, 3), (61, 9, 1), (23, 11, 1), (29, 6, 2), (90, 5, 1), (26, 13, 1), (93, 4, 3), (23, 14, 3), (37, 4, 2), (27, 7, 1), (69, 2, 6), (54, 1, 0), (34, 12, 3), (71, 21, 4), (95, 17, 1), (19, 7, 1), (25, 12, 1), (53, 6, 3), (28, 6, 3), (18, 9, 3), (44, 4, 1), (36, 5, 4), (34, 9, 0), (31, 3, 1), (29, 7, 1), (33, 5, 1), (59, 3, 2), (27, 8, 2), (13, 5, 1), (29, 15, 1), (32, 5, 1), (37, 10, 3), (65, 8, 2), (18, 13, 0), (75, 11, 0), (28, 4, 2), (58, 3, 0), (40, 5, 1), (29, 2, 1), (60, 9, 2), (27, 7, 3), (31, 14, 2), (32, 3, 3)]
             print("WARNING For DEBUG. \nglobal_graph nodes numbers result: \n", global_graphs)
 
     def finish_of_episode(self, episode_no, batch_size, decay_lr=False):
@@ -110,7 +124,6 @@ class OracleSggDAggerAgent(TextDAggerAgent):
             raise NotImplementedError()
 
         graph_embed_features = []
-        # import pdb; pdb.set_trace()
         scene_graph = self.scene_graphs[env_index]
         rgb_image = store_state["rgb_image"]
         # mask_image = store_state["mask_image"][i]
@@ -126,9 +139,27 @@ class OracleSggDAggerAgent(TextDAggerAgent):
             results = self.detector(rgb_image)
             result = results[0]
             scene_graph.add_local_graph_to_global_graph(rgb_image, result)
+        # embed graph data
         global_graph = scene_graph.get_graph_data()
-        graph_embed_feature, dict_ANALYZE_GRAPH = self.graph_embed_model(global_graph, hidden_state=hidden_state)
+        graph_embed_feature, dict_ANALYZE_GRAPH = self.graph_embed_model(
+            global_graph,
+            CHOSE_IMPORTENT_NODE=True,
+            hidden_state=hidden_state
+        )
+        if self.EMBED_CURRENT_STATE:
+            current_state_graph = scene_graph.get_current_state_graph_data()
+            current_state_feature, _ = self.graph_embed_model(
+                current_state_graph,
+            )
+            graph_embed_feature = torch.cat([graph_embed_feature, current_state_feature], dim=1)
+        if self.EMBED_HISTORY_CHANGED_NODES:
+            history_changed_nodes_graph = scene_graph.get_history_changed_nodes_graph_data()
+            history_changed_nodes_feature, _ = self.graph_embed_model(
+                history_changed_nodes_graph,
+            )
+            graph_embed_feature = torch.cat([graph_embed_feature, history_changed_nodes_feature], dim=1)
         graph_embed_features.append(graph_embed_feature)
+
         dict_objectIds_to_score = []
         if self.ANALYZE_GRAPH:
             dict_objectIds_to_score = scene_graph.analyze_graph(dict_ANALYZE_GRAPH)
@@ -159,62 +190,6 @@ class OracleSggDAggerAgent(TextDAggerAgent):
 
     # with recurrency
     def train_dagger_recurrent(self):
-        '''
-            if len(self.dagger_memory) < self.dagger_replay_batch_size:
-                return None
-            # self.dagger_replay_batch_size, self.dagger_replay_sample_history_length = 64, 4
-            sequence_of_transitions, contains_first_step = self.dagger_memory.sample_sequence(self.dagger_replay_batch_size, self.dagger_replay_sample_history_length)
-            if sequence_of_transitions is None:
-                return None
-
-            batches = []
-            for transitions in sequence_of_transitions:
-                batch = memory.dagger_transition(*zip(*transitions))
-                batches.append(batch)
-
-            if self.action_space == "generation":
-                self.reset_all_scene_graph()
-                losses = []
-                b_store_states, b_task_desc_strings, b_expert_actions = \
-                    [batch.observation_list for batch in batches],\
-                    [batch.task_list for batch in batches],\
-                    [batch.target_list for batch in batches],
-                if self.use_exploration_frame_feats:
-                    b_exploration_data = [batch.exploration_data for batch in batches]
-                # import pdb; pdb.set_trace()
-                # len(store_states[0]) = 64 = self.dagger_replay_batch_size
-                for replay_batch_index in range(len(b_store_states[0])):
-                    # len(store_states) = 4 = self.dagger_replay_sample_history_length
-                    store_states, task_desc_strings, expert_actions = [], [], []
-                    for history_length in range(len(b_store_states)):
-                        store_states.append(b_store_states[history_length][replay_batch_index])
-                        task_desc_strings.append([b_task_desc_strings[history_length][replay_batch_index]])
-                        expert_actions.append([b_expert_actions[history_length][replay_batch_index]])
-                    env_index = replay_batch_index % len(self.scene_graphs)
-                    if env_index == 0:
-                        self.reset_all_scene_graph()
-                    # exploration_data
-                    if self.use_exploration_frame_feats:
-                        self.update_exploration_data_to_global_graph(
-                            b_exploration_data[0][replay_batch_index],
-                            env_index
-                        )
-                    # train model
-                    loss = self.train_command_generation_recurrent_teacher_force(
-                        store_states,
-                        task_desc_strings,
-                        expert_actions,
-                        train_now=False,
-                        env_index=env_index,
-                    )
-                    losses.append(loss)
-                loss = torch.stack(losses).mean()
-                loss = self.grad(loss)
-                print("loss: ", loss.item())
-                self.summary_writer.training_loss(train_loss=loss, optimizer=self.optimizer)
-            else:
-                raise NotImplementedError()
-        '''
         if len(self.dagger_memory) < self.dagger_replay_batch_size:
             return None
         sequence_of_transitions = self.dagger_memory.sample_sequence_to_end(self.dagger_replay_batch_size, self.dagger_replay_sample_history_length)
@@ -319,8 +294,8 @@ class OracleSggDAggerAgent(TextDAggerAgent):
 
             obs = [o.to(h_td.device) for o in observation_feats]
             aggregated_obs_feat = self.aggregate_feats_seq(obs)
-            h_obs = self.online_net.vision_fc(aggregated_obs_feat)
             # import pdb; pdb.set_trace()
+            h_obs = self.online_net.vision_fc(aggregated_obs_feat)
             vision_td = torch.cat((h_obs, h_td_mean), dim=1) # batch x k boxes x hid
             vision_td_mask = torch.ones((batch_size, h_obs.shape[1]+h_td_mean.shape[1])).to(h_td_mean.device)
 
@@ -333,7 +308,6 @@ class OracleSggDAggerAgent(TextDAggerAgent):
             # torch.Size([1, 5, 28996])
             pred = self.online_net.vision_decode(input_target, target_mask, vision_td, vision_td_mask, current_dynamics)  # batch x target_length x vocab
             # pred_ind = torch.argmax(pred, dim=2)
-            # import pdb; pdb.set_trace()
             # values, topk_indices = torch.topk(pred, 3, dim=2)
             # print("\nground_truth: {}\npred: {}\noutput_target_strings: {}".format(
             #     ground_truth.to('cpu').numpy(), values.detach().to('cpu').numpy(), output_target_strings))
@@ -407,7 +381,6 @@ class OracleSggDAggerAgent(TextDAggerAgent):
             input_target_list = [[self.word2id["[CLS]"]] for i in range(batch_size)]
             eos = np.zeros(batch_size)
             for _ in range(self.max_target_length):
-
                 input_target = copy.deepcopy(input_target_list)
                 input_target = pad_sequences(input_target, maxlen=max_len(input_target)).astype('int32')
                 input_target = to_pt(input_target, self.use_cuda)
