@@ -8,7 +8,7 @@ Get dependencies and compile the planner:
 ```bash
 $ sudo apt-get install ffmpeg flex bison
 
-$ cd $ALFRED_ROOT/gen/ff_planner
+$ cd $ALFWORLD_ROOT/gen/ff_planner
 $ make
 ```
 
@@ -17,7 +17,7 @@ $ make
 To spawn multiple generation threads:
 
 ```bash
-$ cd $ALFRED_ROOT/gen
+$ cd $ALFWORLD_ROOT/gen
 $ python scripts/generate_trajectories.py --save_path data/new_trajs --in_parallel --debug --num_threads 2 
 ```
 

@@ -73,7 +73,7 @@ class Net(torch.nn.Module):
             data.edge_obj_to_obj, \
             data.edge_attr
         dict_ANALYZE_GRAPH = None
-        # no edge
+        # no edge, without gcn
         if edge_obj_to_obj is None:
             if self.PRINT_DEBUG:
                 print("WARNING edge_obj_to_obj is None")

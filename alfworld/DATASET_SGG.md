@@ -18,7 +18,7 @@ SGG train transformers would .convert("RGB")/255
 
 '''
 cd /home/alfworld
-export ALFRED_ROOT=/home/alfworld
+export ALFWORLD_ROOT=/home/alfworld
 export GRAPH_RCNN_ROOT=/home/graph-rcnn.pytorch/
 
 '''

@@ -7,7 +7,9 @@ import torch.multiprocessing as mp
 from models.nn.resnet import Resnet
 from data.preprocess import Dataset
 from importlib import import_module
-
+import numpy as np
+from PIL import Image
+import os
 
 class Eval(object):
 
@@ -137,3 +139,52 @@ class Eval(object):
 
     def create_stats(self):
         raise NotImplementedError()
+
+    def _get_openable_points(self, traj_data):
+        scene_num = traj_data['scene']['scene_num']
+        openable_json_file = os.path.join(os.environ['ALFRED_ROOT'], 'gen/layouts/FloorPlan%d-openable.json' % scene_num)
+        with open(openable_json_file, 'r') as f:
+            openable_points = json.load(f)
+        return openable_points
+
+    def explore_scene(self, env, traj_data):
+        '''
+        Use pre-computed openable points from ALFRED to store receptacle locations
+        '''
+        meta_datas = {
+            "exploration_sgg_meta_data": [],
+        }
+        openable_points = self._get_openable_points(traj_data)
+        agent_height = env.last_event.metadata['agent']['position']['y']
+        for recep_id, point in openable_points.items():
+            recep_class = recep_id.split("|")[0]
+            action = {'action': 'TeleportFull',
+                      'x': point[0],
+                      'y': agent_height,
+                      'z': point[1],
+                      'rotateOnTeleport': False,
+                      'rotation': point[2],
+                      'horizon': point[3]}
+            event = env.step(action)
+            if event.metadata['lastActionSuccess']:
+                image = np.uint8(env.last_event.frame)
+                curr_image = Image.fromarray(image)
+                meta_data = env.last_event.metadata['objects']
+                meta_data = {
+                    "exploration_img": curr_image,
+                    "exploration_sgg_meta_data": meta_data,
+                }
+                meta_datas["exploration_sgg_meta_data"].append(meta_data)
+        return meta_datas
+
+    def get_meta_datas(self, env):
+        image = np.uint8(env.last_event.frame)
+        curr_image = Image.fromarray(image)
+        meta_data = {
+            "rgb_image": curr_image,
+            "sgg_meta_data": env.last_event.metadata['objects'],
+        }
+        meta_datas = {
+            "sgg_meta_data": [meta_data],
+        }
+        return meta_datas

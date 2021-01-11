@@ -123,8 +123,8 @@ def load_pretrained_model(cfg, transforms, ind_to_classes, device):
 
 
 if __name__ == '__main__':
-    sys.path.insert(0, os.environ['ALFRED_ROOT'])
-    sys.path.insert(0, os.path.join(os.environ['ALFRED_ROOT'], 'agents'))
+    sys.path.insert(0, os.environ['ALFWORLD_ROOT'])
+    sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents'))
     import modules.generic as generic
     import alfred_data_format
     from semantic_graph.semantic_graph import SceneGraph

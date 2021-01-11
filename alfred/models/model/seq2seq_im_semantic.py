@@ -1,12 +1,13 @@
 import os
+import sys
 import torch
 import numpy as np
-import nn.vnn as vnn
+import nn.vnn2 as vnn
 import collections
 from torch import nn
 from torch.nn import functional as F
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
-from model.seq2seq import Module as Base
+from model.seq2seq_semantic import Module as Base
 from models.utils.metric import compute_f1, compute_exact
 from gen.utils.image_util import decompress_mask
 from torchvision import transforms
@@ -14,6 +15,16 @@ from nn.resnet import Resnet
 from sys import platform
 from PIL import Image
 import pdb
+'''
+semantic
+'''
+import importlib
+sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT']))
+from agents.utils import tensorboard
+from agents.agent import oracle_sgg_dagger_agent
+import json
+import glob
+#
 trans_color = transforms.Compose([
     transforms.ToPILImage(),
     transforms.ColorJitter(
@@ -35,29 +46,41 @@ class Module(Base):
         Seq2Seq agent
         '''
         super().__init__(args, vocab)
-
+        '''
+        semantic
+        '''
+        self.config = args.config_file
+        self.config['general']['training']['batch_size'] = self.args.batch
+        # for choose node attention input size
+        self.config['general']['model']['block_hidden_dim'] = 2*args.dhid
+        SEMANTIC_GRAPH_RESULT_FEATURE = self.config['semantic_cfg'].SCENE_GRAPH.RESULT_FEATURE
+        # Semantic graph create
+        self.semantic_graph_implement = oracle_sgg_dagger_agent.SemanticGraphImplement(self.config)
+        '''
+        ori
+        '''
         # encoder and self-attention
         self.enc = nn.LSTM(args.demb, args.dhid, bidirectional=True, batch_first=True)
-        # if torch.cuda.device_count() > 1:
-        #   print("Let's use", torch.cuda.device_count(), "GPUs!")
-        #   self.enc = torch.nn.DataParallel(self.enc)
+        # self.enc = torch.nn.DataParallel(self.enc, device_ids=args.DataParallelDevice)
         self.device = torch.device("cuda:%d" % self.args.gpu_id) if self.args.gpu else torch.device('cpu')
-        self.enc_att = vnn.SelfAttn(args.dhid*2)
+        self.enc_att = vnn.SelfAttn(args.dhid*2, DataParallelDevice=args.DataParallelDevice)
         self.extractor = Resnet(args, torch.device('cpu'), eval=True)
         self.depth_encode = nn.Linear(args.dframe, args.dframedepth)
         # subgoal monitoring
         self.subgoal_monitoring = (self.args.pm_aux_loss_wt > 0 or self.args.subgoal_aux_loss_wt > 0)
 
         # frame mask decoder
-        decoder = vnn.DepthConvFrameMaskDecoderProgressMonitor
+        decoder = vnn.Vision
         self.dec = decoder(self.emb_action_low, args.dframe, 2*args.dhid, 0,
                            args.dframedepth,
+                           self.semantic_graph_implement, SEMANTIC_GRAPH_RESULT_FEATURE,
                            pframe=args.pframe,
                            attn_dropout=args.attn_dropout,
                            hstate_dropout=args.hstate_dropout,
                            actor_dropout=args.actor_dropout,
                            input_dropout=args.input_dropout,
-                           teacher_forcing=args.dec_teacher_forcing)
+                           teacher_forcing=args.dec_teacher_forcing,
+                           DataParallelDevice=args.DataParallelDevice)
         # if torch.cuda.device_count() > 1:
         #   print("Let's use", torch.cuda.device_count(), "GPUs!")
         #   self.dec = torch.nn.DataParallel(self.dec)
@@ -84,6 +107,9 @@ class Module(Base):
 
         # reset model
         self.reset()
+
+    def finish_of_episode(self):
+        self.semantic_graph_implement.reset_all_scene_graph()
 
     def featurize(self, batch, load_mask=True, load_frames=True):
         '''
@@ -128,18 +154,24 @@ class Module(Base):
             # load Resnet features from disk
             if load_frames and not self.test_mode:
                 root = self.get_task_root(ex)
-                images = self._load_img(os.path.join(root, 'raw_images'), ex["images"], name_pt="feat_raw_frames.pt", type_image=".jpg")
-                images_depth = self._load_img(os.path.join(root, 'depth_images'), ex["images"], name_pt="feat_depth.pt", type_image=".png")
-                # im = images.to(self.device)
-                # im_depth = images_depth.to(self.device)
-                # import pdb; pdb.set_trace()
-                im = self.extractor.resnet_model.extract(images)
-                images_depth = self.extractor.resnet_model.extract(images_depth)
-                im = im.to(self.device)
-                images_depth = images_depth.to(self.device)
-                feat['frames'].append(im)  # add stop frame
-                feat['depth_images'].append(im)  # add stop frame
+                all_meta_data = self._load_meta_data(root, ex["images"])
+                feat['all_meta_datas'].append(all_meta_data)  # add stop frame
 
+                im = torch.load(os.path.join(root, self.feat_pt))
+
+                num_low_actions = len(ex['plan']['low_actions'])
+                num_feat_frames = im.shape[0]
+
+                if num_low_actions != num_feat_frames:
+                    keep = [None] * len(ex['plan']['low_actions'])
+                    for i, d in enumerate(ex['images']):
+                        # only add frames linked with low-level actions (i.e. skip filler frames like smooth rotations and dish washing)
+                        if keep[d['low_idx']] is None:
+                            keep[d['low_idx']] = im[i]
+                    keep.append(keep[-1])  # stop frame
+                    feat['frames'].append(torch.stack(keep, dim=0))
+                else:
+                    feat['frames'].append(torch.cat([im, im[-1].unsqueeze(0)], dim=0))  # add stop frame
             #########
             # outputs
             #########
@@ -154,7 +186,6 @@ class Module(Base):
 
                 # low-level valid interact
                 feat['action_low_valid_interact'].append([a['valid_interact'] for a in ex['num']['action_low']])
-
 
         # tensorization and padding
         for k, v in feat.items():
@@ -175,6 +206,8 @@ class Module(Base):
                 seqs = [torch.tensor(vv, device=self.device, dtype=torch.float) for vv in v]
                 pad_seq = pad_sequence(seqs, batch_first=True, padding_value=self.pad)
                 feat[k] = pad_seq
+            elif k in {'all_meta_datas'}:
+                pass
             else:
                 # default: tensorize and pad sequence
                 seqs = [torch.tensor(vv, device=self.device, dtype=torch.float if ('frames' in k) or ('depth_images' in k) else torch.long) for vv in v]
@@ -240,6 +273,54 @@ class Module(Base):
         frames = torch.stack(frames, dim=0)
         return frames
 
+    def _load_meta_data(self, root, list_img_traj):
+        def sequences_to_one():
+            print("_load with path", root)
+            meta_datas = {
+                "sgg_meta_data": [],
+                "exploration_sgg_meta_data": [],
+            }
+            low_idx = -1
+            for i, dict_frame in enumerate(list_img_traj):
+                # 60 actions need 61 frames
+                if low_idx != dict_frame["low_idx"]:
+                    low_idx = dict_frame["low_idx"]
+                else:
+                    continue
+                name_frame = dict_frame["image_name"].split(".")[0]
+                file_path = os.path.join(root, "sgg_meta", name_frame + ".json")
+                if os.path.isfile(file_path):
+                    with open(file_path, 'r') as f:
+                        meta_data = json.load(f)
+                    meta_data = {
+                        "rgb_image": [],
+                        "sgg_meta_data": meta_data,
+                    }
+                    meta_datas["sgg_meta_data"].append(meta_data)
+                else:
+                    print("file is not exist: {}".format(file_path))
+            meta_datas["sgg_meta_data"].append(meta_data)
+            exploration_path = os.path.join(root, "exploration_meta", "*.json")
+            exploration_file_paths = glob.glob(exploration_path)
+            for exploration_file_path in exploration_file_paths:
+                with open(exploration_file_path, 'r') as f:
+                    meta_data = json.load(f)
+                meta_data = {
+                    "exploration_img": [],
+                    "exploration_sgg_meta_data": meta_data,
+                }
+                meta_datas["exploration_sgg_meta_data"].append(meta_data)
+            return meta_datas
+        all_meta_data_path = os.path.join(root, "all_meta_data.json")
+        if os.path.isfile(all_meta_data_path):
+            with open(all_meta_data_path, 'r') as f:
+                all_meta_data = json.load(f)
+        else:
+            all_meta_data = sequences_to_one()
+            with open(all_meta_data_path, 'w') as f:
+                json.dump(all_meta_data, f)
+        return all_meta_data
+
     def serialize_lang_action(self, feat):
         '''
         append segmented instr language and low-level actions into single sequences
@@ -250,7 +331,6 @@ class Module(Base):
             if not self.test_mode:
                 feat['num']['action_low'] = [a for a_group in feat['num']['action_low'] for a in a_group]
 
-
     def decompress_mask(self, compressed_mask):
         '''
         decompress mask from json files
@@ -259,17 +339,14 @@ class Module(Base):
         mask = np.expand_dims(mask, axis=0)
         return mask
 
-
     def forward(self, feat, max_decode=300):
         cont_lang, enc_lang = self.encode_lang(feat)
         state_0 = cont_lang, torch.zeros_like(cont_lang)
         frames = self.vis_dropout(feat['frames'])
-        frames_depth = self.vis_dropout(feat['depth_images'])
-        res = self.dec(enc_lang, frames, None, frames_depth, max_decode=max_decode, gold=feat['action_low'], state_0=state_0)
+        res = self.dec(enc_lang, frames, None, feat['all_meta_datas'], max_decode=max_decode, gold=feat['action_low'], state_0=state_0)
         feat.update(res)
         # import pdb; pdb.set_trace()
         return feat
-
 
     def encode_lang(self, feat):
         '''
@@ -313,8 +390,25 @@ class Module(Base):
         # previous action embedding
         e_t = self.embed_action(prev_action) if prev_action is not None else self.r_state['e_t']
 
+        '''
+        semantic graph
+        '''
+        # batch = 1
+        all_meta_datas = feat['all_meta_datas']
+        feat_semantic_graph = []
+        for env_index in range(len(all_meta_datas)):
+            b_store_state = all_meta_datas[env_index]
+            graph_embed_features, _, _ = \
+                self.semantic_graph_implement.extract_visual_features(
+                    store_state=b_store_state["sgg_meta_data"],
+                    hidden_state=self.r_state['state_t'][env_index:env_index+1],
+                    env_index=env_index
+                )
+            # graph_embed_features is list (actually dont need list)
+            feat_semantic_graph.append(graph_embed_features[0])
+        feat_semantic_graph = torch.cat(feat_semantic_graph, dim=0)
         # decode and save embedding and hidden states
-        out_action_low, out_action_low_mask, state_t, *_ = self.dec.step(self.r_state['enc_lang'], feat['frames'][:, 0], e_t=e_t, state_tm1=self.r_state['state_t'], gcn_embedding=None)
+        out_action_low, out_action_low_mask, state_t, *_ = self.dec.step(self.r_state['enc_lang'], feat['frames'][:, 0], e_t=e_t, state_tm1=self.r_state['state_t'], gcn_embedding=None, feat_semantic_graph=feat_semantic_graph)
 
         # save states
         self.r_state['state_t'] = state_t
@@ -349,7 +443,7 @@ class Module(Base):
             words = self.vocab['action_low'].index2word(alow)
 
             # sigmoid preds to binary mask
-            alow_mask = F.sigmoid(alow_mask)
+            alow_mask = torch.sigmoid(alow_mask)
             p_mask = [(alow_mask[t] > 0.5).cpu().numpy() for t in range(alow_mask.shape[0])]
 
             task_id_ann = self.get_task_and_ann_id(ex)
@@ -389,9 +483,10 @@ class Module(Base):
         alow_loss = alow_loss.mean()
         losses['action_low'] = alow_loss * self.args.action_loss_wt
         if self.args.fast_epoch:
-            # print("p_alow:", p_alow)
+            print("p_alow:", p_alow)
             # print("l_alow:", l_alow)
-            print("action_low:", losses['action_low'])
+            # print("action_low:", losses['action_low'])
+
         # mask loss
         valid_idxs = valid.view(-1).nonzero().view(-1)
         flat_p_alow_mask = p_alow_mask.view(p_alow_mask.shape[0]*p_alow_mask.shape[1], *p_alow_mask.shape[2:])[valid_idxs]

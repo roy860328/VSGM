@@ -6,25 +6,25 @@
 
 TextDAgger Training:
 ```bash
-$ cd $ALFRED_ROOT/agents
+$ cd $ALFWORLD_ROOT/agents
 $ python dagger/train_dagger.py config/base_config.yaml
 ```
 
 VisionDAgger Training:
 ```bash
-$ cd $ALFRED_ROOT/agents
+$ cd $ALFWORLD_ROOT/agents
 $ python dagger/train_vision_dagger.py config/base_config.yaml
 ```
 
 TextDQN Training (not fully supported):
 ```bash
-$ cd $ALFRED_ROOT/agents
+$ cd $ALFWORLD_ROOT/agents
 $ python dqn/train_dqn.py config/base_config.yaml
 ```
 
 Seq2Seq Training:
 ```bash
-$ cd $ALFRED_ROOT/agents
+$ cd $ALFWORLD_ROOT/agents
 
 # collect dataset for offline training (not needed if sh download_data.sh extra)
 # python seq2seq/collect_seq2seq_dataset.py config/base_config.yaml
@@ -205,7 +205,7 @@ rl:
 The training script evaluates every `report_frequency` episodes. But additionally, you can also independently evaluate pre-trained agents:
 
 ```bash
-$ cd $ALFRED_ROOT/agents
+$ cd $ALFWORLD_ROOT/agents
 $ python eval/run_eval.py config/eval_config.yaml
 ```
 

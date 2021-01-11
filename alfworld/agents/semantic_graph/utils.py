@@ -1,5 +1,6 @@
 import os
 import glob
+import json
 import numpy as np
 from torch_geometric.utils import to_networkx
 import torch
@@ -89,3 +90,87 @@ def save_plt_img(plt, path, name):
 
 def load_graph_data(path):
     pass
+
+
+def save_final_dynamics(path, final_dynamics, name="final_dynamics"):
+    final_dynamics_path = os.path.join(path, name + ".json")
+    for key in final_dynamics.keys():
+        final_dynamics[key]["final_dynamics"] = final_dynamics[key]["final_dynamics"].tolist()
+        if "observation_feats" in final_dynamics[key]:
+            final_dynamics[key]["observation_feats"] = final_dynamics[key]["observation_feats"].tolist()[0]
+    with open(final_dynamics_path, 'w') as f:
+        json.dump(final_dynamics, f)
+    data_to_t_sne(path, final_dynamics, name=name, s_feature="final_dynamics")
+    if "observation_feats" in final_dynamics[key]:
+        data_to_t_sne(path, final_dynamics, name=name, s_feature="observation_feats")
+
+
+def data_to_t_sne(path, data, name="output", s_feature="final_dynamics"):
+    from sklearn.manifold import TSNE
+    from sklearn.decomposition import PCA
+    import pandas as pd
+    import seaborn as sns
+    X = None
+    label = []
+    for key in data.keys():
+        label.append(data[key]["label"])
+        feature = data[key][s_feature]
+        feature = np.array([feature])
+        if X is None:
+            X = feature
+        else:
+            X = np.concatenate((X, feature), axis=0)
+    X = PCA(n_components=50).fit_transform(X)
+    for perplexity in [10, 20, 30, 40, 50]:
+        tsne_results = TSNE(
+            n_components=2,
+            perplexity=perplexity,
+            n_iter=2000).fit_transform(X)
+        df = pd.DataFrame()
+        df['tsne-2d-one'] = tsne_results[:, 0]
+        df['tsne-2d-two'] = tsne_results[:, 1]
+        df['label'] = label
+        sns_plot = sns.lmplot(
+            data=df,
+            x='tsne-2d-one',
+            y='tsne-2d-two',
+            hue='label',
+            fit_reg=False
+        )
+        fig_name = os.path.join(path, name + "_" + s_feature + "_%d.png" % perplexity)
+        sns_plot.savefig(fig_name)
+
+
+if __name__ == '__main__':
+    import ast
+    path = "D:\\alfred\\alfworld\\videos"
+    file = "D:\\alfred\\alfworld\\videos\\valid_seen_final_dynamics.json"
+    name = "valid_seen_final_dynamics"
+
+    f = open(file, "r")
+    data = f.read()
+    data = ast.literal_eval(data)
+    for key in data.keys():
+        final_dynamics = data[key]["final_dynamics"]
+        data[key]["final_dynamics"] = np.array(final_dynamics)
+        if "observation_feats" in data[key]:
+            observation_feats = data[key]["observation_feats"]
+            data[key]["observation_feats"] = np.array(observation_feats)[0]
+    data_to_t_sne(path, data, name=name)
+    if "observation_feats" in data[key]:
+        data_to_t_sne(path, data, name=name, s_feature="observation_feats")
+
+    # file = "D:\\alfred\\alfworld\\videos\\valid_unseen_final_dynamics.json"
+    # f = open(file, "r")
+    # data = f.read()
+    # data = ast.literal_eval(data)
+    # for key in data.keys():
+    #     final_dynamics = data[key]["final_dynamics"]
+    #     data[key]["final_dynamics"] = np.array(final_dynamics)
+    #     if "observation_feats" in final_dynamics[key]:
+    #         observation_feats = data[key]["observation_feats"]
+    #         final_dynamics[key]["observation_feats"] = np.array(observation_feats)
+
+    # data_to_t_sne("D:\\alfred\\alfworld\\videos", data, name="valid_unseen_final_dynamics")
+    # if "observation_feats" in final_dynamics[key]:
+    #     data_to_t_sne(path, final_dynamics, name="valid_unseen_final_dynamics", feature="observation_feats")

@@ -8,7 +8,7 @@ apt install cmake g++ git make
 pip install downward-faster_replan.zip
 pip install TextWorld-handcoded_expert_integration.zip
 
-export ALFRED_ROOT=/home/alfworld
+export ALFWORLD_ROOT=/home/alfworld
 export GRAPH_RCNN_ROOT=/home/graph-rcnn.pytorch/
 python scripts/play_alfred_tw.py data/json_2.1.1/train/pick_heat_then_place_in_recep-Potato-None-SinkBasin-14/trial_T20190908_231731_054988/ --domain data/alfred.pddl
 ```
@@ -16,6 +16,7 @@ python scripts/play_alfred_tw.py data/json_2.1.1/train/pick_heat_then_place_in_r
 ### Train language
 ```
 python dagger/train_dagger.py config/base_config.yaml
+CUDA_VISIBLE_DEVICES=1 python dagger/train_butler_semantic_dagger.py config/base_config.yaml --semantic_config_file config/butler_memory_semantic_graph.yaml
 ```
 
 ### Train vision
@@ -29,9 +30,9 @@ infos: {'admissible_commands': [['go to countertop 1', 'go to coffeemachine 1', 
 ```
 
 # Visual Semantic
-$ALFRED_ROOT/agents/sgg/*
-$ALFRED_ROOT/agents/semantic_graph/*
-$ALFRED_ROOT/config setting
+$ALFWORLD_ROOT/agents/sgg/*
+$ALFWORLD_ROOT/agents/semantic_graph/*
+$ALFWORLD_ROOT/config setting
 ```
 vision_dagger:
   model_type: "sgg"
@@ -39,22 +40,10 @@ vision_dagger:
 object_classes = "__background__" + objects
 predicate_to_ind = "__background__" + relations
 
-## Visual Semantic Train Data
-### Get train_sgg_vision_dagger_without_env train data
-1. use_exploration_frame_feats=False
-"task_desc_string", "expert_action", "sgg_meta_data", "rgb_image",
-```
-python dagger/save_expert_dagger.py config/save_semantic_data_base.yaml --semantic_config_file config/save_semantic_data.yaml
-```
-2. use_exploration_frame_feats=True
-"exploration_img", "exploration_sgg_meta_data"
-```
-python dagger/save_expert_dagger.py config/save_semantic_data_base.yaml --semantic_config_file config/save_semantic_data.yaml
-```
 
 ## SGG train object relation attribute
 ### 1. Get SGG Train Data
-$ALFRED_ROOT/DATASET_SGG.md
+$ALFWORLD_ROOT/DATASET_SGG.md
 
 ### 2. Train SGG
 ```
@@ -70,12 +59,12 @@ python main.py --config-file configs/attribute.yaml --inference --resume 99999 -
 ## Semantic Global Graph
 ### Oracle - Test semantic graph
 ```
-cd $ALFRED_ROOT/agents/
+cd $ALFWORLD_ROOT/agents/
 python semantic_graph/semantic_graph.py config/semantic_graph_base.yaml --semantic_config_file config/oracle_semantic_graph.yaml
 ``` 
 ### Oracle - Train with semantic graph dagger
 ```
-cd $ALFRED_ROOT/agents/
+cd $ALFWORLD_ROOT/agents/
 python dagger/train_sgg_vision_dagger.py config/semantic_graph_base.yaml --semantic_config_file config/oracle_semantic_graph.yaml
 ```
 
@@ -112,6 +101,19 @@ dict_ANALYZE_GRAPH = {
 }
 ```
 
+## Visual Semantic Train Data
+### Get train_sgg_vision_dagger_without_env training data
+1. Get training data. use_exploration_frame_feats=False
+"task_desc_string", "expert_action", "sgg_meta_data", "rgb_image",
+```
+python dagger/save_expert_data.py config/save_semantic_data_base.yaml --semantic_config_file config/save_semantic_data.yaml
+```
+2. Get exploration training data. use_exploration_frame_feats=True
+"exploration_img", "exploration_sgg_meta_data"
+```
+python dagger/save_expert_data.py config/save_semantic_data_base.yaml --semantic_config_file config/save_semantic_data.yaml
+```
+
 ### Hete semantic graph
 #### train_sgg_vision_dagger_without_env
 ```
@@ -130,6 +132,11 @@ CUDA_VISIBLE_DEVICES=1 python dagger/train_sgg_vision_dagger.py config/hete_grap
 CUDA_VISIBLE_DEVICES=1 python dagger/train_sgg_vision_dagger.py config/hete_graph_base.yaml --semantic_config_file config/exploration_hete_semantic_graph.yaml
 ```
 
+### memory: Global Graph state, current info state, important node (choose node), all changed history nodes
+```
+CUDA_VISIBLE_DEVICES=1 python dagger/train_sgg_vision_dagger_without_env.py config/without_env_base.yaml --semantic_config_file config/memory_semantic_graph.yaml
+```
+
 ## Analyze Graph
 ```
 CUDA_VISIBLE_DEVICES=1 python dagger/train_sgg_vision_dagger.py config/analyze_base.yaml --semantic_config_file config/analyze_semantic_graph.yaml
@@ -137,7 +144,12 @@ CUDA_VISIBLE_DEVICES=1 python dagger/train_sgg_vision_dagger.py config/analyze_b
 
 
 
+# Eval
+```
+python eval/run_semantic_eval.py config/eval_semantic_config.yaml --semantic_config_file config/eval_semantic_graph.yaml
 
+python eval/run_eval.py config/eval_config.yaml
+```
 
 
 

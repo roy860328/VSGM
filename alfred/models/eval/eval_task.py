@@ -31,7 +31,20 @@ class EvalTask(Eval):
                 r_idx = task['repeat_idx']
                 print("Evaluating: %s" % (traj['root']))
                 print("No. of trajectories left: %d" % (task_queue.qsize()))
+                try:
+                    meta_datas = cls.explore_scene(env, model)
+                    if model.semantic_graph_implement.use_exploration_frame_feats:
+                        model.semantic_graph_implement.update_exploration_data_to_global_graph(
+                            meta_datas,
+                            0
+                        )
+                except Exception as e:
+                    print(e)
                 cls.evaluate(env, model, r_idx, resnet, traj, args, lock, successes, failures, results)
+                try:
+                    model.finish_of_episode()
+                except Exception as e:
+                    print(e)
             except Exception as e:
                 import traceback
                 traceback.print_exc()
@@ -77,6 +90,7 @@ class EvalTask(Eval):
             curr_depth_image = env.last_event.depth_frame * (255 / 10000)
             curr_depth_image = curr_depth_image.astype(np.uint8)
             feat['frames_depth'] = curr_depth_image
+            feat['all_meta_datas'] = cls.get_meta_datas(env)
             # forward model
             m_out = model.step(feat)
             m_pred = model.extract_preds(m_out, [traj_data], feat, clean_special_tokens=False)

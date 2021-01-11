@@ -9,8 +9,8 @@ import importlib
 import numpy as np
 
 import sys
-sys.path.insert(0, os.environ['ALFRED_ROOT'])
-sys.path.insert(0, os.path.join(os.environ['ALFRED_ROOT'], 'agents'))
+sys.path.insert(0, os.environ['ALFWORLD_ROOT'])
+sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents'))
 
 from agent import OracleSggDAggerAgent
 import modules.generic as generic
@@ -309,11 +309,11 @@ def train():
         ood_eval_game_points, ood_eval_game_step, ood_eval_game_goal_condition_points = 0.0, 0.0, 0.0
         if agent.run_eval:
             if id_eval_env is not None and episode_no != batch_size:
-                id_eval_res = evaluate_semantic_graph_dagger(id_eval_env, agent, num_id_eval_game)
+                id_eval_res, _ = evaluate_semantic_graph_dagger(id_eval_env, agent, num_id_eval_game)
                 id_eval_game_points, id_eval_game_step = id_eval_res['average_points'], id_eval_res['average_steps']
                 id_eval_game_goal_condition_points = id_eval_res['average_goal_condition_points']
             if ood_eval_env is not None and episode_no != batch_size:
-                ood_eval_res = evaluate_semantic_graph_dagger(ood_eval_env, agent, num_ood_eval_game)
+                ood_eval_res, _ = evaluate_semantic_graph_dagger(ood_eval_env, agent, num_ood_eval_game)
                 ood_eval_game_points, ood_eval_game_step = ood_eval_res['average_points'], ood_eval_res['average_steps']
                 ood_eval_game_goal_condition_points = ood_eval_res['average_goal_condition_points']
             if id_eval_game_points >= best_performance_so_far:

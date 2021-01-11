@@ -5,7 +5,7 @@ from torch_geometric.data import Data
 from collections import defaultdict
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
-sys.path.insert(0, os.path.join(os.environ['ALFRED_ROOT']))
+sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT']))
 from agents.semantic_graph import utils
 import importlib
 
@@ -410,8 +410,8 @@ class SceneGraph(object):
 
 
 if __name__ == '__main__':
-    sys.path.insert(0, os.environ['ALFRED_ROOT'])
-    sys.path.insert(0, os.path.join(os.environ['ALFRED_ROOT'], 'agents'))
+    sys.path.insert(0, os.environ['ALFWORLD_ROOT'])
+    sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents'))
     import modules.generic as generic
     from sgg import alfred_data_format
 

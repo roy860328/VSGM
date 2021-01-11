@@ -1,46 +1,36 @@
 import os
 import sys
+import operator
+from queue import PriorityQueue
 import copy
 import numpy as np
 import torch
 import torch.nn.functional as F
 import modules.memory as memory
 from agent import TextDAggerAgent
-from modules.generic import to_np, to_pt, _words_to_ids, pad_sequences, preproc, max_len, ez_gather_dim_1, LinearSchedule
+from modules.generic import to_np, to_pt, _words_to_ids, pad_sequences, preproc, max_len, ez_gather_dim_1, LinearSchedule, BeamSearchNode
 from modules.layers import NegativeLogLoss, masked_mean, compute_mask
 import torchvision.transforms as T
 from torchvision import models
 from torchvision.ops import boxes as box_ops
 import importlib
 
-sys.path.insert(0, os.path.join(os.environ['ALFRED_ROOT'], 'agents'))
+sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents'))
 from agents.utils import tensorboard
-sys.path.insert(0, os.path.join(os.environ['ALFRED_ROOT'], 'agents', 'semantic_graph'))
+sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents', 'semantic_graph'))
 import pdb
 from semantic_graph import SceneGraph
 from sgg import alfred_data_format, sgg
 
 
-class OracleSggDAggerAgent(TextDAggerAgent):
-    '''
-    Vision Agent trained with DAgger
-    '''
+class SemanticGraphImplement():
     def __init__(self, config):
-        super().__init__(config)
-
-        assert self.action_space == "generation"
-
-        self.use_gpu = config['general']['use_cuda']
-        self.transform = T.Compose([T.ToTensor()])
-
-        # choose vision model
-        self.vision_model_type = config['vision_dagger']['model_type']
-        self.use_exploration_frame_feats = config['vision_dagger']['use_exploration_frame_feats']
-        self.sequence_aggregation_method = config['vision_dagger']['sequence_aggregation_method']
-
         '''
         NEW
         '''
+        self.use_gpu = config['general']['use_cuda']
+        self.use_exploration_frame_feats = config['vision_dagger']['use_exploration_frame_feats']
+
         # Semantic graph create
         self.cfg_semantic = config['semantic_cfg']
         self.ANALYZE_GRAPH = self.cfg_semantic.GENERAL.ANALYZE_GRAPH
@@ -48,6 +38,7 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         self.isORACLE = self.cfg_semantic.SCENE_GRAPH.ORACLE
         self.EMBED_CURRENT_STATE = self.cfg_semantic.SCENE_GRAPH.EMBED_CURRENT_STATE
         self.EMBED_HISTORY_CHANGED_NODES = self.cfg_semantic.SCENE_GRAPH.EMBED_HISTORY_CHANGED_NODES
+        self.RESULT_FEATURE = self.cfg_semantic.SCENE_GRAPH.RESULT_FEATURE
         # model
         self.graph_embed_model = importlib.import_module(self.cfg_semantic.SCENE_GRAPH.MODEL)
         self.graph_embed_model = self.graph_embed_model.Net(
@@ -71,11 +62,7 @@ class OracleSggDAggerAgent(TextDAggerAgent):
                 )
             self.detector.eval()
             self.detector.cuda()
-
-        self.load_pretrained = self.cfg_semantic.GENERAL.LOAD_PRETRAINED
-        self.load_from_tag = self.cfg_semantic.GENERAL.LOAD_PRETRAINED_PATH
-
-        self.summary_writer = tensorboard.TensorBoardX(config["general"]["save_path"])
+        self.use_gpu = config['general']['use_cuda']
 
     def reset_all_scene_graph(self):
         global_graphs = []
@@ -99,10 +86,6 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         if self.PRINT_DEBUG:
             # [(26, 13, 0), (80, 10, 2), (72, 4, 2), (25, 7, 1), (30, 5, 3), (27, 5, 1), (59, 14, 4), (30, 9, 1), (31, 6, 3), (61, 6, 0), (32, 4, 2), (36, 5, 2), (44, 14, 1), (19, 2, 2), (73, 15, 1), (77, 8, 4), (56, 9, 2), (59, 10, 4), (72, 5, 1), (16, 3, 0), (40, 13, 2), (22, 4, 3), (61, 9, 1), (23, 11, 1), (29, 6, 2), (90, 5, 1), (26, 13, 1), (93, 4, 3), (23, 14, 3), (37, 4, 2), (27, 7, 1), (69, 2, 6), (54, 1, 0), (34, 12, 3), (71, 21, 4), (95, 17, 1), (19, 7, 1), (25, 12, 1), (53, 6, 3), (28, 6, 3), (18, 9, 3), (44, 4, 1), (36, 5, 4), (34, 9, 0), (31, 3, 1), (29, 7, 1), (33, 5, 1), (59, 3, 2), (27, 8, 2), (13, 5, 1), (29, 15, 1), (32, 5, 1), (37, 10, 3), (65, 8, 2), (18, 13, 0), (75, 11, 0), (28, 4, 2), (58, 3, 0), (40, 5, 1), (29, 2, 1), (60, 9, 2), (27, 7, 3), (31, 14, 2), (32, 3, 3)]
             print("WARNING For DEBUG. \nglobal_graph nodes numbers result: \n", global_graphs)
-
-    def finish_of_episode(self, episode_no, batch_size, decay_lr=False):
-        super().finish_of_episode(episode_no, batch_size, decay_lr=decay_lr)
-        self.reset_all_scene_graph()
 
     def get_env_last_event_data(self, thor):
         env = thor.env
@@ -166,6 +149,8 @@ class OracleSggDAggerAgent(TextDAggerAgent):
         return graph_embed_features, store_state, dict_objectIds_to_score
 
     def update_exploration_data_to_global_graph(self, exploration_transition_cache, env_index):
+        if not self.use_exploration_frame_feats:
+            return
         if self.PRINT_DEBUG:
             print("=== update_exploration_data_to_global_graph ===")
         scene_graph = self.scene_graphs[env_index]
@@ -183,6 +168,59 @@ class OracleSggDAggerAgent(TextDAggerAgent):
                 result = results[0]
                 scene_graph.add_local_graph_to_global_graph(rgb_image, result)
         # import pdb; pdb.set_trace()
+
+
+class OracleSggDAggerAgent(TextDAggerAgent):
+    '''
+    Vision Agent trained with DAgger
+    '''
+    def __init__(self, config):
+        super().__init__(config)
+
+        assert self.action_space == "generation"
+
+        self.use_gpu = config['general']['use_cuda']
+        self.transform = T.Compose([T.ToTensor()])
+        '''
+        semantic graph
+        '''
+        self.cfg_semantic = config['semantic_cfg']
+        self.ANALYZE_GRAPH = self.cfg_semantic.GENERAL.ANALYZE_GRAPH
+        self.PRINT_DEBUG = self.cfg_semantic.GENERAL.PRINT_DEBUG
+        self.semantic_graph_implement = SemanticGraphImplement(config)
+
+        # choose vision model
+        self.vision_model_type = config['vision_dagger']['model_type']
+        self.use_exploration_frame_feats = config['vision_dagger']['use_exploration_frame_feats']
+        self.sequence_aggregation_method = config['vision_dagger']['sequence_aggregation_method']
+
+        self.load_pretrained = self.cfg_semantic.GENERAL.LOAD_PRETRAINED
+        self.load_from_tag = self.cfg_semantic.GENERAL.LOAD_PRETRAINED_PATH
+
+        self.summary_writer = tensorboard.TensorBoardX(config["general"]["save_path"])
+
+    def reset_all_scene_graph(self):
+        self.semantic_graph_implement.reset_all_scene_graph()
+
+    # visual features for state representation
+    def extract_visual_features(self, thor=None, store_state=None, hidden_state=None, env_index=None):
+        graph_embed_features, store_state, dict_objectIds_to_score = \
+            self.semantic_graph_implement.extract_visual_features(
+                thor=thor,
+                store_state=store_state,
+                hidden_state=hidden_state,
+                env_index=env_index)
+        return graph_embed_features, store_state, dict_objectIds_to_score
+
+    def update_exploration_data_to_global_graph(self, exploration_transition_cache, env_index):
+        self.semantic_graph_implement.update_exploration_data_to_global_graph(
+            exploration_transition_cache,
+            env_index
+        )
+
+    def finish_of_episode(self, episode_no, batch_size, decay_lr=False):
+        super().finish_of_episode(episode_no, batch_size, decay_lr=decay_lr)
+        self.semantic_graph_implement.reset_all_scene_graph()
 
     # without recurrency
     def train_dagger(self):
@@ -204,7 +242,7 @@ class OracleSggDAggerAgent(TextDAggerAgent):
                 store_states = [transition[0] for transition in sequence_of_transition]
                 task_desc_strings = [[transition[1]] for transition in sequence_of_transition]
                 expert_actions = [[transition[3]] for transition in sequence_of_transition]
-                env_index = replay_batch_index % len(self.scene_graphs)
+                env_index = replay_batch_index % len(self.semantic_graph_implement.scene_graphs)
                 if env_index == 0:
                     self.reset_all_scene_graph()
                 # exploration_data
@@ -221,51 +259,18 @@ class OracleSggDAggerAgent(TextDAggerAgent):
                     train_now=False,
                     env_index=env_index,
                 )
-                losses.append(loss)
-            loss = torch.stack(losses).mean()
-            loss = self.grad(loss)
+                if loss is not None:
+                    losses.append(loss)
+            if len(losses):
+                loss = torch.stack(losses).mean()
+                loss = self.grad(loss)
+            else:
+                loss = torch.tensor(0.)
             if self.PRINT_DEBUG:
                 print("loss: ", loss.item())
             self.summary_writer.training_loss(train_loss=loss, optimizer=self.optimizer)
         else:
             raise NotImplementedError()
-
-    # not recurrent loss
-    def train_command_generation_teacher_force(self, observation_feats, task_desc_strings, target_strings):
-        input_target_strings = [" ".join(["[CLS]"] + item.split()) for item in target_strings]
-        output_target_strings = [" ".join(item.split() + ["[SEP]"]) for item in target_strings]
-        batch_size = len(observation_feats)
-
-        aggregated_obs_feat = self.aggregate_feats_seq(observation_feats)
-        h_obs = self.online_net.vision_fc(aggregated_obs_feat)
-        # ['[SEP] clean some potato and put it in garbagecan.']
-        # torch.Size([1, 14, 64])
-        # tensor([[1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 0., 0., 0.]])
-        h_td, td_mask = self.encode(task_desc_strings, use_model="online")
-        h_td_mean = self.online_net.masked_mean(h_td, td_mask).unsqueeze(1)
-        h_obs = h_obs.to(h_td_mean.device)
-        # torch.Size([1, 2, 64])
-        vision_td = torch.cat((h_obs, h_td_mean), dim=1) # batch x k boxes x hi
-        vision_td_mask = torch.ones((batch_size, h_obs.shape[1]+h_td_mean.shape[1])).to(h_td_mean.device)
-
-        input_target = self.get_word_input(input_target_strings)
-        ground_truth = self.get_word_input(output_target_strings)  # batch x target_length
-        target_mask = compute_mask(input_target)  # mask of ground truth should be the same
-        pred = self.online_net.vision_decode(input_target, target_mask, vision_td, vision_td_mask, None)  # batch x target_length x vocab
-
-        batch_loss = NegativeLogLoss(pred * target_mask.unsqueeze(-1), ground_truth, target_mask, smoothing_eps=self.smoothing_eps)
-        loss = torch.mean(batch_loss)
-
-        if loss is None:
-            return None, None
-        # Backpropagate
-        self.online_net.zero_grad()
-        self.optimizer.zero_grad()
-        loss.backward()
-        # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
-        torch.nn.utils.clip_grad_norm_(self.online_net.parameters(), self.clip_grad_norm)
-        self.optimizer.step()  # apply gradients
-        return to_np(pred), to_np(loss)
 
     '''
     from train_sgg_vision_dagger_without_env.py
@@ -299,14 +304,17 @@ class OracleSggDAggerAgent(TextDAggerAgent):
             vision_td = torch.cat((h_obs, h_td_mean), dim=1) # batch x k boxes x hid
             vision_td_mask = torch.ones((batch_size, h_obs.shape[1]+h_td_mean.shape[1])).to(h_td_mean.device)
 
-            averaged_vision_td_representation = self.online_net.masked_mean(vision_td, vision_td_mask)
-            current_dynamics = self.online_net.rnncell(averaged_vision_td_representation, previous_dynamics) if previous_dynamics is not None else self.online_net.rnncell(averaged_vision_td_representation)
+            averaged_vision_td_representation = self.online_net.masked_mean(
+                vision_td, vision_td_mask)
+            current_dynamics = self.online_net.rnncell(
+                averaged_vision_td_representation, previous_dynamics) if previous_dynamics is not None else self.online_net.rnncell(averaged_vision_td_representation)
 
             input_target = self.get_word_input(input_target_strings)
             ground_truth = self.get_word_input(output_target_strings)  # batch x target_length
             target_mask = compute_mask(input_target)  # mask of ground truth should be the same
             # torch.Size([1, 5, 28996])
-            pred = self.online_net.vision_decode(input_target, target_mask, vision_td, vision_td_mask, current_dynamics)  # batch x target_length x vocab
+            pred = self.online_net.vision_decode(
+                input_target, target_mask, vision_td, vision_td_mask, current_dynamics)  # batch x target_length x vocab
             # pred_ind = torch.argmax(pred, dim=2)
             # values, topk_indices = torch.topk(pred, 3, dim=2)
             # print("\nground_truth: {}\npred: {}\noutput_target_strings: {}".format(
@@ -401,6 +409,110 @@ class OracleSggDAggerAgent(TextDAggerAgent):
             res = [self.tokenizer.decode(item) for item in input_target_list]
             res = [item.replace("[CLS]", "").replace("[SEP]", "").strip() for item in res]
             res = [item.replace(" in / on ", " in/on " ) for item in res]
+            return res, current_dynamics
+
+    def command_generation_beam_search_generation(self, observation_feats, task_desc_strings, previous_dynamics):
+        with torch.no_grad():
+            batch_size = len(observation_feats)
+            beam_width = self.beam_width
+            if beam_width == 1:
+                res, current_dynamics = self.command_generation_greedy_generation(observation_feats, task_desc_strings, previous_dynamics)
+                res = [[item] for item in res]
+                return res, current_dynamics
+            generate_top_k = self.generate_top_k
+            res = []
+
+            aggregated_obs_feat = self.aggregate_feats_seq(observation_feats)
+            h_obs = self.online_net.vision_fc(aggregated_obs_feat)
+            h_td, td_mask = self.encode(task_desc_strings, use_model="online")
+            h_td_mean = self.online_net.masked_mean(h_td, td_mask).unsqueeze(1)
+            h_obs = h_obs.to(h_td_mean.device)
+            vision_td = torch.cat((h_obs, h_td_mean), dim=1) # batch x k boxes x hid
+            vision_td_mask = torch.ones((batch_size, h_obs.shape[1]+h_td_mean.shape[1])).to(h_td_mean.device)
+
+            averaged_vision_td_representation = self.online_net.masked_mean(vision_td, vision_td_mask)
+
+            if self.recurrent:
+                averaged_representation = self.online_net.masked_mean(averaged_vision_td_representation, vision_td_mask)  # batch x hid
+                current_dynamics = self.online_net.rnncell(averaged_representation, previous_dynamics) if previous_dynamics is not None else self.online_net.rnncell(averaged_representation)
+            else:
+                current_dynamics = None
+
+            for b in range(batch_size):
+
+                # starts from CLS tokens
+                __input_target_list = [self.word2id["[CLS]"]]
+                __input_obs = aggregated_obs_feat[b: b + 1]  # 1 x obs_len
+                __obs_mask = td_mask[b: b + 1]  # 1 x obs_len
+                __aggregated_obs_representation = averaged_vision_td_representation[b: b + 1]  # 1 x obs_len x hid
+                if current_dynamics is not None:
+                    __current_dynamics = current_dynamics[b: b + 1]  # 1 x hid
+                else:
+                    __current_dynamics = None
+                ended_nodes = []
+
+                # starting node -  previous node, input target, logp, length
+                node = BeamSearchNode(None, __input_target_list, 0, 1)
+                nodes_queue = PriorityQueue()
+                # start the queue
+                nodes_queue.put((node.val, node))
+                queue_size = 1
+
+                while(True):
+                    # give up when decoding takes too long
+                    if queue_size > 2000:
+                        break
+
+                    # fetch the best node
+                    score, n = nodes_queue.get()
+                    __input_target_list = n.input_target
+
+                    if (n.input_target[-1] == self.word2id["[SEP]"] or n.length >= self.max_target_length) and n.previous_node != None:
+                        ended_nodes.append((score, n))
+                        # if we reached maximum # of sentences required
+                        if len(ended_nodes) >= generate_top_k:
+                            break
+                        else:
+                            continue
+
+                    input_target = pad_sequences([__input_target_list], dtype='int32')
+                    input_target = to_pt(input_target, self.use_cuda)
+                    target_mask = compute_mask(input_target)
+                    # decode for one step using decoder
+                    pred = self.online_net.decode(input_target, target_mask, __aggregated_obs_representation, __obs_mask, __current_dynamics, __input_obs)  # 1 x target_length x vocab
+                    pred = pred[0][-1].cpu()
+                    gt_zero = torch.gt(pred, 0.0).float()  # vocab
+                    epsilon = torch.le(pred, 0.0).float() * 1e-8  # vocab
+                    log_pred = torch.log(pred + epsilon) * gt_zero  # vocab
+
+                    top_beam_width_log_probs, top_beam_width_indicies = torch.topk(log_pred, beam_width)
+                    next_nodes = []
+
+                    for new_k in range(beam_width):
+                        pos = top_beam_width_indicies[new_k]
+                        log_p = top_beam_width_log_probs[new_k].item()
+                        node = BeamSearchNode(n, __input_target_list + [pos], n.log_prob + log_p, n.length + 1)
+                        next_nodes.append((node.val, node))
+
+                    # put them into queue
+                    for i in range(len(next_nodes)):
+                        score, nn = next_nodes[i]
+                        nodes_queue.put((score, nn))
+                    # increase qsize
+                    queue_size += len(next_nodes) - 1
+
+                # choose n best paths
+                if len(ended_nodes) == 0:
+                    ended_nodes = [nodes_queue.get() for _ in range(generate_top_k)]
+
+                utterances = []
+                for score, n in sorted(ended_nodes, key=operator.itemgetter(0)):
+                    utte = n.input_target
+                    utte_string = self.tokenizer.decode(utte)
+                    utterances.append(utte_string)
+                utterances = [item.replace("[CLS]", "").replace("[SEP]", "").strip() for item in utterances]
+                utterances = [item.replace(" in / on ", " in/on " ) for item in utterances]
+                res.append(utterances)
             return res, current_dynamics
 
     def get_vision_feat_mask(self, observation_feats):

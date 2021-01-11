@@ -15,8 +15,8 @@ pip install imageio
 ```
 cd gcn/alfred
 # linux
-export ALFRED_ROOT=/home/host/gcn/alfred/
-export ALFRED_ROOT=/home/alfworld/
+export ALFRED_ROOT=/home/alfred/
+export ALFWORLD_ROOT=/home/alfworld/
 # windows
 SET ALFRED_ROOT=D:\HetG\alfred
 SET ALFRED_ROOT=D:\alfred\alfred
@@ -96,8 +96,26 @@ python models/train/train_graph.py --data data/full_2.1.0/ --model fast_embeddin
 python models/train/train_parallel.py --data data/full_2.1.0/ --model contrastive_pretrain_im --dout exp/model,SimCLR_{model},heterograph__attention_,name,pm_and_subgoals_01 --splits data/splits/oct21.json --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --HETAttention --dgcnout 128 --demb 300 --dframe 1000 --dhid 64 --HetLowSg --gpu --gpu_id 0 --DataParallelDevice 0 --DataParallelDevice 1
 ```
 
-## Eval
-### Build AI2-THOR method
+# Semantic graph
+## generate Semantic graph data
+```
+cd alfred/gen
+python scripts/augment_meta_data_trajectories.py --data_path ../data/full_2.1.0/ --num_threads 4 --smooth_nav --time_delays
+```
+
+## train Semantic graph
+```
+python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/memory_semantic_graph.yaml --data data/full_2.1.0/ --model seq2seq_im_semantic --dout exp/memory{model},name,pm_and_subgoals_01 --splits data/splits/oct21.json --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --HETAttention --dgcnout 128 --demb 300 --dframe 1000 --dhid 64 --HetLowSg --gpu --gpu_id 0 --DataParallelDevice 0 --DataParallelDevice 1
+```
+
+## MOCA + Semantic graph
+https://github.com/gistvision/moca
+```
+CUDA_VISIBLE_DEVICES=1 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/memory_semantic_graph.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_semantic --dout exp/moca_memory{model},name,pm_and_subgoals_01 --splits data/splits/oct21.json --batch 5 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --demb 100 --dhid 256 --gpu
+```
+
+# Eval
+## Build AI2-THOR method
 1. install https://github.com/allenai/ai2thor-docker
 2. 		
 (alfred: https://medium.com/@etendue2013/how-to-run-ai2-thor-simulation-fast-with-google-cloud-platform-gcp-c9fcde213a4a)
@@ -107,12 +125,12 @@ python models/train/train_parallel.py --data data/full_2.1.0/ --model contrastiv
 python3 scripts/startx.py
 ```
 
-#### result
+### result
 XSERVTransSocketUNIXCreateListener: ...SocketCreateListener() failed
 XSERVTransMakeAllCOTSServerListeners: server already running
 (have running in docker)
 
-### eval for train/valid_seen/valid_unseen
+## eval for train/valid_seen/valid_unseen
 ```
 cd alfred
 python models/eval/eval_seq2seq.py --model_path exp/json_feat_2/best_seen.pth --model models.model.seq2seq_im_mask --data data/json_feat_2.1.0 --gpu --gpu_id 0
@@ -121,14 +139,14 @@ python models/eval/eval_seq2seq.py --model_path exp/model,gcn_im,name,pm_and_sub
 --eval_split ['train', 'valid_seen', 'valid_unseen', ]
 --subgoals ['all', 'GotoLocation', 'PickupObject', ...]
 
-### eval hete graph
+## eval hete graph
 ```
 python models/eval/eval_graph.py --model_path exp/{model_path}}/best_seen.pth --model models.model.gcn_im --data data/full_2.1.0/ --gpu --gpu_id 0 --model_hete_graph
 ```
 --HETAttention --dgcnout 1024 --HetLowSg
 --eval_split ['train', 'valid_seen', 'valid_unseen', ]
 --subgoals ['all', 'GotoLocation', 'PickupObject', ...]
-### Leaderboard
+## Leaderboard
 ```
 cd alfred
 python models/eval/leaderboard.py --model_path <model_path>/model.pth --model models.model.seq2seq_im_mask --data data/full_2.1.0/ --gpu --num_threads 5

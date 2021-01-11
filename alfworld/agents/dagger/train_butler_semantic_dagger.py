@@ -11,10 +11,11 @@ sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents'))
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 import modules.generic as generic
-from eval import evaluate_dagger
-from agent import TextDAggerAgent
+from eval.evaluate_butler_semantic_dagger import evaluate_butler_semantic_dagger
+from agent import ButlerSemanticAgent
 from agents.utils.misc import extract_admissible_commands
 from modules.generic import HistoryScoreCache, EpisodicCountingMemory, ObjCentricEpisodicMemory
+import torch
 
 
 def train():
@@ -22,7 +23,7 @@ def train():
     time_1 = datetime.datetime.now()
     step_time = []
     config = generic.load_config()
-    agent = TextDAggerAgent(config)
+    agent = ButlerSemanticAgent(config)
     alfred_env = getattr(importlib.import_module("environment"), config["env"]["type"])(config, train_eval="train")
     env = alfred_env.init_env(batch_size=agent.batch_size)
     
@@ -101,6 +102,25 @@ def train():
         observation_strings = agent.preprocess_observation(observation_strings)
         first_sight_strings = copy.deepcopy(observation_strings)
         agent.observation_pool.push_first_sight(first_sight_strings)
+
+        exploration_datas = []
+        # extract exploration frame features
+        if agent.use_exploration_frame_feats:
+            exploration_frames = env.get_exploration_frames()
+            exploration_sgg_meta_datas = env.get_sgg_meta_datas()
+            for env_index in range(len(exploration_frames)):
+                exploration_frame = exploration_frames[env_index]
+                exploration_sgg_meta_data = exploration_sgg_meta_datas[env_index]
+                store_states = []
+                for one_episode_frames, one_episode_sgg_meta_data in zip(exploration_frame, exploration_sgg_meta_data):
+                    store_state = {
+                        "exploration_img": one_episode_frames,
+                        "exploration_sgg_meta_data": one_episode_sgg_meta_data
+                    }
+                    store_states.append(store_state)
+                agent.update_exploration_data_to_global_graph(store_states, env_index)
+                exploration_datas.append(store_states)
+
         if agent.action_space == "exhaustive":
             action_candidate_list = [extract_admissible_commands(intro, obs) for intro, obs in zip(first_sight_strings, observation_strings)]
         else:
@@ -108,28 +128,43 @@ def train():
         action_candidate_list = agent.preprocess_action_candidates(action_candidate_list)
         observation_strings = [item + " [SEP] " + a for item, a in zip(observation_strings, execute_actions)]  # appending the chosen action at previous step into the observation
 
-        # it requires to store sequences of transitions into memory with order,
-        # so we use a cache to keep what agents returns, and push them into memory
-        # altogether in the end of game.
         transition_cache = []
         still_running_mask = []
         sequence_game_points = []
         print_actions = []
         report = agent.report_frequency > 0 and (episode_no % agent.report_frequency <= (episode_no - batch_size) % agent.report_frequency)
 
-        # print(" === observation_strings {} ===".format(observation_strings))
         for step_no in range(agent.max_nb_steps_per_episode):
-            # push obs into observation 
-            agent.observation_pool.push_batch(observation_strings)
-            # get most recent k observations
-            most_recent_observation_strings = agent.observation_pool.get()
-            # print(" === most_recent_observation_strings {} ===".format(most_recent_observation_strings))
+            with torch.no_grad():
+                observation_feats, store_states, dict_objectIds_to_scores = None, [], []
+                for env_index in range(len(env.envs)):
+                    if previous_dynamics is not None:
+                        hidden_state = previous_dynamics[env_index].unsqueeze(0)
+                    else:
+                        hidden_state = None
+                    observation_feat, store_state, dict_objectIds_to_score = agent.extract_visual_features(
+                        thor=env.envs[env_index],
+                        hidden_state=hidden_state,
+                        env_index=env_index
+                        )
+                    if observation_feats is None:
+                        observation_feats = observation_feat
+                    else:
+                        observation_feats.extend(observation_feat)
+                    store_states.append(store_state)
+                    dict_objectIds_to_scores.append(dict_objectIds_to_score)
 
-            # predict actions
+            agent.observation_pool.push_batch(observation_strings)
+            most_recent_observation_strings = agent.observation_pool.get()
+            observation = {
+                "most_recent_observation_strings": most_recent_observation_strings,
+                "observation_feats": observation_feats,
+                "store_states": store_states,
+            }
+
             if agent.action_space == "generation":
-                agent_actions, current_dynamics = agent.command_generation_greedy_generation(most_recent_observation_strings, task_desc_strings, previous_dynamics)
-            elif agent.action_space in ["admissible", "exhaustive"]:
-                agent_actions, _, current_dynamics = agent.admissible_commands_greedy_generation(most_recent_observation_strings, task_desc_strings, action_candidate_list, previous_dynamics)
+                agent_actions, current_dynamics = agent.command_generation_greedy_generation(
+                    observation, task_desc_strings, previous_dynamics)
             else:
                 raise NotImplementedError()
 
@@ -155,7 +190,7 @@ def train():
                 else:
                     execute_actions.append(agent_actions[b])
 
-            replay_info = [most_recent_observation_strings, task_desc_strings, action_candidate_list, expert_actions, expert_indices]
+            replay_info = [observation, task_desc_strings, action_candidate_list, expert_actions, expert_indices]
             transition_cache.append(replay_info)
 
             env_step_start_time = datetime.datetime.now()
@@ -174,7 +209,7 @@ def train():
                 action_candidate_list = list(infos["admissible_commands"])
             action_candidate_list = agent.preprocess_action_candidates(action_candidate_list)
             observation_strings = [item + " [SEP] " + a for item, a in zip(observation_strings, execute_actions)]  # appending the chosen action at previous step into the observation
-            print(" === observation_strings {} ===".format(observation_strings))
+            # print(" === observation_strings {} ===".format(observation_strings))
             previous_dynamics = current_dynamics
 
             if step_in_total % agent.dagger_update_per_k_game_steps == 0:
@@ -207,9 +242,18 @@ def train():
             for b in range(batch_size):
                 trajectory = []
                 for i in range(len(transition_cache)):
-                    observation_strings, task_strings, action_candidate_list, expert_actions, expert_indices = transition_cache[i]
-                    trajectory.append([observation_strings[b], task_strings[b], action_candidate_list[b],
-                                       expert_actions[b], expert_indices[b]])
+                    observation, task_strings, action_candidate_list, expert_actions, expert_indices = transition_cache[i]
+                    observation = {
+                        "most_recent_observation_strings": observation["most_recent_observation_strings"][b],
+                        "observation_feats": observation["observation_feats"][b],
+                        "store_states": observation["store_states"][b],
+                    }
+                    if i == 0:
+                        trajectory.append([observation, task_strings[b], action_candidate_list[b],
+                                           expert_actions[b], expert_indices[b], exploration_datas[b]])
+                    else:
+                        trajectory.append([observation, task_strings[b], action_candidate_list[b],
+                                           expert_actions[b], expert_indices[b], []])
                     if still_running_mask_np[i][b] == 0.0:
                         break
                 agent.dagger_memory.push(trajectory)
@@ -234,17 +278,17 @@ def train():
         avg_step_time = np.mean(np.array(step_time))
         print("Model: {:s} | Episode: {:3d} | {:s} | time spent: {:s} | eps/sec : {:2.3f} | avg step time: {:2.10f} | loss: {:2.3f} | game points: {:2.3f} | used steps: {:2.3f} | student points: {:2.3f} | student steps: {:2.3f} | fraction assist: {:2.3f} | fraction random: {:2.3f}".format(agent.experiment_tag, episode_no, game_names[0], str(time_2 - time_1).rsplit(".")[0], eps_per_sec, avg_step_time, running_avg_dagger_loss.get_avg(), running_avg_game_points.get_avg(), running_avg_game_steps.get_avg(), running_avg_student_points.get_avg(), running_avg_student_steps.get_avg(), agent.fraction_assist, agent.fraction_random))
         # print(game_id + ":    " + " | ".join(print_actions))
-        print(" | ".join(print_actions))
+        print(" | ".join(print_actions).encode('utf-8'))
 
         # evaluate
         id_eval_game_points, id_eval_game_step = 0.0, 0.0
         ood_eval_game_points, ood_eval_game_step = 0.0, 0.0
         if agent.run_eval:
             if id_eval_env is not None:
-                id_eval_res, _ = evaluate_dagger(id_eval_env, agent, num_id_eval_game)
+                id_eval_res, _ = evaluate_butler_semantic_dagger(id_eval_env, agent, num_id_eval_game)
                 id_eval_game_points, id_eval_game_step = id_eval_res['average_points'], id_eval_res['average_steps']
             if ood_eval_env is not None:
-                ood_eval_res, _ = evaluate_dagger(ood_eval_env, agent, num_ood_eval_game)
+                ood_eval_res, _ = evaluate_butler_semantic_dagger(ood_eval_env, agent, num_ood_eval_game)
                 ood_eval_game_points, ood_eval_game_step = ood_eval_res['average_points'], ood_eval_res['average_steps']
             if id_eval_game_points >= best_performance_so_far:
                 best_performance_so_far = id_eval_game_points

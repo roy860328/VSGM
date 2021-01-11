@@ -6,8 +6,8 @@ import random
 import json
 from PIL import Image
 from torch.utils.data import Dataset
-sys.path.insert(0, os.environ['ALFRED_ROOT'])
-sys.path.insert(0, os.path.join(os.environ['ALFRED_ROOT'], 'agents'))
+sys.path.insert(0, os.environ['ALFWORLD_ROOT'])
+sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents'))
 sys.path.insert(0, os.environ["GRAPH_RCNN_ROOT"])
 from lib.scene_parser.rcnn.structures.bounding_box import BoxList
 import sgg.parser_scene as parser_scene

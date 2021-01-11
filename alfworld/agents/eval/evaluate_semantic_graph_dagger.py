@@ -4,7 +4,7 @@ import torch
 
 import os
 import sys
-sys.path.insert(0, os.environ['ALFRED_ROOT'])
+sys.path.insert(0, os.environ['ALFWORLD_ROOT'])
 from agents.utils.misc import extract_admissible_commands
 
 
@@ -14,6 +14,7 @@ def evaluate_semantic_graph_dagger(env, agent, num_games, debug=False):
     episode_no = 0
     res_points, res_steps, res_gcs = [], [], []
     res_info = []
+    final_dynamics = {}
     with torch.no_grad():
         while(True):
             print("=== eval env.index_save_train_data === ", env.index_save_train_data)
@@ -23,6 +24,8 @@ def evaluate_semantic_graph_dagger(env, agent, num_games, debug=False):
             obs, infos = env.reset()
             game_names = infos["extra.gamefile"]
             batch_size = len(obs)
+            if agent.unstick_by_beam_search:
+                smart = [{"not working": [], "to try": []} for _ in range(batch_size)]
 
             agent.init(batch_size)
             previous_dynamics = None
@@ -87,11 +90,34 @@ def evaluate_semantic_graph_dagger(env, agent, num_games, debug=False):
 
                 # predict actions
                 if agent.action_space == "generation":
+                    prev_actions = copy.copy(execute_actions)
+                    if agent.unstick_by_beam_search:
+                        for i in range(batch_size):
+                            if "Nothing happens" in observation_strings[i]:
+                                smart[i]["not working"].append(execute_actions[i])
+
                     execute_actions, current_dynamics = agent.command_generation_greedy_generation(
                         observation_feats,
                         task_desc_strings,
                         previous_dynamics,
                     )
+                    if agent.unstick_by_beam_search:
+                        for i in range(batch_size):
+                            if "Nothing happens" in observation_strings[i] and execute_actions[i] in smart[i]["not working"]:
+                                if len(smart[i]["to try"]) == 0:
+                                    bs_actions, _ = agent.command_generation_beam_search_generation(
+                                        observation_feats[i: i + 1],
+                                        task_desc_strings[i: i + 1],
+                                        None if previous_dynamics is None else previous_dynamics[i: i + 1]
+                                    )
+                                    bs_actions = bs_actions[0]
+                                    smart[i]["to try"] += bs_actions
+
+                                smart[i]["to try"] = [item for item in smart[i]["to try"] if item != prev_actions[i]]
+                                if len(smart[i]["to try"]) > 0:
+                                    execute_actions[i] = smart[i]["to try"][0]
+                            else:
+                                smart[i] = {"not working": [], "to try": []}  # reset
                 else:
                     raise NotImplementedError()
 
@@ -136,6 +162,14 @@ def evaluate_semantic_graph_dagger(env, agent, num_games, debug=False):
                 if np.sum(still_running) == 0:
                     break
 
+            for n in range(batch_size):
+                Thor = env.envs[n]
+                task_name = Thor.env.save_frames_path
+                final_dynamics[task_name] = {}
+                final_dynamics[task_name]["final_dynamics"] = current_dynamics[n].to('cpu').numpy()
+                final_dynamics[task_name]["observation_feats"] = observation_feats[n].to('cpu').numpy()
+                final_dynamics[task_name]["label"] = Thor.traj_data['task_type']
+
             game_steps = np.sum(np.array(still_running_mask), 0).tolist()  # batch
             game_points = np.max(np.array(sequence_game_points), 0).tolist()  # batch
             game_gcs = np.max(np.array(goal_condition_points), 0).tolist() # batch
@@ -174,4 +208,4 @@ def evaluate_semantic_graph_dagger(env, agent, num_games, debug=False):
             'res_gcs': res_gcs,
             'res_steps': res_steps,
             'res_info': res_info
-        }
+        }, final_dynamics

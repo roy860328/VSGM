@@ -9,7 +9,7 @@ from queue import Queue
 from threading import Thread
 import sys
 import random
-sys.path.insert(0, os.environ['ALFRED_ROOT'])
+sys.path.insert(0, os.environ['ALFWORLD_ROOT'])
 
 from agents.utils.misc import Demangler, get_templated_task_desc, add_task_to_grammar
 from env.thor_env import ThorEnv
@@ -74,7 +74,7 @@ class AlfredThorEnv(object):
         def load_mask_rcnn(self):
             # load pretrained MaskRCNN model if required
             if 'mrcnn' in self.config['controller']['type'] and not self.mask_rcnn:
-                model_path = os.path.join(os.environ['ALFRED_ROOT'],
+                model_path = os.path.join(os.environ['ALFWORLD_ROOT'],
                                           self.config['mask_rcnn']['pretrained_model_path'])
                 self.mask_rcnn = load_pretrained_model(model_path)
 
@@ -115,7 +115,7 @@ class AlfredThorEnv(object):
                 f.write("Task: %s\r\n" % str(self.task_desc))
             # setup task for reward
             class args: pass
-            args.reward_config = os.path.join(os.environ['ALFRED_ROOT'], 'agents/config/rewards.json')
+            args.reward_config = os.path.join(os.environ['ALFWORLD_ROOT'], 'agents/config/rewards.json')
             self.env.set_task(self.traj_data, args, reward_type='dense')
 
             # set controller

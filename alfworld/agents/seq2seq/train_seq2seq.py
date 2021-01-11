@@ -6,8 +6,8 @@ import numpy as np
 from tqdm import tqdm
 
 import sys
-sys.path.insert(0, os.environ['ALFRED_ROOT'])
-sys.path.insert(0, os.path.join(os.environ['ALFRED_ROOT'], 'agents'))
+sys.path.insert(0, os.environ['ALFWORLD_ROOT'])
+sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents'))
 
 from agent import TextDAggerAgent
 import modules.generic as generic

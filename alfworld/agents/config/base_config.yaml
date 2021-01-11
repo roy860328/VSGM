@@ -9,7 +9,7 @@ pddl:
   domain: '../data/alfred.pddl'                             # PDDL domain file that defines world dynamics
 
 env:
-  type: 'AlfredTWEnv'                                       # 'AlfredTWEnv' or 'AlfredThorEnv' or 'AlfredHybrid'
+  type: 'AlfredThorEnv'                                       # 'AlfredTWEnv' or 'AlfredThorEnv' or 'AlfredHybrid'
   regen_game_files: False                                   # check if game is solvable by expert and save to game.tw-pddl file
   domain_randomization: False                               # shuffle Textworld print order and object id nums
   task_types: [1, 2, 3, 4, 5, 6]                            # task-type ids: 1 - Pick & Place, 2 - Examine in Light, 3 - Clean & Place, 4 - Heat & Place, 5 - Cool & Place, 6 - Pick Two & Place
@@ -39,7 +39,7 @@ mask_rcnn:
 
 general:
   random_seed: 42
-  use_cuda: False                                            # disable this when running on machine without cuda
+  use_cuda: True                                            # disable this when running on machine without cuda
   visdom: False                                             # plot training/eval curves, run with visdom server
   task: 'alfred'
   training_method: 'dagger'                                 # 'dqn' or 'dagger'
@@ -48,7 +48,7 @@ general:
   hide_init_receptacles: False                              # remove initial observation containing navigable receptacles
 
   training:
-    batch_size: 5
+    batch_size: 10
     max_episode: 50000
     smoothing_eps: 0.1
     optimizer:
@@ -59,11 +59,11 @@ general:
     run_eval: True
     batch_size: 5
     env:
-      type: "AlfredTWEnv"
+      type: "AlfredThorEnv"
 
   checkpoint:
     report_frequency: 1000                                  # report every N episode
-    experiment_tag: 'test'                                  # name of experiment
+    experiment_tag: 'test_AlfredThorEnv'                                  # name of experiment
     load_pretrained: False                                  # during test, enable this so that the agent load your pretrained model
     load_from_tag: 'not loading anything'                   # name of pre-trained model to load in save_path
 
@@ -137,7 +137,7 @@ dagger:
     replay_sample_update_from: 2
 
 vision_dagger:
-  model_type: "resnet"                                      # 'resnet' (whole image features) or 'maskrcnn_whole' (whole image MaskRCNN feats) or 'maskrcnn' (top k MaskRCNN detection feats) or 'no_vision' (zero vision input)
+  model_type: "sgg"                                      # 'resnet' (whole image features) or 'maskrcnn_whole' (whole image MaskRCNN feats) or 'maskrcnn' (top k MaskRCNN detection feats) or 'no_vision' (zero vision input)
   resnet_fc_dim: 64
   maskrcnn_top_k_boxes: 10                                  # top k box features
   use_exploration_frame_feats: False                        # append feats from initial exploration (memory intensive!)

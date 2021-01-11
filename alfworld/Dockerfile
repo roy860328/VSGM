@@ -53,4 +53,4 @@ RUN apt-get update && apt-get install -y \
 RUN mkdir /home/$USER_NAME/alfworld
 RUN cd ${USER_HOME_DIR} && echo $(pwd) && chown $USER_NAME:$USER_NAME -R .
 
-ENTRYPOINT bash -c "export ALFRED_ROOT=~/alfworld && /bin/bash"
+ENTRYPOINT bash -c "export ALFWORLD_ROOT=~/alfworld && /bin/bash"

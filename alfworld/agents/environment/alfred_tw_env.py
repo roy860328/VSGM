@@ -4,7 +4,7 @@ import json
 import glob
 import random
 
-sys.path.insert(0, os.environ['ALFRED_ROOT'])
+sys.path.insert(0, os.environ['ALFWORLD_ROOT'])
 from agents.utils.misc import Demangler, get_templated_task_desc, add_task_to_grammar
 
 import textworld
@@ -181,7 +181,7 @@ class AlfredTWEnv(object):
 
     def get_game_logic(self):
         self.game_logic = {"pddl_domain": open(self.config['pddl']['domain']).read(),
-                           "grammar": "\n".join(open(f).read() for f in glob.glob(os.path.join(os.environ['ALFRED_ROOT'], "data/textworld_data/logic/*.twl2")))}
+                           "grammar": "\n".join(open(f).read() for f in glob.glob(os.path.join(os.environ['ALFWORLD_ROOT'], "data/textworld_data/logic/*.twl2")))}
 
     # use expert to check the game is solvable
     def is_solvable(self, env, game_file_path,

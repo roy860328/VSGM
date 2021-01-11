@@ -6,26 +6,26 @@ import sys
 sys.path.insert(0, os.environ['ALFWORLD_ROOT'])
 sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents'))
 
-from agent import TextDAggerAgent
+from agent import OracleSggDAggerAgent
 from agents.semantic_graph.utils import save_final_dynamics
 import modules.generic as generic
-from eval import evaluate_dagger, evaluate_dqn
+from eval.evaluate_semantic_graph_dagger import evaluate_semantic_graph_dagger
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 def run_eval():
     config = generic.load_config()
-    agent = TextDAggerAgent(config)
+    agent = OracleSggDAggerAgent(config)
 
-    output_dir = config["general"]["save_path"]
+    output_dir = "./runs/"
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
     # load model from checkpoint
-    data_dir = config["general"]["save_path"]
+    data_dir = config['semantic_cfg'].GENERAL.LOAD_PRETRAINED_PATH
     if agent.load_pretrained:
-        if os.path.exists(data_dir + "/" + agent.load_from_tag + ".pt"):
-            agent.load_pretrained_model(data_dir + "/" + agent.load_from_tag + ".pt")
+        if os.path.exists(data_dir + ".pt"):
+            agent.load_pretrained_model(data_dir + ".pt")
             agent.update_target_net()
 
     training_method = config["general"]["training_method"]
@@ -46,16 +46,15 @@ def run_eval():
                 config["dataset"]["eval_ood_data_path"] = eval_path
                 config["controller"]["type"] = controller_type
 
-                alfred_env = getattr(importlib.import_module("environment"), config["general"]["evaluate"]["env"]["type"])(config, train_eval="eval_out_of_distribution")
+                alfred_env = getattr(importlib.import_module("environment"), "AlfredThorEnv")(config, train_eval="eval_out_of_distribution")
                 eval_env = alfred_env.init_env(batch_size=agent.eval_batch_size)
 
                 # evaluate method
                 if training_method == "dagger":
-                    results, final_dynamics = evaluate_dagger(eval_env, agent, alfred_env.num_games*repeats)
-                    if final_dynamics != {}:
-                        final_dynamics_path = eval_env.config['env']['thor']['save_frames_path']
-                        name = eval_env_type + "_" + controller_type + "_" + eval_path.split("/")[-1] + "_final_dynamics"
-                        save_final_dynamics(final_dynamics_path, final_dynamics, name=name)
+                    results, final_dynamics = evaluate_semantic_graph_dagger(eval_env, agent, alfred_env.num_games*repeats)
+                    final_dynamics_path = eval_env.config['env']['thor']['save_frames_path']
+                    name = eval_path.split("/")[-1] + "_final_dynamics"
+                    save_final_dynamics(final_dynamics_path, final_dynamics, name=name)
                 elif training_method == "dqn":
                     results = evaluate_dqn(eval_env, agent, alfred_env.num_games*repeats)
                 else:

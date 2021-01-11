@@ -1,7 +1,7 @@
 import os
 import sys
-sys.path.append(os.path.join(os.environ['ALFRED_ROOT']))
-sys.path.append(os.path.join(os.environ['ALFRED_ROOT'], 'gen'))
+sys.path.append(os.path.join(os.environ['ALFWORLD_ROOT']))
+sys.path.append(os.path.join(os.environ['ALFWORLD_ROOT'], 'gen'))
 
 import json
 import glob
@@ -94,7 +94,7 @@ def get_scene_type(scene_num):
 
 def get_openable_points(traj_data):
     scene_num = traj_data['scene']['scene_num']
-    openable_json_file = os.path.join(os.environ['ALFRED_ROOT'], 'gen/layouts/FloorPlan%d-openable.json' % scene_num)
+    openable_json_file = os.path.join(os.environ['ALFWORLD_ROOT'], 'gen/layouts/FloorPlan%d-openable.json' % scene_num)
     with open(openable_json_file, 'r') as f:
         openable_points = json.load(f)
     return openable_points

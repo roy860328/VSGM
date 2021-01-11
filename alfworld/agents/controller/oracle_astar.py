@@ -1,8 +1,11 @@
 import json
-import gen.constants as constants
-from gen.game_states.task_game_state_full_knowledge import TaskGameStateFullKnowledge
-from gen.agents.deterministic_planner_agent import DeterministicPlannerAgent
-from gen.graph import graph_obj
+import os
+import sys
+sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'gen'))
+import constants as constants
+from game_states.task_game_state_full_knowledge import TaskGameStateFullKnowledge
+from agents.deterministic_planner_agent import DeterministicPlannerAgent
+from graph import graph_obj
 from agents.controller.oracle import OracleAgent
 import os
 
@@ -34,7 +37,7 @@ class OracleAStarAgent(OracleAgent):
         game_state.agent_height = self.env.last_event.metadata['agent']['position']['y']
         game_state.camera_height = game_state.agent_height + constants.CAMERA_HEIGHT_OFFSET
 
-        points_source = os.path.join(os.environ['ALFRED_ROOT'], 'gen/layouts/FloorPlan%s-openable.json' % scene_num)
+        points_source = os.path.join(os.environ['ALFWORLD_ROOT'], 'gen/layouts/FloorPlan%s-openable.json' % scene_num)
         with open(points_source, 'r') as f:
             openable_object_to_point = json.load(f)
         game_state.openable_object_to_point = openable_object_to_point

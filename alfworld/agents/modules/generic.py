@@ -205,6 +205,7 @@ def load_config():
 
     ### other ###
     if args.semantic_config_file is not None:
+        sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents'))
         from config import cfg
         cfg.merge_from_file(args.semantic_config_file)
         cfg.GENERAL.save_path = cfg.GENERAL.save_path + sys.argv[0].split("/")[-1] + "_"
@@ -219,7 +220,7 @@ def load_config():
     # print(config)
 
     output_dir = config["general"]["save_path"]
-    if output_dir != '.':
+    if output_dir != '.' and args.semantic_config_file is not None:
         from shutil import copyfile
         # import pdb; pdb.set_trace()
         folder_count = len(glob.glob(os.path.join(output_dir + "*", "")))

@@ -8,7 +8,7 @@ sys.path.insert(0, os.environ['ALFWORLD_ROOT'])
 from agents.utils.misc import extract_admissible_commands
 
 
-def evaluate_dagger(env, agent, num_games, debug=False):
+def evaluate_butler_semantic_dagger(env, agent, num_games, debug=False):
     env.seed(42)
     agent.eval()
     episode_no = 0
@@ -54,16 +54,54 @@ def evaluate_dagger(env, agent, num_games, debug=False):
             print_actions = []
             report = agent.report_frequency > 0 and (episode_no % agent.report_frequency <= (episode_no - batch_size) % agent.report_frequency)
 
+            # extract exploration frame features
+            if agent.use_exploration_frame_feats:
+                exploration_frames = env.get_exploration_frames()
+                exploration_sgg_meta_datas = env.get_sgg_meta_datas()
+                for env_index in range(len(exploration_frames)):
+                    exploration_frame = exploration_frames[env_index]
+                    exploration_sgg_meta_data = exploration_sgg_meta_datas[env_index]
+                    store_states = []
+                    for one_episode_frames, one_episode_sgg_meta_data in zip(exploration_frame, exploration_sgg_meta_data):
+                        store_state = {
+                            "exploration_img": one_episode_frames,
+                            "exploration_sgg_meta_data": one_episode_sgg_meta_data
+                        }
+                        store_states.append(store_state)
+                    agent.update_exploration_data_to_global_graph(store_states, env_index)
+
             if debug:
                 print(first_sight_strings[0])
                 print(task_desc_strings[0])
 
             for step_no in range(agent.max_nb_steps_per_episode):
+                with torch.no_grad():
+                    observation_feats, store_states, dict_objectIds_to_scores = None, [], []
+                    for env_index in range(len(env.envs)):
+                        if previous_dynamics is not None:
+                            hidden_state = previous_dynamics[env_index].unsqueeze(0)
+                        else:
+                            hidden_state = None
+                        observation_feat, store_state, dict_objectIds_to_score = agent.extract_visual_features(
+                            thor=env.envs[env_index],
+                            hidden_state=hidden_state,
+                            env_index=env_index
+                            )
+                        if observation_feats is None:
+                            observation_feats = observation_feat
+                        else:
+                            observation_feats.extend(observation_feat)
+                        store_states.append(store_state)
+                        dict_objectIds_to_scores.append(dict_objectIds_to_score)
                 # push obs into observation pool
                 agent.observation_pool.push_batch(observation_strings)
                 # get most recent k observations
                 most_recent_observation_strings = agent.observation_pool.get()
-
+                observation = {
+                    "most_recent_observation_strings": most_recent_observation_strings,
+                    "observation_feats": observation_feats,
+                    "store_states": store_states,
+                }
                 # predict actions
                 if agent.action_space == "generation":
                     # heuristically unstick the agent from generating the same thing over and over again
@@ -73,7 +111,8 @@ def evaluate_dagger(env, agent, num_games, debug=False):
                             if "Nothing happens" in observation_strings[i]:
                                 smart[i]["not working"].append(execute_actions[i])
 
-                    execute_actions, current_dynamics = agent.command_generation_greedy_generation(most_recent_observation_strings, task_desc_strings, previous_dynamics)
+                    execute_actions, current_dynamics = agent.command_generation_greedy_generation(
+                        observation, task_desc_strings, previous_dynamics)
 
                     # heuristically unstick the agent from generating the same thing over and over again
                     if agent.unstick_by_beam_search:

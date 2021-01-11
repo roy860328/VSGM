@@ -9,8 +9,8 @@ import importlib
 import numpy as np
 
 import sys
-sys.path.insert(0, os.environ['ALFRED_ROOT'])
-sys.path.insert(0, os.path.join(os.environ['ALFRED_ROOT'], 'agents'))
+sys.path.insert(0, os.environ['ALFWORLD_ROOT'])
+sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents'))
 
 from agent import OracleSggDAggerAgent
 import modules.generic as generic
@@ -64,6 +64,7 @@ def train():
 
     json_file_name = agent.experiment_tag.replace(" ", "_")
     best_performance_so_far = 0.0
+    best_performance_loss = 1000
 
     # load model from checkpoint
     if agent.load_pretrained:
@@ -99,7 +100,7 @@ def train():
         '''
         # Add exploration img & meta data to GraphData
         '''
-        for loop in range(batch_size):
+        for loop in range(10):
             if agent.use_exploration_frame_feats:
                 for env_index in range(len(exploration_transition_caches)):
                     exploration_transition_cache = exploration_transition_caches[env_index]
@@ -133,6 +134,9 @@ def train():
         episode_no += batch_size
         print("episode_no: ", episode_no)
 
+        print("running_avg_dagger_loss.get_avg: ", running_avg_dagger_loss.get_avg())
+        print("best_performance_so_far: ", best_performance_so_far)
+        print("best_performance_loss: ", best_performance_loss)
         if not report:
             continue
         time_2 = datetime.datetime.now()
@@ -144,12 +148,12 @@ def train():
         id_eval_game_points, id_eval_game_step, id_eval_game_goal_condition_points = 0.0, 0.0, 0.0
         ood_eval_game_points, ood_eval_game_step, ood_eval_game_goal_condition_points = 0.0, 0.0, 0.0
         if agent.run_eval:
-            if id_eval_env is not None and episode_no != batch_size:
-                id_eval_res = evaluate_semantic_graph_dagger(id_eval_env, agent, num_id_eval_game)
+            if id_eval_env is not None:# and episode_no != batch_size:
+                id_eval_res, _ = evaluate_semantic_graph_dagger(id_eval_env, agent, num_id_eval_game)
                 id_eval_game_points, id_eval_game_step = id_eval_res['average_points'], id_eval_res['average_steps']
                 id_eval_game_goal_condition_points = id_eval_res['average_goal_condition_points']
-            if ood_eval_env is not None and episode_no != batch_size:
-                ood_eval_res = evaluate_semantic_graph_dagger(ood_eval_env, agent, num_ood_eval_game)
+            if ood_eval_env is not None:# and episode_no != batch_size:
+                ood_eval_res, _ = evaluate_semantic_graph_dagger(ood_eval_env, agent, num_ood_eval_game)
                 ood_eval_game_points, ood_eval_game_step = ood_eval_res['average_points'], ood_eval_res['average_steps']
                 ood_eval_game_goal_condition_points = ood_eval_res['average_goal_condition_points']
             if id_eval_game_points >= best_performance_so_far:
@@ -164,8 +168,8 @@ def train():
                 ood_eval_game_goal_condition_points
             )
         else:
-            if running_avg_dagger_loss.get_avg() >= best_performance_so_far:
-                best_performance_so_far = running_avg_dagger_loss.get_avg()
+            if running_avg_dagger_loss.get_avg() <= best_performance_loss:
+                best_performance_loss = running_avg_dagger_loss.get_avg()
                 agent.save_model_to_path(output_dir + "/" + agent.experiment_tag + ".pt")
         print("Save Model end")
         print("dagger_replay_sample_history_length: ", agent.dagger_replay_sample_history_length)

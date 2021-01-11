@@ -1,12 +1,13 @@
 import os
 import sys
 import json
-sys.path.append(os.path.join(os.environ['ALFRED_ROOT']))
-
+sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'gen'))
 import copy
 import random
-import gen.constants as constants
-from gen.utils.image_util import compress_mask, decompress_mask
+# gen
+import constants as constants
+from utils.image_util import compress_mask, decompress_mask
+#
 from agents.utils.misc import get_templated_task_desc, get_human_anns_task_desc, NumpyArrayEncoder
 from enum import Enum
 

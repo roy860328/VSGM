@@ -4,7 +4,7 @@ import torch
 
 import os
 import sys
-sys.path.insert(0, os.environ['ALFRED_ROOT'])
+sys.path.insert(0, os.environ['ALFWORLD_ROOT'])
 from agents.utils.misc import extract_admissible_commands
 
 
@@ -14,6 +14,7 @@ def evaluate_vision_dagger(env, agent, num_games, debug=False):
     episode_no = 0
     res_points, res_steps, res_gcs = [], [], []
     res_info = []
+    final_dynamics = {}
     with torch.no_grad():
         while(True):
             if episode_no >= num_games:
@@ -106,6 +107,13 @@ def evaluate_vision_dagger(env, agent, num_games, debug=False):
                 if np.sum(still_running) == 0:
                     break
 
+            for n in range(batch_size):
+                Thor = env.envs[n]
+                task_name = Thor.env.save_frames_path
+                final_dynamics[task_name] = {}
+                final_dynamics[task_name]["final_dynamics"] = current_dynamics[n].to('cpu').numpy()
+                final_dynamics[task_name]["label"] = Thor.traj_data['task_type']
+
             game_steps = np.sum(np.array(still_running_mask), 0).tolist()  # batch
             game_points = np.max(np.array(sequence_game_points), 0).tolist()  # batch
             game_gcs = np.max(np.array(goal_condition_points), 0).tolist() # batch
@@ -142,4 +150,4 @@ def evaluate_vision_dagger(env, agent, num_games, debug=False):
             'res_gcs': res_gcs,
             'res_steps': res_steps,
             'res_info': res_info
-        }
+        }, final_dynamics

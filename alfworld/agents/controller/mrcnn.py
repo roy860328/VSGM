@@ -12,7 +12,9 @@ import traceback
 import glob
 
 import numpy as np
-import gen.constants as constants
+import sys
+sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'gen'))
+import constants as constants
 from collections import Counter
 from PIL import Image
 
@@ -57,7 +59,7 @@ class MaskRCNNAgent(BaseAgent):
 
     def get_openable_points(self, traj_data):
         scene_num = traj_data['scene']['scene_num']
-        openable_json_file = os.path.join(os.environ['ALFRED_ROOT'], 'gen/layouts/FloorPlan%d-openable.json' % scene_num)
+        openable_json_file = os.path.join(os.environ['ALFWORLD_ROOT'], 'gen/layouts/FloorPlan%d-openable.json' % scene_num)
         with open(openable_json_file, 'r') as f:
             openable_points = json.load(f)
         return openable_points

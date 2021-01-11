@@ -46,7 +46,20 @@ class EvalSubgoals(Eval):
                 subgoal_idxs = [sg['high_idx'] for sg in traj['plan']['high_pddl'] if sg['discrete_action']['action'] in subgoals_to_evaluate]
                 for eval_idx in subgoal_idxs:
                     print("No. of trajectories left: %d" % (task_queue.qsize()))
+                    try:
+                        meta_datas = cls.explore_scene(env, model)
+                        if model.semantic_graph_implement.use_exploration_frame_feats:
+                            model.semantic_graph_implement.update_exploration_data_to_global_graph(
+                                meta_datas,
+                                0
+                            )
+                    except Exception as e:
+                        print(e)
                     cls.evaluate(env, model, eval_idx, r_idx, resnet, traj, args, lock, successes, failures, results)
+                    try:
+                        model.finish_of_episode()
+                    except Exception as e:
+                        print(e)
             except Exception as e:
                 import traceback
                 traceback.print_exc()
@@ -84,6 +97,7 @@ class EvalSubgoals(Eval):
         fails = 0
         t = 0
         reward = 0
+
         while not done:
             # break if max_steps reached
             if t >= args.max_steps + len(expert_init_actions):
@@ -94,6 +108,7 @@ class EvalSubgoals(Eval):
             feat['frames'] = resnet.featurize([curr_image], batch=1).unsqueeze(0)
             curr_depth_image = np.uint8(env.last_event.depth_frame)
             feat['frames_depth'] = curr_depth_image
+            feat['all_meta_datas'] = cls.get_meta_datas(env)
 
             # expert teacher-forcing upto subgoal
             if t < len(expert_init_actions):

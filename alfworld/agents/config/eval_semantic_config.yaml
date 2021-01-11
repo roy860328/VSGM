@@ -9,7 +9,7 @@ pddl:
   domain: '../data/alfred.pddl'                             # PDDL domain file that defines world dynamics
 
 env:
-  type: 'AlfredTWEnv'                                       # 'AlfredTWEnv' or 'AlfredThorEnv' or 'AlfredHybrid'
+  type: 'AlfredThorEnv'                                       # 'AlfredTWEnv' or 'AlfredThorEnv' or 'AlfredHybrid'
   regen_game_files: False                                   # check if game is solvable by expert and save to game.tw-pddl file
   domain_randomization: False                               # shuffle Textworld print order and object id nums
   task_types: [1, 2, 3, 4, 5, 6]                            # task-type ids: 1 - Pick & Place, 2 - Examine in Light, 3 - Clean & Place, 4 - Heat & Place, 5 - Cool & Place, 6 - Pick Two & Place
@@ -25,14 +25,14 @@ env:
   thor:
     screen_width: 300                                       # width of THOR window
     screen_height: 300                                      # height of THOR window
-    smooth_nav: True                                       # smooth rotations, looks, and translations during navigation (very slow)
+    smooth_nav: False                                       # smooth rotations, looks, and translations during navigation (very slow)
     save_frames_to_disk: False                              # save frame PNGs to disk (useful for making videos)
-    save_frames_path: '../videos/'                          # path to save frame PNGs
+    save_frames_path: '../eval_semantic_video/'                          # path to save frame PNGs
 
 controller:
   type: 'oracle'                                            # 'oracle' or 'oracle_astar' or 'mrcnn' or 'mrcnn_astar' (aka BUTLER)
   debug: False
-  load_receps: True                                         # load receptacle locations from precomputed dict (if available)
+  load_receps: False                                        # load receptacle locations from precomputed dict (if available)
 
 mask_rcnn:
   pretrained_model_path: 'agents/detector/models/mrcnn.pth'
@@ -43,7 +43,7 @@ general:
   visdom: False                                             # plot training/eval curves, run with visdom server
   task: 'alfred'
   training_method: 'dagger'                                 # 'dqn' or 'dagger'
-  save_path: '.'                                            # path to save pytorch models
+  save_path: '../exp/eval_semantic_'                                      # path to save pytorch models
   observation_pool_capacity: 3                              # k-size queue, 0 indicates no observation
   hide_init_receptacles: False                              # remove initial observation containing navigable receptacles
 
@@ -57,15 +57,25 @@ general:
 
   evaluate:
     run_eval: True
-    batch_size: 5
+    batch_size: 3                                           # number of parallel eval threads
+    repeats: 1                                              # number of times to loop over eval games (we used 3 in paper experiments)
+    controllers:                                            # different controllers to evaluate with
+      - 'oracle'
+    envs:                                                   # different environments to evaluate in
+      - 'AlfredThorEnv'
     env:
-      type: "AlfredTWEnv"
+      type:
+       'AlfredThorEnv'
+    eval_paths:                                             # different splits to evaluate on
+      - '../data/json_2.1.1/valid_seen'
+      - '../data/json_2.1.1/valid_unseen'
+    eval_experiment_tag: "eval_run_semantic_001"                     # save results json with this prefix
 
   checkpoint:
-    report_frequency: 1000                                  # report every N episode
-    experiment_tag: 'test_visual'                                  # name of experiment
-    load_pretrained: true                                  # during test, enable this so that the agent load your pretrained model
-    load_from_tag: 'runs/pretrained_checkpoint_ood'                   # name of pre-trained model to load in save_path
+    report_frequency: 10                                    # report every N episode
+    experiment_tag: '.'                                  # name of experiment
+    load_pretrained: True                                   # during test, enable this so that the agent load your pretrained model
+    load_from_tag: '.'               # name of pre-trained model to load in save_path
 
   model:
     encoder_layers: 1
@@ -114,7 +124,7 @@ dagger:
   max_target_length: 20                                     # max token length for seq2seq generation
   beam_width: 10                                            # 1 means greedy
   generate_top_k: 5
-  unstick_by_beam_search: False                             # use beam-search for failed actions, set True during evaluation
+  unstick_by_beam_search: True                              # use beam-search for failed actions, set True during evaluation
 
   training:
     max_nb_steps_per_episode: 50                            # terminate after this many steps
@@ -137,7 +147,7 @@ dagger:
     replay_sample_update_from: 2
 
 vision_dagger:
-  model_type: "resnet"                                      # 'resnet' (whole image features) or 'maskrcnn_whole' (whole image MaskRCNN feats) or 'maskrcnn' (top k MaskRCNN detection feats) or 'no_vision' (zero vision input)
+  model_type: "sgg"                                      # 'resnet' (whole image features) or 'maskrcnn_whole' (whole image MaskRCNN feats) or 'maskrcnn' (top k MaskRCNN detection feats) or 'no_vision' (zero vision input)
   resnet_fc_dim: 64
   maskrcnn_top_k_boxes: 10                                  # top k box features
   use_exploration_frame_feats: False                        # append feats from initial exploration (memory intensive!)

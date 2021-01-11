@@ -9,7 +9,7 @@ pddl:
   domain: '../data/alfred.pddl'                             # PDDL domain file that defines world dynamics
 
 env:
-  type: 'AlfredTWEnv'                                       # 'AlfredTWEnv' or 'AlfredThorEnv' or 'AlfredHybrid'
+  type: 'AlfredThorEnv'                                       # 'AlfredTWEnv' or 'AlfredThorEnv' or 'AlfredHybrid'
   regen_game_files: False                                   # check if game is solvable by expert and save to game.tw-pddl file
   domain_randomization: False                               # shuffle Textworld print order and object id nums
   task_types: [1]                            # task-type ids: 1 - Pick & Place, 2 - Examine in Light, 3 - Clean & Place, 4 - Heat & Place, 5 - Cool & Place, 6 - Pick Two & Place
@@ -56,7 +56,7 @@ general:
       clip_grad_norm: 5
 
   evaluate:
-    run_eval: True
+    run_eval: False
     batch_size: 2
     env:
       type: "AlfredTWEnv"

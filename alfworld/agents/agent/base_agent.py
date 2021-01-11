@@ -349,7 +349,7 @@ class BaseAgent:
         obs_encoding_sequence, obs_mask = model.encode_text(input_obs)
         return obs_encoding_sequence, obs_mask
 
-    def finish_of_episode(self, episode_no, batch_size, decay_lr=True):
+    def finish_of_episode(self, episode_no, batch_size, decay_lr=False):
         # fraction_assist annealing
         self.fraction_assist = self.fraction_assist_scheduler.value(episode_no)
         self.fraction_assist = max(self.fraction_assist, 0.0)

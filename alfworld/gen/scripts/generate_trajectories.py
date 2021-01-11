@@ -1,7 +1,7 @@
 import os
 import sys
-sys.path.append(os.path.join(os.environ['ALFRED_ROOT']))
-sys.path.append(os.path.join(os.environ['ALFRED_ROOT'], 'gen'))
+sys.path.append(os.path.join(os.environ['ALFWORLD_ROOT']))
+sys.path.append(os.path.join(os.environ['ALFWORLD_ROOT'], 'gen'))
 
 import time
 import multiprocessing as mp

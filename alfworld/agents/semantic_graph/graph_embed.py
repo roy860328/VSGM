@@ -85,15 +85,15 @@ class DotAttnChoseImportentNode(nn.Module):
         nodes: torch.Size([3, 40])
         hidden_state: torch.Size([1, 64])
         '''
-        # import pdb; pdb.set_trace()
-        if hidden_state is None:
+        # tensor([])
+        if hidden_state is None or len(hidden_state) == 0:
             if self.PRINT_DEBUG:
                 print("WARNING hidden_state is None")
             hidden_state = torch.zeros((1, self.bert_hidden_size))
             if self.GPU:
                 hidden_state = hidden_state.to('cuda')
         elif hidden_state.shape[0] > 1:
-            raise "nodes only can accept one batch, hidden_state == torch.Size([1, 64])"
+            raise "nodes only can accept one batch, hidden_state == torch.Size([1, ?])"
         # torch.Size([1, 40])
         hidden_state = self.hidden_state_to_node(hidden_state)
         # torch.Size([3])
@@ -113,8 +113,10 @@ class DotAttnChoseImportentNode(nn.Module):
                     chose_nodes = node
                 else:
                     chose_nodes = torch.cat((chose_nodes, node), dim=1)
+            else:
+                break
         # can chose nodes smaller than OUTPUT_SHAPE, cat zeros vectors
-        if self.OUTPUT_SHAPE != chose_nodes.shape[-1]:
+        if chose_nodes is None or self.OUTPUT_SHAPE != chose_nodes.shape[-1]:
             tensor_zeros = torch.zeros((chose_nodes.shape[0], self.OUTPUT_SHAPE - chose_nodes.shape[-1]))
             if self.GPU:
                 tensor_zeros = tensor_zeros.to('cuda')
