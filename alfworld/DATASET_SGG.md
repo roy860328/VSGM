@@ -26,8 +26,10 @@ export GRAPH_RCNN_ROOT=/home/graph-rcnn.pytorch/
 ### Check alfred detector data is ok 
 '''
 cd /home/alfworld/agents
-python sgg/alfred_data_format.py config/test_base.yaml
+python sgg/alfred_data_format.py config/test_base.yaml --semantic_config_file config/semantic_graph.yaml --sgg_config_file $GRAPH_RCNN_ROOT/configs/attribute.yaml
 '''
+sgg/graph-rcnn.pytorch/configs/attribute.yaml
+
 ### Check oracle scene graph is ok
 '''
 cd /home/alfworld/agents

@@ -81,13 +81,14 @@ class MaskRCNN(object):
 
 class Resnet(object):
 
-    def __init__(self, args, device, eval=True, share_memory=False, use_conv_feat=True):
+    def __init__(self, args, device='cuda', eval=True, share_memory=False, use_conv_feat=True):
         # self.model_type = args.visual_model
         # self.gpu = args.gpu
 
         # choose model type
         self.resnet_model = Resnet18(args, eval, share_memory, use_conv_feat=use_conv_feat)
         self.resnet_model.model.to(device)
+        self.device = device
 
         # normalization transform
         self.transform = self.get_default_transform()
@@ -105,7 +106,7 @@ class Resnet(object):
         ])
 
     def featurize(self, images, batch=32):
-        images_normalized = torch.stack([self.transform(i) for i in images], dim=0)
+        images_normalized = torch.stack([self.transform(i) for i in images], dim=0).to(self.device)
         # if self.gpu:
         #     images_normalized = images_normalized.to(torch.device('cuda'))
 

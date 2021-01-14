@@ -99,8 +99,7 @@ class SemanticGraphImplement():
         }
         return store_state
 
-    # visual features for state representation
-    def extract_visual_features(self, thor=None, store_state=None, hidden_state=None, env_index=None):
+    def store_data_to_graph(self, thor=None, store_state=None, env_index=None):
         if thor is not None:
             store_state = self.get_env_last_event_data(thor)
         if store_state is None:
@@ -113,6 +112,51 @@ class SemanticGraphImplement():
         # color_to_obj_id_type = {}
         # for color, object_id in env.last_event.color_to_object_id.items():
         #     color_to_obj_id_type[str(color)] = object_id
+        if self.isORACLE:
+            sgg_meta_data = store_state["sgg_meta_data"]
+            target = self.trans_MetaData.trans_object_meta_data_to_relation_and_attribute(sgg_meta_data)
+            scene_graph.add_oracle_local_graph_to_global_graph(rgb_image, target)
+        else:
+            rgb_image = rgb_image.unsqueeze(0)
+            results = self.detector(rgb_image)
+            result = results[0]
+            scene_graph.add_local_graph_to_global_graph(rgb_image, result)
+
+    def chose_importent_node_feature(self, chose_type, env_index, hidden_state=None):
+        scene_graph = self.scene_graphs[env_index]
+        if chose_type == "GLOBAL_GRAPH":
+            # embed graph data
+            global_graph = scene_graph.get_graph_data()
+            importent_node_feature, dict_ANALYZE_GRAPH = self.graph_embed_model.chose_importent_node(
+                global_graph,
+                hidden_state,
+            )
+        elif chose_type == "CURRENT_STATE_GRAPH":
+            current_state_graph = scene_graph.get_current_state_graph_data()
+            importent_node_feature, dict_ANALYZE_GRAPH = self.graph_embed_model.chose_importent_node(
+                current_state_graph,
+                hidden_state,
+            )
+        elif chose_type == "HISTORY_CHANGED_NODES_GRAPH":
+            history_changed_nodes_graph = scene_graph.get_history_changed_nodes_graph_data()
+            importent_node_feature, dict_ANALYZE_GRAPH = self.graph_embed_model.chose_importent_node(
+                history_changed_nodes_graph,
+                hidden_state,
+            )
+        else:
+            raise NotImplementedError
+        return importent_node_feature, dict_ANALYZE_GRAPH
+
+    # visual features for state representation
+    def extract_visual_features(self, thor=None, store_state=None, hidden_state=None, env_index=None):
+        if thor is not None:
+            store_state = self.get_env_last_event_data(thor)
+        if store_state is None:
+            raise NotImplementedError()
+
+        graph_embed_features = []
+        scene_graph = self.scene_graphs[env_index]
+        rgb_image = store_state["rgb_image"]
         if self.isORACLE:
             sgg_meta_data = store_state["sgg_meta_data"]
             target = self.trans_MetaData.trans_object_meta_data_to_relation_and_attribute(sgg_meta_data)

@@ -47,7 +47,7 @@ def load_config(args):
     # print(config)
 
     output_dir = config["general"]["save_path"]
-    if output_dir != '.' and args.semantic_config_file is not None:
+    if output_dir != '.' and args.semantic_config_file is not None and not args.test:
         from shutil import copyfile
         # import pdb; pdb.set_trace()
         folder_count = len(glob.glob(os.path.join(output_dir + "*", "")))
@@ -82,6 +82,8 @@ if __name__ == '__main__':
     parser.add_argument("-p", "--params", nargs="+", metavar="my.setting=value", default=[],
                         help="override params of the config file,"
                              " e.g. -p 'training.gamma=0.95'")
+    parser.add_argument('--test', help='test without save config', action='store_true')
+
     # settings
     parser.add_argument('--seed', help='random seed', default=123, type=int)
     parser.add_argument('--data', help='dataset folder data/json_feat_2.1.0, data/full_2.1.0', default='data/json_feat_2.1.0')

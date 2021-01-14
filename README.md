@@ -9,6 +9,7 @@ pip install pytorch-nlp
 pip install imageio
 ```
 
+
 # Run Model
 
 ## ALFRED_ROOT
@@ -17,10 +18,44 @@ cd gcn/alfred
 # linux
 export ALFRED_ROOT=/home/alfred/
 export ALFWORLD_ROOT=/home/alfworld/
+export GRAPH_RCNN_ROOT=/home/graph-rcnn.pytorch/
+
 # windows
-SET ALFRED_ROOT=D:\HetG\alfred
 SET ALFRED_ROOT=D:\alfred\alfred
+SET ALFWORLD_ROOT=D:\alfred\alfworld
+SET GRAPH_RCNN_ROOT=D:\alfred\alfworld\agents\sgg\graph-rcnn.pytorch
 ```
+
+## MOCA pre-download eval maskrcnn model
+```
+cd $ALFRED_ROOT
+wget https://alfred-colorswap.s3.us-east-2.amazonaws.com/weight_maskrcnn.pt
+```
+
+## MOCA
+
+```
+CUDA_VISIBLE_DEVICES=1 python models/train/train_semantic.py models/config/test_base.yaml --semantic_config_file models/config/test_semantic_graph.yaml --data data/full_2.1.0/ --model seq2seq_im_moca --dout exp/moca_{model},name,pm_and_subgoals_01 --splits data/splits/oct21.json --batch 5 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --gpu
+
+CUDA_VISIBLE_DEVICES=0 python models/eval_moca/eval_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/memory_semantic_graph.yaml --model_path exp/moca_seq2seq_im_moca,name,pm_and_subgoals_01_13-01-2021_10-59-32/best_seen.pth --model seq2seq_im_moca --data data/full_2.1.0/ --eval_split train --gpu
+```
+
+
+## MOCA + Semantic
+```
+CUDA_VISIBLE_DEVICES=1 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/memory_semantic_graph.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_semantic --dout exp/moca_memory{model},name,pm_and_subgoals_01 --splits data/splits/oct21.json --batch 20 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --gpu
+
+CUDA_VISIBLE_DEVICES=0 python models/eval_moca/eval_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/memory_semantic_graph.yaml --model_path exp/moca_memoryseq2seq_im_moca_semantic,name,pm_and_subgoals_01_12-01-2021_03-37-50/best_seen.pth --model seq2seq_im_moca_semantic --data data/full_2.1.0/ --eval_split train --gpu
+```
+
+## MOCA + Importent nodes graph feature
+```
+CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/importent_semantic_graph.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_importent_nodes --dout exp/importent_nodes_moca --splits data/splits/oct21.json --batch 20 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --demb 100 --dhid 256 --gpu --test
+```
+
+
+---
+---
 
 
 ## Seq2Seq

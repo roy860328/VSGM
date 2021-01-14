@@ -21,11 +21,11 @@ from agents.utils.misc import extract_admissible_commands
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 import pdb
 
+
 def train():
 
     time_1 = datetime.datetime.now()
     config = generic.load_config()
-    # pdb.set_trace()
     agent = VisionDAggerAgent(config)
     env_type = "AlfredThorEnv"
     alfred_env = getattr(importlib.import_module("environment"), env_type)(config, train_eval="train")
@@ -76,10 +76,7 @@ def train():
 
     # load model from checkpoint
     if agent.load_pretrained:
-        print(data_dir + "/" + agent.load_from_tag + ".pt")
-        print(os.path.exists(data_dir + "/" + agent.load_from_tag + ".pt"))
         if os.path.exists(data_dir + "/" + agent.load_from_tag + ".pt"):
-            print("load model")
             agent.load_pretrained_model(data_dir + "/" + agent.load_from_tag + ".pt")
             agent.update_target_net()
 
@@ -88,9 +85,7 @@ def train():
             break
         np.random.seed(episode_no)
         env.seed(episode_no)
-        print("reload")
         obs, infos = env.reset()
-        print("reload ends")
         game_names = infos["extra.gamefile"]
         batch_size = len(obs)
 
@@ -108,8 +103,6 @@ def train():
         observation_strings = list(obs)
         observation_strings = agent.preprocess_observation(observation_strings)
         task_desc_strings, observation_strings = agent.get_task_and_obs(observation_strings)
-        # print("task_desc_strings: ", task_desc_strings)
-        # print("observation_strings: ", observation_strings)
         first_sight_strings = copy.deepcopy(observation_strings)
         agent.observation_pool.push_first_sight(first_sight_strings)
 
@@ -132,13 +125,10 @@ def train():
         still_running_mask = []
         sequence_game_points = []
         print_actions = []
-        # 1000>0, 0%1000<=(0-1)%1000
         report = agent.report_frequency > 0 and (episode_no % agent.report_frequency <= (episode_no - batch_size) % agent.report_frequency)
-        print("report: {}".format(report))
 
         for step_no in range(agent.max_nb_steps_per_episode):
             # get visual features
-            # pdb.set_trace()
             current_frames = env.get_frames()
             observation_feats = agent.extract_visual_features(current_frames)
 
@@ -166,7 +156,6 @@ def train():
 
             from_which = np.random.uniform(low=0.0, high=1.0, size=(batch_size,))
             execute_actions = []
-            # pdb.set_trace()
             for b in range(batch_size):
                 if not report and from_which[b] <= agent.fraction_assist:
                     execute_actions.append(expert_actions[b])
@@ -191,7 +180,6 @@ def train():
 
             if step_in_total % agent.dagger_update_per_k_game_steps == 0:
                 dagger_loss = agent.update_dagger()
-                print(dagger_loss)
                 if dagger_loss is not None:
                     running_avg_dagger_loss.push(dagger_loss)
 
@@ -217,7 +205,6 @@ def train():
 
         # push experience into replay buffer (dagger)
         if not report:
-            # pdb.set_trace()
             for b in range(batch_size):
                 trajectory = []
                 for i in range(len(transition_cache)):
@@ -237,9 +224,8 @@ def train():
                 running_avg_game_steps.push(np.sum(still_running_mask_np, 0)[b])
 
         # finish game
-        agent.finish_of_episode(episode_no, batch_size, decay_lr=True)
+        agent.finish_of_episode(episode_no, batch_size)
         episode_no += batch_size
-        print("episode_no: ", episode_no)
 
         if not report:
             continue
@@ -248,19 +234,17 @@ def train():
         eps_per_sec = float(episode_no) / time_spent_seconds
         print("Name: {:s} | Episode: {:3d} | {:s} | time spent: {:s} | eps/sec : {:2.3f} | loss: {:2.3f} | game points: {:2.3f} | used steps: {:2.3f} | student points: {:2.3f} | student steps: {:2.3f} | fraction assist: {:2.3f} | fraction random: {:2.3f}".format(agent.experiment_tag, episode_no, game_names[0], str(time_2 - time_1).rsplit(".")[0], eps_per_sec, running_avg_dagger_loss.get_avg(), running_avg_game_points.get_avg(), running_avg_game_steps.get_avg(), running_avg_student_points.get_avg(), running_avg_student_steps.get_avg(), agent.fraction_assist, agent.fraction_random))
         # print(game_id + ":    " + " | ".join(print_actions))
-        print(" | ".join(print_actions).encode('utf-8'))
+        print(" | ".join(print_actions))
 
         # evaluate
-        print("Save Model")
-        # pdb.set_trace()
         id_eval_game_points, id_eval_game_step = 0.0, 0.0
         ood_eval_game_points, ood_eval_game_step = 0.0, 0.0
         if agent.run_eval:
             if id_eval_env is not None:
-                id_eval_res, _ = evaluate_vision_dagger(id_eval_env, agent, num_id_eval_game)
+                id_eval_res = evaluate_vision_dagger(id_eval_env, agent, num_id_eval_game)
                 id_eval_game_points, id_eval_game_step = id_eval_res['average_points'], id_eval_res['average_steps']
             if ood_eval_env is not None:
-                ood_eval_res, _ = evaluate_vision_dagger(ood_eval_env, agent, num_ood_eval_game)
+                ood_eval_res = evaluate_vision_dagger(ood_eval_env, agent, num_ood_eval_game)
                 ood_eval_game_points, ood_eval_game_step = ood_eval_res['average_points'], ood_eval_res['average_steps']
             if id_eval_game_points >= best_performance_so_far:
                 best_performance_so_far = id_eval_game_points
@@ -269,7 +253,6 @@ def train():
             if running_avg_student_points.get_avg() >= best_performance_so_far:
                 best_performance_so_far = running_avg_student_points.get_avg()
                 agent.save_model_to_path(output_dir + "/" + agent.experiment_tag + ".pt")
-        print("Save Model end")
 
         # plot using visdom
         if config["general"]["visdom"]:

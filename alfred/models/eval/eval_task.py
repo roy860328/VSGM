@@ -32,14 +32,14 @@ class EvalTask(Eval):
                 print("Evaluating: %s" % (traj['root']))
                 print("No. of trajectories left: %d" % (task_queue.qsize()))
                 try:
-                    meta_datas = cls.explore_scene(env, model)
                     if model.semantic_graph_implement.use_exploration_frame_feats:
+                        meta_datas = cls.explore_scene(env, model)
                         model.semantic_graph_implement.update_exploration_data_to_global_graph(
                             meta_datas,
                             0
                         )
                 except Exception as e:
-                    print(e)
+                    pass
                 cls.evaluate(env, model, r_idx, resnet, traj, args, lock, successes, failures, results)
                 try:
                     model.finish_of_episode()

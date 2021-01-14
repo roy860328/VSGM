@@ -8,8 +8,8 @@ import argparse
 from PIL import Image
 import cv2
 from detector import transforms as T
-sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'gen'))
-import constants
+sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], '..'))
+from alfworld.gen import constants
 
 OBJECTS_DETECTOR = constants.OBJECTS_DETECTOR
 STATIC_RECEPTACLES = constants.STATIC_RECEPTACLES
@@ -86,7 +86,7 @@ def get_transform(cfg, train):
     transform = T.Compose(
         [
             color_jitter,
-            T.Resize(min_size, max_size),
+            # T.Resize(min_size, max_size),
             T.ToTensor(),
             # normalize_transform,
         ]

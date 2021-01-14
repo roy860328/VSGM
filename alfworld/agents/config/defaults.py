@@ -15,10 +15,10 @@ _C.ALFREDTEST.bedroom_factor = 1.
 _C.ALFREDTEST.bathroom_factor = 1.
 
 _C.INPUT = CN()
-_C.INPUT.MIN_SIZE_TRAIN = (800,)   # Size of the smallest side of the image during training
-_C.INPUT.MAX_SIZE_TRAIN = 1024     # Maximum size of the side of the image during training
-_C.INPUT.MIN_SIZE_TEST = 800       # Size of the smallest side of the image during testing
-_C.INPUT.MAX_SIZE_TEST = 1024      # Maximum size of the side of the image during testing
+_C.INPUT.MIN_SIZE_TRAIN = (400,)   # Size of the smallest side of the image during training
+_C.INPUT.MAX_SIZE_TRAIN = 400     # Maximum size of the side of the image during training
+_C.INPUT.MIN_SIZE_TEST = 400       # Size of the smallest side of the image during testing
+_C.INPUT.MAX_SIZE_TEST = 400      # Maximum size of the side of the image during testing
 _C.INPUT.PIXEL_MEAN = [102.9801, 115.9465, 122.7717]  # Values to be used for image normalization
 _C.INPUT.PIXEL_STD = [1., 1., 1.]  # Values to be used for image normalization
 _C.INPUT.TO_BGR255 = False          # Convert image to BGR format (for Caffe2 models), in range 0-255

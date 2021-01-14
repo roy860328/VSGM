@@ -28,7 +28,7 @@ import glob
 
 class Module(Base):
 
-    def __init__(self, args, vocab):
+    def __init__(self, args, vocab, importent_nodes=False):
         '''
         Seq2Seq agent
         '''
@@ -54,15 +54,16 @@ class Module(Base):
         self.subgoal_monitoring = (self.args.pm_aux_loss_wt > 0 or self.args.subgoal_aux_loss_wt > 0)
 
         # frame mask decoder
-        decoder = vnn.ConvFrameMaskDecoderProgressMonitor
-        self.dec = decoder(self.emb_action_low, args.dframe, 2*args.dhid,
-                           self.semantic_graph_implement, SEMANTIC_GRAPH_RESULT_FEATURE,
-                           pframe=args.pframe,
-                           attn_dropout=args.attn_dropout,
-                           hstate_dropout=args.hstate_dropout,
-                           actor_dropout=args.actor_dropout,
-                           input_dropout=args.input_dropout,
-                           teacher_forcing=args.dec_teacher_forcing)
+        if not importent_nodes:
+            decoder = vnn.ConvFrameMaskDecoderProgressMonitor
+            self.dec = decoder(self.emb_action_low, args.dframe, 2*args.dhid,
+                               self.semantic_graph_implement, SEMANTIC_GRAPH_RESULT_FEATURE,
+                               pframe=args.pframe,
+                               attn_dropout=args.attn_dropout,
+                               hstate_dropout=args.hstate_dropout,
+                               actor_dropout=args.actor_dropout,
+                               input_dropout=args.input_dropout,
+                               teacher_forcing=args.dec_teacher_forcing)
 
         # dropouts
         self.vis_dropout = nn.Dropout(args.vis_dropout)
@@ -379,7 +380,7 @@ class Module(Base):
             graph_embed_features, _, _ = \
                 self.semantic_graph_implement.extract_visual_features(
                     store_state=b_store_state["sgg_meta_data"],
-                    hidden_state=self.r_state['state_t_instr'][env_index:env_index+1],
+                    hidden_state=self.r_state['state_t_instr'][0][env_index:env_index+1],
                     env_index=env_index
                 )
             # graph_embed_features is list (actually dont need list)
@@ -393,7 +394,7 @@ class Module(Base):
                 self.r_state['enc_lang_goal'],
                 self.r_state['enc_lang_instr'],
                 feat['frames'][:, 0],
-                feat_semantic_graph,
+                feat_semantic_graph=feat_semantic_graph,
                 e_t=e_t,
                 state_tm1_goal=self.r_state['state_t_goal'],
                 state_tm1_instr=self.r_state['state_t_instr'],
@@ -524,7 +525,7 @@ class Module(Base):
         compute f1 and extract match scores for output
         '''
         m = collections.defaultdict(list)
-        for (task, _) in data:
+        for task in data:
             ex = self.load_task_json(task)
             i = self.get_task_and_ann_id(ex)
             label = ' '.join([a['discrete_action']['action'] for a in ex['plan']['low_actions']])

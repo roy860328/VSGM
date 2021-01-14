@@ -112,6 +112,9 @@ data from gen/scripts/augment_sgg_trajectories.py
 
 class AlfredDataset(Dataset):
     def __init__(self, cfg):
+        from sys import platform
+        if platform == "win32":
+            cfg.ALFREDTEST.data_path = "D:\\alfred\\alfworld\\detector\\data\\test"
         self.root = cfg.ALFREDTEST.data_path
         self.cfg = cfg
 
@@ -209,6 +212,7 @@ class AlfredDataset(Dataset):
 
         width, height = img.size
         target_raw = BoxList(boxes, (width, height), mode="xyxy")
+        # img, target = img, target_raw
         img, target = self.trans_meta_data.transforms(img, target_raw)
         target.add_field("labels", labels)
         target.add_field("pred_labels", torch.from_numpy(obj_relations).to(dtype=torch.float))
@@ -228,31 +232,74 @@ class AlfredDataset(Dataset):
 
 
 def main(cfg):
-    # train on the GPU or on the CPU, if a GPU is not available
-    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-
-    # import pdb; pdb.set_trace()
-    # our dataset has two classes only - background and person
-    num_classes = len(parser_scene.get_object_classes(cfg.ALFREDTEST.object_types))+1
-    # use our dataset and defined transformations
-    dataset = AlfredDataset(cfg)
-    for i in range(100):
-        print(dataset[i])
-
-    # split the dataset in train and test set
-    # indices = torch.randperm(len(dataset)).tolist()
-    indices = list(range(len(dataset)))
-    dataset = torch.utils.data.Subset(dataset, indices[:-4000])
-
+    from random import shuffle
+    import cv2
+    from torchvision.transforms import functional as F
+    import time
     # define training and validation data loaders
     # data_loader = torch.utils.data.DataLoader(
     #     dataset, batch_size=cfg.batch_size, shuffle=True, num_workers=4,
     #     collate_fn=utils.collate_fn)
+    # use our dataset and defined transformations
+    alfred_dataset = AlfredDataset(cfg)
+    extractor = get_resnet_model(cfg)
+    object_vision_feature = {
+        "0": [0]*512,
+        # ...
+    }
+    save_path = os.path.join(os.getcwd(), "semantic_graph/rgb_feature")
+    if os.path.isfile(os.path.join(save_path, "object_rgb_feature.json")):
+        with open(os.path.join(save_path, "object_rgb_feature.json"), "r") as f:
+            object_vision_feature = json.load(f)
 
-    # data_loader_test = torch.utils.data.DataLoader(
-    #     dataset_test, batch_size=args.batch_size, shuffle=False, num_workers=4,
-    #     collate_fn=utils.collate_fn)
+    object_not_save = [i for i in range(len(alfred_dataset.object_classes))]
+    # object_not_save = [0, 3, 14, 25, 51, 57, 59, 62, 69, 73, 79, 87, 97, 99, 103]
+    print("Always not found: ", [alfred_dataset.object_classes[i] for i in [0, 3, 14, 51, 57, 59, 69, 97, 99]])
 
+    indices = list(range(len(alfred_dataset)))
+    shuffle(indices)
+    for i in indices:
+        img, target, idx = alfred_dataset[i]
+        dict_target = {
+            "labels": target.extra_fields["labels"],
+            "obj_relations": target.extra_fields["pred_labels"],
+            "relation_labels": target.extra_fields["relation_labels"],
+            "attributes": target.extra_fields["attributes"],
+            "objectIds": target.extra_fields["objectIds"],
+        }
+        img = F.to_pil_image(img)
+        for ind, label in enumerate(target.extra_fields["labels"].numpy().astype(int)):
+            if label in object_not_save:
+                bbox = target.bbox[ind].numpy().astype(int)
+                crop_img = img.crop(bbox)
+                if crop_img.size[0] * crop_img.size[1] < 3000:# or min(bbox) == 0 or max(bbox) == 400:
+                    continue
+                object_not_save.remove(label)
+                print("remove: ", label)
+                print("bbox:", bbox)
+                print("object: ", alfred_dataset.object_classes[label])
+                rgb_feature = extractor.featurize([crop_img], batch=1)
+                object_vision_feature[str(label)] = rgb_feature.to('cpu').numpy().tolist()
+                print(rgb_feature.shape)
+                crop_img.save(os.path.join(save_path, alfred_dataset.object_classes[label] + "_{}.jpg".format(label)))
+                time.sleep(1)
+                print("Can't find object class: ", object_not_save)
+                with open(os.path.join(save_path, "object_rgb_feature.json"), "w") as f:
+                    json.dump(object_vision_feature, f)
+        # [0, 3, 14, 51, 57, 59, 69, 97, 99]
+        if len(object_not_save) <= 9:
+            break
+        img.close()
+        # import pdb; pdb.set_trace()
+    print("Can't find object class: ", object_not_save)
+
+
+def get_resnet_model(cfg):
+    sys.path.append(os.path.join(os.environ['ALFRED_ROOT'], 'models'))
+    from nn.resnet import Resnet
+    cfg.gpu = True
+    extractor = Resnet(cfg, eval=True)
+    return extractor
 
 def get_dataset(cfg, transform=None):
     dataset = AlfredDataset(cfg)

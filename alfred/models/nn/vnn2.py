@@ -137,18 +137,172 @@ class DynamicConvLayer(nn.Module):
         df1 = self.head1(weighted_lang_t_instr)
         df2 = self.head2(weighted_lang_t_instr)
         df3 = self.head3(weighted_lang_t_instr)
+        # torch.Size([3, 20, 512])
+        # print(torch.stack([df1, df2, df3]).shape)
+        # torch.Size([20, 3, 512])
+        # print(torch.stack([df1, df2, df3]).transpose(0, 1).shape)
+        # import pdb; pdb.set_trace()
         dynamic_filters = torch.stack([df1, df2, df3]).transpose(0, 1)
         dynamic_filters = self.filter_activation(dynamic_filters)
         dynamic_filters = F.normalize(dynamic_filters, p=2, dim=-1)
 
         """ attention map """
+        # torch.Size([20, 512, 7, 7])
+        # print(frame.shape)
         frame = frame.view(frame.size(0), frame.size(1), -1)
+        # torch.Size([20, 512, 49])
+        # print(frame.shape)
+        # dynamic_filters.shape  torch.Size([20, 3, 512])
+        # print("dynamic_filters.shape ", dynamic_filters.shape)
+        # frame.transpose(1,2)  torch.Size([20, 49, 512])
+        # print("frame.transpose(1,2) ", frame.transpose(1,2).shape)
+        # dynamic_filters.transpose(-1, -2)  torch.Size([20, 512, 3])
+        # print("dynamic_filters.transpose(-1, -2) ", dynamic_filters.transpose(-1, -2).shape)
+        # import pdb; pdb.set_trace()
         scale_2 = np.sqrt(frame.shape[1]) #torch.sqrt(torch.tensor(frame.shape[1], dtype=torch.double))
         attention_map = torch.bmm(frame.transpose(1,2), dynamic_filters.transpose(-1, -2)) / scale_2
         attention_map = attention_map.reshape(attention_map.size(0), -1)
 
         return attention_map
 ######################################################################################################################
+
+class MOCAConvFrameMaskDecoderProgressMonitor(nn.Module):
+    '''
+    action decoder with subgoal and progress monitoring
+    '''
+
+    def __init__(self, emb, dframe, dhid,
+                 pframe=300, attn_dropout=0., hstate_dropout=0., actor_dropout=0., input_dropout=0.,
+                 teacher_forcing=False):
+        super().__init__()
+        demb = emb.weight.size(1)
+
+        self.emb = emb
+        self.pframe = pframe
+        self.dhid = dhid
+        self.vis_encoder = ResnetVisualEncoder(dframe=dframe)
+        self.cell_goal = nn.LSTMCell(dhid+dframe+demb, dhid)
+        self.cell_instr = nn.LSTMCell(dhid+dframe+demb, dhid)
+        print("self.cell_instr: ", dhid+dframe+demb)
+        self.attn = DotAttn()
+        self.input_dropout = nn.Dropout(input_dropout)
+        self.attn_dropout = nn.Dropout(attn_dropout)
+        self.hstate_dropout = nn.Dropout(hstate_dropout)
+        self.actor_dropout = nn.Dropout(actor_dropout)
+        self.go = nn.Parameter(torch.Tensor(demb))
+        self.actor = nn.Linear(dhid+dhid+dframe+demb, demb)
+        print("self.actor: ", dhid+dhid+dframe+demb)
+        self.mask_dec = nn.Sequential(
+            nn.Linear(dhid, dhid//2), nn.ReLU(),
+            nn.Linear(dhid//2, 119)
+        )
+        self.teacher_forcing = teacher_forcing
+        self.h_tm1_fc_goal = nn.Linear(dhid, dhid)
+        self.h_tm1_fc_instr = nn.Linear(dhid, dhid)
+
+        self.subgoal = nn.Linear(dhid+dhid+dframe+demb, 1)
+        self.progress = nn.Linear(dhid+dhid+dframe+demb, 1)
+
+        nn.init.uniform_(self.go, -0.1, 0.1)
+
+        self.scale_dot_attn = ScaledDotAttn(dhid, 128, dhid, 128)
+        self.dynamic_conv = DynamicConvLayer(dhid)
+
+    def step(self, enc_goal, enc_instr, frame, e_t, state_tm1_goal, state_tm1_instr):
+        # previous decoder hidden state (goal, instr decoder)
+        h_tm1_goal = state_tm1_goal[0]
+        h_tm1_instr = state_tm1_instr[0]
+
+        # encode vision and lang feat (goal, instr decoder)
+        lang_feat_t_goal = enc_goal # language is encoded once at the start
+        lang_feat_t_instr = enc_instr # language is encoded once at the start
+
+        # scaled dot product attention
+        weighted_lang_t_goal, lang_attn_t_goal = self.scale_dot_attn(lang_feat_t_goal, h_tm1_goal)
+        weighted_lang_t_instr, lang_attn_t_instr = self.scale_dot_attn(lang_feat_t_instr, h_tm1_instr)
+
+        # dynamic convolution
+        vis_feat_t_goal = self.dynamic_conv(frame, weighted_lang_t_goal)
+        vis_feat_t_instr = self.dynamic_conv(frame, weighted_lang_t_instr)
+
+        # concat visual feats, weight lang, and previous action embedding (goal decoder)
+        inp_t_goal = torch.cat([vis_feat_t_goal, weighted_lang_t_goal, e_t], dim=1)
+        inp_t_goal = self.input_dropout(inp_t_goal)
+        
+        # concat visual feats, weight lang, and previous action embedding (instr decoder)
+        inp_t_instr = torch.cat([vis_feat_t_instr, weighted_lang_t_instr, e_t], dim=1)
+        inp_t_instr = self.input_dropout(inp_t_instr)
+
+        # update hidden state (goal decoder)
+        state_t_goal = self.cell_goal(inp_t_goal, state_tm1_goal)
+        state_t_goal = [self.hstate_dropout(x) for x in state_t_goal]
+        h_t_goal, _ = state_t_goal[0], state_t_goal[1]
+        
+        # decode mask (goal decoder)
+        cont_t_goal = h_t_goal #torch.cat([h_t_goal, inp_t_goal], dim=1)
+        mask_t = self.mask_dec(cont_t_goal)
+        
+        # update hidden state (instr decoder)
+        state_t_instr = self.cell_instr(inp_t_instr, state_tm1_instr)
+        state_t_instr = [self.hstate_dropout(x) for x in state_t_instr]
+        h_t_instr, _ = state_t_instr[0], state_t_instr[1]
+
+        # decode action (instr decoder)
+        cont_t_instr = torch.cat([h_t_instr, inp_t_instr], dim=1)
+        action_emb_t = self.actor(self.actor_dropout(cont_t_instr))
+        action_t = action_emb_t.mm(self.emb.weight.t())
+
+        # predict subgoals completed and task progress
+        subgoal_t = F.sigmoid(self.subgoal(cont_t_instr))
+        progress_t = F.sigmoid(self.progress(cont_t_instr))
+
+        return action_t, mask_t, state_t_goal, state_t_instr, lang_attn_t_goal, lang_attn_t_instr, subgoal_t, progress_t
+
+    def forward(self, enc_goal, enc_instr, frames, gold=None, max_decode=150, state_0_goal=None, state_0_instr=None):
+        max_t = gold.size(1) if self.training else min(max_decode, frames.shape[1])
+        batch = enc_instr.size(0)
+        e_t = self.go.repeat(batch, 1)
+        state_t_goal = state_0_goal
+        state_t_instr = state_0_instr
+
+        actions = []
+        masks = []
+        attn_scores_goal = []
+        attn_scores_instr = []
+        subgoals = []
+        progresses = []
+        for t in range(max_t):
+            print(enc_goal.shape)
+            print(enc_instr.shape)
+            import pdb; pdb.set_trace()
+            action_t, mask_t, state_t_goal, state_t_instr, attn_score_t_goal, attn_score_t_instr, subgoal_t, progress_t = \
+                self.step(enc_goal, enc_instr, frames[:, t], e_t, state_t_goal, state_t_instr)
+            masks.append(mask_t)
+            actions.append(action_t)
+            attn_scores_goal.append(attn_score_t_goal)
+            attn_scores_instr.append(attn_score_t_instr)
+            subgoals.append(subgoal_t)
+            progresses.append(progress_t)
+
+            # find next emb
+            if self.teacher_forcing and self.training:
+                w_t = gold[:, t]
+            else:
+                w_t = action_t.max(1)[1]
+            e_t = self.emb(w_t)
+            raise
+
+        results = {
+            'out_action_low': torch.stack(actions, dim=1),
+            'out_action_low_mask': torch.stack(masks, dim=1),
+            'out_attn_scores_goal': torch.stack(attn_scores_goal, dim=1),
+            'out_attn_scores_instr': torch.stack(attn_scores_instr, dim=1),
+            'out_subgoal': torch.stack(subgoals, dim=1),
+            'out_progress': torch.stack(progresses, dim=1),
+            'state_t_goal': state_t_goal,
+            'state_t_instr': state_t_instr,
+        }
+        return results
 
 
 class ConvFrameMaskDecoderProgressMonitor(nn.Module):
@@ -285,6 +439,206 @@ class ConvFrameMaskDecoderProgressMonitor(nn.Module):
 
             action_t, mask_t, state_t_goal, state_t_instr, attn_score_t_goal, attn_score_t_instr, subgoal_t, progress_t = \
                 self.step(enc_goal, enc_instr, frames[:, t], e_t, state_t_goal, state_t_instr, feat_semantic_graph)
+            masks.append(mask_t)
+            actions.append(action_t)
+            attn_scores_goal.append(attn_score_t_goal)
+            attn_scores_instr.append(attn_score_t_instr)
+            subgoals.append(subgoal_t)
+            progresses.append(progress_t)
+
+            # find next emb
+            if self.teacher_forcing and self.training:
+                w_t = gold[:, t]
+            else:
+                w_t = action_t.max(1)[1]
+            e_t = self.emb(w_t)
+
+        results = {
+            'out_action_low': torch.stack(actions, dim=1),
+            'out_action_low_mask': torch.stack(masks, dim=1),
+            'out_attn_scores_goal': torch.stack(attn_scores_goal, dim=1),
+            'out_attn_scores_instr': torch.stack(attn_scores_instr, dim=1),
+            'out_subgoal': torch.stack(subgoals, dim=1),
+            'out_progress': torch.stack(progresses, dim=1),
+            'state_t_goal': state_t_goal,
+            'state_t_instr': state_t_instr,
+        }
+        return results
+
+
+
+class ImportentNodesConvFrameMaskDecoderProgressMonitor(nn.Module):
+    '''
+    action decoder with subgoal and progress monitoring
+    '''
+
+    def __init__(self, emb, dframe, dhid, semantic_graph_implement, IMPORTENT_NDOES_FEATURE,
+                 pframe=300, attn_dropout=0., hstate_dropout=0., actor_dropout=0., input_dropout=0.,
+                 teacher_forcing=False):
+        super().__init__()
+        demb = emb.weight.size(1)
+
+        self.semantic_graph_implement = semantic_graph_implement
+        self.IMPORTENT_NDOES_FEATURE = IMPORTENT_NDOES_FEATURE
+
+        self.emb = emb
+        self.pframe = pframe
+        self.dhid = dhid
+        self.vis_encoder = ResnetVisualEncoder(dframe=dframe)
+        self.cell_goal = nn.LSTMCell(dhid+dframe+demb+IMPORTENT_NDOES_FEATURE, dhid)
+        self.cell_instr = nn.LSTMCell(dhid+dframe+demb+IMPORTENT_NDOES_FEATURE, dhid)
+        print("self.cell_instr: ", dhid+dframe+demb+IMPORTENT_NDOES_FEATURE)
+        self.attn = DotAttn()
+        self.input_dropout = nn.Dropout(input_dropout)
+        self.attn_dropout = nn.Dropout(attn_dropout)
+        self.hstate_dropout = nn.Dropout(hstate_dropout)
+        self.actor_dropout = nn.Dropout(actor_dropout)
+        self.go = nn.Parameter(torch.Tensor(demb))
+        self.actor = nn.Linear(dhid+dhid+dframe+demb+IMPORTENT_NDOES_FEATURE, demb)
+        print("self.actor: ", dhid+dhid+dframe+demb+IMPORTENT_NDOES_FEATURE)
+        self.mask_dec = nn.Sequential(
+            nn.Linear(dhid, dhid//2), nn.ReLU(),
+            nn.Linear(dhid//2, 119)
+        )
+        self.teacher_forcing = teacher_forcing
+        self.h_tm1_fc_goal = nn.Linear(dhid, dhid)
+        self.h_tm1_fc_instr = nn.Linear(dhid, dhid)
+
+        self.subgoal = nn.Linear(dhid+dhid+dframe+demb+IMPORTENT_NDOES_FEATURE, 1)
+        self.progress = nn.Linear(dhid+dhid+dframe+demb+IMPORTENT_NDOES_FEATURE, 1)
+
+        nn.init.uniform_(self.go, -0.1, 0.1)
+
+        self.scale_dot_attn = ScaledDotAttn(dhid, 128, dhid, 128)
+        self.dynamic_conv = DynamicConvLayer(dhid)
+
+    def step(self, enc_goal, enc_instr, frame, e_t, state_tm1_goal, state_tm1_instr, feat_global_graph, feat_current_state_graph, feat_history_changed_nodes_graph):
+        # previous decoder hidden state (goal, instr decoder)
+        h_tm1_goal = state_tm1_goal[0]
+        h_tm1_instr = state_tm1_instr[0]
+
+        # encode vision and lang feat (goal, instr decoder)
+        lang_feat_t_goal = enc_goal # language is encoded once at the start
+        lang_feat_t_instr = enc_instr # language is encoded once at the start
+
+        # scaled dot product attention
+        weighted_lang_t_goal, lang_attn_t_goal = self.scale_dot_attn(lang_feat_t_goal, h_tm1_goal)
+        weighted_lang_t_instr, lang_attn_t_instr = self.scale_dot_attn(lang_feat_t_instr, h_tm1_instr)
+
+        # dynamic convolution
+        vis_feat_t_goal = self.dynamic_conv(frame, weighted_lang_t_goal)
+        vis_feat_t_instr = self.dynamic_conv(frame, weighted_lang_t_instr)
+
+        # concat visual feats, weight lang, and previous action embedding (goal decoder)
+        inp_t_goal = torch.cat([vis_feat_t_goal, weighted_lang_t_goal, e_t, feat_global_graph], dim=1)
+        inp_t_goal = self.input_dropout(inp_t_goal)
+        
+        # concat visual feats, weight lang, and previous action embedding (instr decoder)
+        inp_t_instr = torch.cat([vis_feat_t_instr, weighted_lang_t_instr, e_t, feat_current_state_graph], dim=1)
+        inp_t_instr = self.input_dropout(inp_t_instr)
+
+        # update hidden state (goal decoder)
+        state_t_goal = self.cell_goal(inp_t_goal, state_tm1_goal)
+        state_t_goal = [self.hstate_dropout(x) for x in state_t_goal]
+        h_t_goal, _ = state_t_goal[0], state_t_goal[1]
+        
+        # decode mask (goal decoder)
+        cont_t_goal = h_t_goal #torch.cat([h_t_goal, inp_t_goal], dim=1)
+        mask_t = self.mask_dec(cont_t_goal)
+        
+        # update hidden state (instr decoder)
+        state_t_instr = self.cell_instr(inp_t_instr, state_tm1_instr)
+        state_t_instr = [self.hstate_dropout(x) for x in state_t_instr]
+        h_t_instr, _ = state_t_instr[0], state_t_instr[1]
+
+        # decode action (instr decoder)
+        cont_t_instr = torch.cat([h_t_instr, inp_t_instr], dim=1)
+        action_emb_t = self.actor(self.actor_dropout(cont_t_instr))
+        action_t = action_emb_t.mm(self.emb.weight.t())
+
+        cont_t_instr_with_history_graph = torch.cat(
+            [h_t_instr, vis_feat_t_instr, weighted_lang_t_instr, e_t,
+                feat_history_changed_nodes_graph], dim=1)
+        # predict subgoals completed and task progress
+        subgoal_t = F.sigmoid(self.subgoal(cont_t_instr_with_history_graph))
+        progress_t = F.sigmoid(self.progress(cont_t_instr_with_history_graph))
+
+        return action_t, mask_t, state_t_goal, state_t_instr, lang_attn_t_goal, lang_attn_t_instr, subgoal_t, progress_t
+
+    def forward(self, enc_goal, enc_instr, frames, all_meta_datas, gold=None, max_decode=150, state_0_goal=None, state_0_instr=None):
+        max_t = gold.size(1) if self.training else min(max_decode, frames.shape[1])
+        batch = enc_instr.size(0)
+        e_t = self.go.repeat(batch, 1)
+        state_t_goal = state_0_goal
+        state_t_instr = state_0_instr
+
+        actions = []
+        masks = []
+        attn_scores_goal = []
+        attn_scores_instr = []
+        subgoals = []
+        progresses = []
+        for t in range(max_t):
+            feat_global_graph = []
+            feat_current_state_graph = []
+            feat_history_changed_nodes_graph = []
+            for env_index in range(len(all_meta_datas)):
+                b_store_state = all_meta_datas[env_index]
+                if len(b_store_state["sgg_meta_data"]) > t:
+                    t_store_state = b_store_state["sgg_meta_data"][t]
+                    if t == 0 and self.semantic_graph_implement.use_exploration_frame_feats:
+                        exploration_transition_cache = b_store_state["exploration_sgg_meta_data"]
+                        self.semantic_graph_implement.update_exploration_data_to_global_graph(
+                            exploration_transition_cache,
+                            env_index
+                        )
+                    self.semantic_graph_implement.store_data_to_graph(
+                        store_state=t_store_state,
+                        env_index=env_index
+                    )
+                    global_graph_importent_features, _ = \
+                        self.semantic_graph_implement.chose_importent_node_feature(
+                            chose_type="GLOBAL_GRAPH",
+                            env_index=env_index,
+                            hidden_state=state_t_goal[0][env_index:env_index+1],
+                            )
+                    current_state_graph_importent_features, _ = \
+                        self.semantic_graph_implement.chose_importent_node_feature(
+                            chose_type="CURRENT_STATE_GRAPH",
+                            env_index=env_index,
+                            hidden_state=state_t_instr[0][env_index:env_index+1],
+                            )
+                    history_changed_nodes_graph_importent_features, _ = \
+                        self.semantic_graph_implement.chose_importent_node_feature(
+                            chose_type="HISTORY_CHANGED_NODES_GRAPH",
+                            env_index=env_index,
+                            hidden_state=state_t_goal[0][env_index:env_index+1],
+                            )
+                else:
+                    global_graph_importent_features = torch.zeros(
+                        1, self.IMPORTENT_NDOES_FEATURE).to(frames.device)
+                    current_state_graph_importent_features = torch.zeros(
+                        1, self.IMPORTENT_NDOES_FEATURE).to(frames.device)
+                    history_changed_nodes_graph_importent_features = torch.zeros(
+                        1, self.IMPORTENT_NDOES_FEATURE).to(frames.device)
+                feat_global_graph.append(global_graph_importent_features)
+                feat_current_state_graph.append(current_state_graph_importent_features)
+                feat_history_changed_nodes_graph.append(history_changed_nodes_graph_importent_features)
+            feat_global_graph = torch.cat(feat_global_graph, dim=0)
+            feat_current_state_graph = torch.cat(feat_current_state_graph, dim=0)
+            feat_history_changed_nodes_graph = torch.cat(feat_history_changed_nodes_graph, dim=0)
+
+            action_t, mask_t, state_t_goal, state_t_instr, attn_score_t_goal, attn_score_t_instr, subgoal_t, progress_t = \
+                self.step(
+                    enc_goal,
+                    enc_instr,
+                    frames[:, t],
+                    e_t,
+                    state_t_goal,
+                    state_t_instr,
+                    feat_global_graph,
+                    feat_current_state_graph,
+                    feat_history_changed_nodes_graph)
             masks.append(mask_t)
             actions.append(action_t)
             attn_scores_goal.append(attn_score_t_goal)
