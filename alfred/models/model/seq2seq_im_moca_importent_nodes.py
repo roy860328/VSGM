@@ -58,18 +58,43 @@ class Module(seq2seq_im_moca_semantic):
         '''
         # batch = 1
         all_meta_datas = feat['all_meta_datas']
-        feat_semantic_graph = []
+        feat_global_graph = []
+        feat_current_state_graph = []
+        feat_history_changed_nodes_graph = []
         for env_index in range(len(all_meta_datas)):
             b_store_state = all_meta_datas[env_index]
-            graph_embed_features, _, _ = \
-                self.semantic_graph_implement.extract_visual_features(
-                    store_state=b_store_state["sgg_meta_data"],
+            # get_meta_datas(cls, env, resnet):
+            t_store_state = b_store_state["sgg_meta_data"]
+            # cls.resnet.featurize([curr_image], batch=1).unsqueeze(0)
+            t_store_state["rgb_image"] = feat['frames'][env_index, 0]
+            self.semantic_graph_implement.store_data_to_graph(
+                store_state=t_store_state,
+                env_index=env_index
+            )
+            global_graph_importent_features, _ = \
+                self.semantic_graph_implement.get_graph_feature(
+                    chose_type="GLOBAL_GRAPH",
+                    env_index=env_index,
+                    )
+            current_state_graph_importent_features, _ = \
+                self.semantic_graph_implement.chose_importent_node_feature(
+                    chose_type="CURRENT_STATE_GRAPH",
+                    env_index=env_index,
                     hidden_state=self.r_state['state_t_instr'][0][env_index:env_index+1],
-                    env_index=env_index
-                )
+                    )
+            history_changed_nodes_graph_importent_features, _ = \
+                self.semantic_graph_implement.chose_importent_node_feature(
+                    chose_type="HISTORY_CHANGED_NODES_GRAPH",
+                    env_index=env_index,
+                    hidden_state=self.r_state['state_t_goal'][0][env_index:env_index+1],
+                    )
             # graph_embed_features is list (actually dont need list)
-            feat_semantic_graph.append(graph_embed_features[0])
-        feat_semantic_graph = torch.cat(feat_semantic_graph, dim=0)
+            feat_global_graph.append(global_graph_importent_features)
+            feat_current_state_graph.append(current_state_graph_importent_features)
+            feat_history_changed_nodes_graph.append(history_changed_nodes_graph_importent_features)
+        feat_global_graph = torch.cat(feat_global_graph, dim=0)
+        feat_current_state_graph = torch.cat(feat_current_state_graph, dim=0)
+        feat_history_changed_nodes_graph = torch.cat(feat_history_changed_nodes_graph, dim=0)
 
         # decode and save embedding and hidden states
         out_action_low, out_action_low_mask, state_t_goal, state_t_instr, \
@@ -78,10 +103,12 @@ class Module(seq2seq_im_moca_semantic):
                 self.r_state['enc_lang_goal'],
                 self.r_state['enc_lang_instr'],
                 feat['frames'][:, 0],
-                feat_semantic_graph=feat_semantic_graph,
-                e_t=e_t,
-                state_tm1_goal=self.r_state['state_t_goal'],
-                state_tm1_instr=self.r_state['state_t_instr'],
+                e_t,
+                self.r_state['state_t_goal'],
+                self.r_state['state_t_instr'],
+                feat_global_graph,
+                feat_current_state_graph,
+                feat_history_changed_nodes_graph
             )
 
         # save states

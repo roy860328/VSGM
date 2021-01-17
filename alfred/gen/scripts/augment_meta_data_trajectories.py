@@ -27,6 +27,9 @@ ORIGINAL_IMAGES_FORLDER = "raw_images"
 OBJECT_META_FOLDER = "sgg_meta"
 EXPLORATION_META_FOLDER = "exploration_meta"
 
+SAVE_instance_detections2D = False
+INSTANCE_DETECTIONS2D_FILE = "instance_detections2D"
+
 IMAGE_WIDTH = 300
 IMAGE_HEIGHT = 300
 
@@ -39,6 +42,11 @@ render_settings['renderClassImage'] = True
 video_saver = VideoSaver()
 
 fail_log = open("fail_log.txt", "w")
+
+meta_datas = {
+    "instance_detections2D": [],
+    "instance_detections2D_exp": [],
+}
 
 
 def get_openable_points(traj_data):
@@ -70,15 +78,31 @@ def explore_scene(env, traj_data, root_dir):
 
 # class_detections2D
 def save_frame(env, event, root_dir, task_desc='None', folder_name=OBJECT_META_FOLDER):
-    meta_path = os.path.join(root_dir, folder_name)
-    im_idx = get_json_index(meta_path)
-    # store color to object type dictionary
-    all_objects = env.last_event.metadata['objects']
-    # save sgg meta
-    sgg_meta_file = os.path.join(root_dir, folder_name, "%09d.json" % (im_idx))
-    with open(sgg_meta_file, 'w') as f:
-        json.dump(all_objects, f)
-    # print("Total Size: %s" % im_idx)
+    if SAVE_instance_detections2D:
+        global meta_datas
+        instance_detections2D = env.last_event.instance_detections2D
+        if folder_name == OBJECT_META_FOLDER:
+            meta_datas['instance_detections2D'].append(instance_detections2D)
+        elif folder_name == EXPLORATION_META_FOLDER:
+            meta_datas['instance_detections2D_exp'].append(instance_detections2D)
+        else:
+            raise NotImplementedError()
+    else:
+        meta_path = os.path.join(root_dir, folder_name)
+        # EXPLORATION_IMG
+        if folder_name == EXPLORATION_META_FOLDER:
+            im_ind = get_image_index(meta_path)
+            rgb_image = event.frame[:, :, ::-1]
+            cv2.imwrite(meta_path + '/%09d.png' % im_ind, rgb_image)
+        # META DATA
+        im_idx = get_json_index(meta_path)
+        # store color to object type dictionary
+        all_objects = env.last_event.metadata['objects']
+        # save sgg meta
+        sgg_meta_file = os.path.join(root_dir, folder_name, "%09d.json" % (im_idx))
+        with open(sgg_meta_file, 'w') as f:
+            json.dump(all_objects, f)
+        # print("Total Size: %s" % im_idx)
 
 
 def get_json_index(save_path):
@@ -130,12 +154,18 @@ def augment_traj(env, json_file):
     orig_images_dir = os.path.join(root_dir, ORIGINAL_IMAGES_FORLDER)
     object_meta_dir = os.path.join(root_dir, OBJECT_META_FOLDER)
     exploration_dir = os.path.join(root_dir, EXPLORATION_META_FOLDER)
-
+    global meta_datas
+    print("SAVE_instance_detections2D set {}".format(SAVE_instance_detections2D))
+    meta_datas = {
+        "instance_detections2D": [],
+        "instance_detections2D_exp": [],
+    }
     # fresh images list
     traj_data['images'] = list()
 
-    clear_and_create_dir(object_meta_dir)
-    clear_and_create_dir(exploration_dir)
+    # clear_and_create_dir(object_meta_dir)
+    # clear_and_create_dir(exploration_dir)
+    print("no clear_and_create_dir")
 
     # scene setup
     scene_num = traj_data['scene']['scene_num']
@@ -236,6 +266,11 @@ def augment_traj(env, json_file):
     if args.smooth_nav and args.time_delays:
         orig_img_count = get_image_index(orig_images_dir)
         object_meta_count = get_json_index(object_meta_dir)
+        if SAVE_instance_detections2D:
+            object_meta_count = len(meta_datas["instance_detections2D"])
+            instance_detection_file = os.path.join(root_dir, "INSTANCE_DETECTIONS2D_FILE.json")
+            with open(instance_detection_file, 'w') as f:
+                json.dump(meta_datas, f)
         print ("Original Image Count %d, New Image Count %d" % (orig_img_count, object_meta_count))
         if orig_img_count != object_meta_count:
             print("sequence length doesn't match\n" + object_meta_dir + "\n")

@@ -39,6 +39,7 @@ class SemanticGraphImplement():
         self.EMBED_CURRENT_STATE = self.cfg_semantic.SCENE_GRAPH.EMBED_CURRENT_STATE
         self.EMBED_HISTORY_CHANGED_NODES = self.cfg_semantic.SCENE_GRAPH.EMBED_HISTORY_CHANGED_NODES
         self.RESULT_FEATURE = self.cfg_semantic.SCENE_GRAPH.RESULT_FEATURE
+        self.USE_ADJ_TO_GNN = self.cfg_semantic.SCENE_GRAPH.USE_ADJ_TO_GNN
         # model
         self.graph_embed_model = importlib.import_module(self.cfg_semantic.SCENE_GRAPH.MODEL)
         self.graph_embed_model = self.graph_embed_model.Net(
@@ -99,13 +100,13 @@ class SemanticGraphImplement():
         }
         return store_state
 
+    # for alfred model/nn
     def store_data_to_graph(self, thor=None, store_state=None, env_index=None):
         if thor is not None:
             store_state = self.get_env_last_event_data(thor)
         if store_state is None:
             raise NotImplementedError()
 
-        graph_embed_features = []
         scene_graph = self.scene_graphs[env_index]
         rgb_image = store_state["rgb_image"]
         # mask_image = store_state["mask_image"][i]
@@ -122,30 +123,63 @@ class SemanticGraphImplement():
             result = results[0]
             scene_graph.add_local_graph_to_global_graph(rgb_image, result)
 
-    def chose_importent_node_feature(self, chose_type, env_index, hidden_state=None):
+    # for alfred model/nn
+    def get_graph_feature(self, chose_type, env_index):
         scene_graph = self.scene_graphs[env_index]
         if chose_type == "GLOBAL_GRAPH":
             # embed graph data
             global_graph = scene_graph.get_graph_data()
-            importent_node_feature, dict_ANALYZE_GRAPH = self.graph_embed_model.chose_importent_node(
+            graph_feature, dict_ANALYZE_GRAPH = self.graph_embed_model(
                 global_graph,
-                hidden_state,
             )
         elif chose_type == "CURRENT_STATE_GRAPH":
             current_state_graph = scene_graph.get_current_state_graph_data()
-            importent_node_feature, dict_ANALYZE_GRAPH = self.graph_embed_model.chose_importent_node(
+            graph_feature, dict_ANALYZE_GRAPH = self.graph_embed_model(
                 current_state_graph,
-                hidden_state,
             )
         elif chose_type == "HISTORY_CHANGED_NODES_GRAPH":
             history_changed_nodes_graph = scene_graph.get_history_changed_nodes_graph_data()
-            importent_node_feature, dict_ANALYZE_GRAPH = self.graph_embed_model.chose_importent_node(
+            graph_feature, dict_ANALYZE_GRAPH = self.graph_embed_model(
                 history_changed_nodes_graph,
-                hidden_state,
             )
         else:
             raise NotImplementedError
-        return importent_node_feature, dict_ANALYZE_GRAPH
+        return graph_feature, dict_ANALYZE_GRAPH
+
+    # for alfred model/nn
+    def chose_importent_node_feature(self, chose_type, env_index, hidden_state=None):
+        scene_graph = self.scene_graphs[env_index]
+        def basic_chose_node():
+            if chose_type == "GLOBAL_GRAPH":
+                # embed graph data
+                global_graph = scene_graph.get_graph_data()
+                importent_node_feature, dict_ANALYZE_GRAPH = self.graph_embed_model.chose_importent_node(
+                    global_graph,
+                    hidden_state,
+                )
+            elif chose_type == "CURRENT_STATE_GRAPH":
+                current_state_graph = scene_graph.get_current_state_graph_data()
+                importent_node_feature, dict_ANALYZE_GRAPH = self.graph_embed_model.chose_importent_node(
+                    current_state_graph,
+                    hidden_state,
+                )
+            elif chose_type == "HISTORY_CHANGED_NODES_GRAPH":
+                history_changed_nodes_graph = scene_graph.get_history_changed_nodes_graph_data()
+                importent_node_feature, dict_ANALYZE_GRAPH = self.graph_embed_model.chose_importent_node(
+                    history_changed_nodes_graph,
+                    hidden_state,
+                )
+            else:
+                raise NotImplementedError
+            return importent_node_feature, dict_ANALYZE_GRAPH
+
+        def adj_chose_node():
+            raise NotImplementedError
+
+        if self.USE_ADJ_TO_GNN:
+            return adj_chose_node()
+        else:
+            return basic_chose_node()
 
     # visual features for state representation
     def extract_visual_features(self, thor=None, store_state=None, hidden_state=None, env_index=None):
@@ -192,14 +226,18 @@ class SemanticGraphImplement():
             dict_objectIds_to_score = scene_graph.analyze_graph(dict_ANALYZE_GRAPH)
         return graph_embed_features, store_state, dict_objectIds_to_score
 
-    def update_exploration_data_to_global_graph(self, exploration_transition_cache, env_index):
+    def update_exploration_data_to_global_graph(self, exploration_transition_cache, env_index, exploration_imgs=None):
         if not self.use_exploration_frame_feats:
             return
         if self.PRINT_DEBUG:
             print("=== update_exploration_data_to_global_graph ===")
         scene_graph = self.scene_graphs[env_index]
         for i in range(len(exploration_transition_cache)):
-            rgb_image = exploration_transition_cache[i]["exploration_img"]
+            if exploration_imgs is not None:
+                # _load_meta_data, all_meta_data["exploration_imgs"] = exporlation_ims
+                rgb_image = exploration_imgs[i]
+            else:
+                rgb_image = exploration_transition_cache[i]["exploration_img"]
             if self.isORACLE:
                 sgg_meta_data = exploration_transition_cache[i]["exploration_sgg_meta_data"]
                 target = self.trans_MetaData.trans_object_meta_data_to_relation_and_attribute(sgg_meta_data)

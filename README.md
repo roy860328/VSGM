@@ -32,11 +32,22 @@ cd $ALFRED_ROOT
 wget https://alfred-colorswap.s3.us-east-2.amazonaws.com/weight_maskrcnn.pt
 ```
 
+## generate Semantic graph data
+```
+cd alfred/gen
+python scripts/augment_meta_data_trajectories.py --data_path ../data/full_2.1.0/ --num_threads 4 --smooth_nav --time_delays
+```
+### extract exploration img to resnet feature
+```
+python models/utils/extract_resnet.py --data data/full_2.1.0 --batch 32 --gpu --visual_model resnet18 --filename feat_exploration_conv.pt --img_folder exploration_meta
+```
+
 ## MOCA
 
 ```
-CUDA_VISIBLE_DEVICES=1 python models/train/train_semantic.py models/config/test_base.yaml --semantic_config_file models/config/test_semantic_graph.yaml --data data/full_2.1.0/ --model seq2seq_im_moca --dout exp/moca_{model},name,pm_and_subgoals_01 --splits data/splits/oct21.json --batch 5 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --gpu
-
+cd /home/moca
+CUDA_VISIBLE_DEVICES=1 python models/train/train_seq2seq.py --model seq2seq_im_mask --dout exp/moca_{model},name,pm_and_subgoals_01 --splits data/splits/oct21.json --batch 8 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --gpu
+# eval
 CUDA_VISIBLE_DEVICES=0 python models/eval_moca/eval_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/memory_semantic_graph.yaml --model_path exp/moca_seq2seq_im_moca,name,pm_and_subgoals_01_13-01-2021_10-59-32/best_seen.pth --model seq2seq_im_moca --data data/full_2.1.0/ --eval_split train --gpu
 ```
 
@@ -50,7 +61,9 @@ CUDA_VISIBLE_DEVICES=0 python models/eval_moca/eval_semantic.py models/config/wi
 
 ## MOCA + Importent nodes graph feature
 ```
-CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/importent_semantic_graph.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_importent_nodes --dout exp/importent_nodes_moca --splits data/splits/oct21.json --batch 20 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --demb 100 --dhid 256 --gpu --test
+CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/importent_semantic_graph.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_importent_nodes --dout exp/importent_nodes_moca --splits data/splits/oct21.json --batch 20 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --demb 100 --dhid 256 --gpu
+
+CUDA_VISIBLE_DEVICES=0 python models/eval_moca/eval_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/importent_semantic_graph.yaml --model_path exp/importent_nodes_moca_16-01-2021_11-02-31/best_seen.pth --model seq2seq_im_moca_importent_nodes --data data/full_2.1.0/ --eval_split train --gpu
 ```
 
 

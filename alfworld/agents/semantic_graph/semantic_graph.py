@@ -160,18 +160,23 @@ class HeteGraphData(GraphData):
             feature = feature.cuda()
         return feature, unique_obj_index
 
-    def add_node(self, obj_cls, feature, obj_id=None):
-        word_embed = self.get_wore_embed(obj_cls).unsqueeze(0)
-        feature, unique_obj_index = self._append_unique_obj_index_to_attribute(feature, obj_cls)
+    def add_node(self, obj_cls, attr_feature, obj_id=None, feature_img=None):
+        node_feature = self.get_wore_embed(obj_cls).unsqueeze(0)
+        attr_feature, unique_obj_index = self._append_unique_obj_index_to_attribute(attr_feature, obj_cls)
+
+        if feature_img is not None:
+            if self.GPU:
+                feature_img = feature_img.cuda()
+            node_feature = torch.cat([node_feature, feature_img], dim=1)
         # init self.x
         if self.x is None:
             ind = 0
-            self.x = word_embed
-            self.attributes = feature
+            self.x = node_feature
+            self.attributes = attr_feature
         else:
             ind = len(self.x)
-            self.x = torch.cat([self.x, word_embed], dim=0)
-            self.attributes = torch.cat([self.attributes, feature], dim=0)
+            self.x = torch.cat([self.x, node_feature], dim=0)
+            self.attributes = torch.cat([self.attributes, attr_feature], dim=0)
         # Oracle
         if obj_id is None:
             # Not Oracle. Create new obj_id
@@ -182,16 +187,25 @@ class HeteGraphData(GraphData):
         self.list_node_obj_cls.append(obj_cls)
         return ind
 
-    def update_node(self, obj_cls, feature, obj_id):
+    def update_node(self, obj_cls, feature, obj_id, feature_img=None):
         '''
+        isFeatureChange: if True, add to history graph
         '''
         isFeatureChange = False
         ind = self.obj_id_to_ind[obj_id]
         if self.GPU:
             feature = feature.cuda()
+            if feature_img is not None:
+                feature_img = feature_img.cuda()
         if not torch.equal(self.attributes[ind][:-1], feature):
             isFeatureChange = True
+        # set feature
         self.attributes[ind][:-1] = feature
+        if feature_img is not None:
+            # 512
+            ind_feature_img = feature_img.shape[-1]
+            # from -512
+            self.x[ind][-ind_feature_img:] = feature_img
         return ind, isFeatureChange
 
     def update_relation(self, node_src, node_dst, relation):
@@ -249,6 +263,7 @@ class SceneGraph(object):
         self.SAME_VISION_FEATURE_THRESHOLD = cfg.SCENE_GRAPH.SAME_VISION_FEATURE_THRESHOLD
         # graph
         self.obj_cls_name_to_features = self._get_obj_cls_name_to_features()
+        self.adj, self.x = self._get_adjacency_matrix_and_all_feature()
         self.init_graph_data()
 
     def init_graph_data(self):
@@ -336,8 +351,13 @@ class SceneGraph(object):
     def compare_features(self, feature1, feature2):
         return cosine_similarity(feature1.reshape(1, -1), feature2.reshape(1, -1))
 
-    def add_oracle_local_graph_to_global_graph(self, img, target):
+    def add_oracle_local_graph_to_global_graph(self, feature_img, target):
+        '''
+        feature_img: torch.Size([512, 7, 7])
+        '''
         self.init_current_state_data()
+        # global average pooling, https://discuss.pytorch.org/t/how-can-i-perform-global-average-pooling-before-the-last-fully-connected-layer/74352
+        feature_img = feature_img.mean([1, 2]).reshape(1, -1)
         tar_ids = target["objectIds"]
         obj_clses = target["labels"].numpy().astype(int)
         obj_attributes = target["attributes"]
@@ -356,14 +376,14 @@ class SceneGraph(object):
             isFindNode = self.global_graph.search_node(obj_id=tar_id)
             # check node
             if isFindNode:
-                ind, isFeatureChange = self.global_graph.update_node(obj_cls, obj_attribute, tar_id)
+                ind, isFeatureChange = self.global_graph.update_node(obj_cls, obj_attribute, tar_id, feature_img=feature_img)
                 # EMBED_HISTORY_CHANGED_NODES
                 if isFeatureChange:
-                    self.history_changed_nodes_graph.add_node(obj_cls, obj_attribute, tar_id)
+                    self.history_changed_nodes_graph.add_node(obj_cls, obj_attribute, tar_id, feature_img=feature_img)
             else:
-                ind = self.global_graph.add_node(obj_cls, obj_attribute, tar_id)
+                ind = self.global_graph.add_node(obj_cls, obj_attribute, tar_id, feature_img=feature_img)
             # EMBED_CURRENT_STATE
-            current_state_node_ind = self.current_state_graph.add_node(obj_cls, obj_attribute, tar_id)
+            current_state_node_ind = self.current_state_graph.add_node(obj_cls, obj_attribute, tar_id, feature_img=feature_img)
             # [317, 318, 148, 149, 150, 151, 152, 319, 320, 321, 322, 154, 323, 155, 157, 158, 159, 160, 161, 324]
             global_graph_current_frame_obj_cls_to_node_index.append(ind)
             current_state_graph_current_frame_obj_cls_to_node_index.append(current_state_node_ind)

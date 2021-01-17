@@ -150,7 +150,7 @@ class Eval(object):
             openable_points = json.load(f)
         return openable_points
 
-    def explore_scene(cls, env, traj_data):
+    def explore_scene(cls, env, traj_data, resnet):
         '''
         Use pre-computed openable points from ALFRED to store receptacle locations
         '''
@@ -170,21 +170,21 @@ class Eval(object):
                       'horizon': point[3]}
             event = env.step(action)
             if event.metadata['lastActionSuccess']:
-                image = np.uint8(env.last_event.frame)
-                curr_image = Image.fromarray(image)
+                curr_image = Image.fromarray(np.uint8(env.last_event.frame))
+                image_feature = resnet.featurize([curr_image], batch=1)[0]
                 meta_data = env.last_event.metadata['objects']
                 meta_data = {
-                    "exploration_img": curr_image,
+                    "exploration_img": image_feature,
                     "exploration_sgg_meta_data": meta_data,
                 }
                 meta_datas["exploration_sgg_meta_data"].append(meta_data)
         return meta_datas
 
-    def get_meta_datas(cls, env):
-        image = np.uint8(env.last_event.frame)
-        curr_image = Image.fromarray(image)
+    def get_meta_datas(cls, env, resnet):
+        curr_image = Image.fromarray(np.uint8(env.last_event.frame))
+        image_feature = resnet.featurize([curr_image], batch=1)[0]
         meta_data = {
-            "rgb_image": curr_image,
+            "rgb_image": image_feature,
             "sgg_meta_data": env.last_event.metadata['objects'],
         }
         meta_datas = {

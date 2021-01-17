@@ -505,7 +505,7 @@ class ImportentNodesConvFrameMaskDecoderProgressMonitor(nn.Module):
         self.h_tm1_fc_instr = nn.Linear(dhid, dhid)
 
         self.subgoal = nn.Linear(dhid+dhid+dframe+demb+IMPORTENT_NDOES_FEATURE, 1)
-        self.progress = nn.Linear(dhid+dhid+dframe+demb+IMPORTENT_NDOES_FEATURE, 1)
+        self.progress = nn.Linear(dhid+dhid+dframe+demb+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE, 1)
 
         nn.init.uniform_(self.go, -0.1, 0.1)
 
@@ -530,7 +530,7 @@ class ImportentNodesConvFrameMaskDecoderProgressMonitor(nn.Module):
         vis_feat_t_instr = self.dynamic_conv(frame, weighted_lang_t_instr)
 
         # concat visual feats, weight lang, and previous action embedding (goal decoder)
-        inp_t_goal = torch.cat([vis_feat_t_goal, weighted_lang_t_goal, e_t, feat_global_graph], dim=1)
+        inp_t_goal = torch.cat([vis_feat_t_goal, weighted_lang_t_goal, e_t, feat_current_state_graph], dim=1)
         inp_t_goal = self.input_dropout(inp_t_goal)
         
         # concat visual feats, weight lang, and previous action embedding (instr decoder)
@@ -556,12 +556,15 @@ class ImportentNodesConvFrameMaskDecoderProgressMonitor(nn.Module):
         action_emb_t = self.actor(self.actor_dropout(cont_t_instr))
         action_t = action_emb_t.mm(self.emb.weight.t())
 
-        cont_t_instr_with_history_graph = torch.cat(
+        cont_t_instr_with_subgoal = torch.cat(
             [h_t_instr, vis_feat_t_instr, weighted_lang_t_instr, e_t,
                 feat_history_changed_nodes_graph], dim=1)
+        cont_t_instr_with_progress = torch.cat(
+            [h_t_instr, vis_feat_t_instr, weighted_lang_t_instr, e_t,
+                feat_history_changed_nodes_graph, feat_global_graph], dim=1)
         # predict subgoals completed and task progress
-        subgoal_t = F.sigmoid(self.subgoal(cont_t_instr_with_history_graph))
-        progress_t = F.sigmoid(self.progress(cont_t_instr_with_history_graph))
+        subgoal_t = F.sigmoid(self.subgoal(cont_t_instr_with_subgoal))
+        progress_t = F.sigmoid(self.progress(cont_t_instr_with_progress))
 
         return action_t, mask_t, state_t_goal, state_t_instr, lang_attn_t_goal, lang_attn_t_instr, subgoal_t, progress_t
 
@@ -587,20 +590,23 @@ class ImportentNodesConvFrameMaskDecoderProgressMonitor(nn.Module):
                 if len(b_store_state["sgg_meta_data"]) > t:
                     t_store_state = b_store_state["sgg_meta_data"][t]
                     if t == 0 and self.semantic_graph_implement.use_exploration_frame_feats:
+                        # import pdb;pdb.set_trace()
                         exploration_transition_cache = b_store_state["exploration_sgg_meta_data"]
+                        exploration_imgs = b_store_state["exploration_imgs"]
                         self.semantic_graph_implement.update_exploration_data_to_global_graph(
                             exploration_transition_cache,
-                            env_index
+                            env_index,
+                            exploration_imgs=exploration_imgs,
                         )
+                    t_store_state["rgb_image"] = frames[env_index, t]
                     self.semantic_graph_implement.store_data_to_graph(
                         store_state=t_store_state,
                         env_index=env_index
                     )
                     global_graph_importent_features, _ = \
-                        self.semantic_graph_implement.chose_importent_node_feature(
+                        self.semantic_graph_implement.get_graph_feature(
                             chose_type="GLOBAL_GRAPH",
                             env_index=env_index,
-                            hidden_state=state_t_goal[0][env_index:env_index+1],
                             )
                     current_state_graph_importent_features, _ = \
                         self.semantic_graph_implement.chose_importent_node_feature(

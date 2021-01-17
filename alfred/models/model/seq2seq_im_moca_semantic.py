@@ -83,12 +83,14 @@ class Module(Base):
         # paths
         self.root_path = os.getcwd()
         self.feat_pt = 'feat_conv.pt'
+        self.feat_exploration_pt = 'feat_exploration_conv.pt'
 
         # params
         self.max_subgoals = 25
 
         # reset model
         self.reset()
+        self.extractor = None
 
 
     def finish_of_episode(self):
@@ -127,7 +129,6 @@ class Module(Base):
                 with open(exploration_file_path, 'r') as f:
                     meta_data = json.load(f)
                 meta_data = {
-                    "exploration_img": [],
                     "exploration_sgg_meta_data": meta_data,
                 }
                 meta_datas["exploration_sgg_meta_data"].append(meta_data)
@@ -140,6 +141,8 @@ class Module(Base):
             all_meta_data = sequences_to_one()
             with open(all_meta_data_path, 'w') as f:
                 json.dump(all_meta_data, f)
+        exporlation_ims = torch.load(os.path.join(root, self.feat_exploration_pt))
+        all_meta_data["exploration_imgs"] = exporlation_ims
         return all_meta_data
 
     def featurize(self, batch, load_mask=True, load_frames=True):

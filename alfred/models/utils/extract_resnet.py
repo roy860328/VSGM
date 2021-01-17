@@ -34,14 +34,14 @@ if __name__ == '__main__':
             fimages = sorted([os.path.join(root, f) for f in files
                               if (f.endswith('.png') or (f.endswith('.jpg')))])
             if len(fimages) > 0:
-                if args.skip_existing and os.path.isfile(os.path.join(root, 'feat_conv.pt')):
+                if args.skip_existing and os.path.isfile(os.path.join(root, args.filename)):
                     continue
                 try:
                     print('{}'.format(root))
                     image_loader = Image.open if isinstance(fimages[0], str) else Image.fromarray
                     images = [image_loader(f) for f in fimages]
                     feat = extractor.featurize(images, batch=args.batch)
-                    torch.save(feat.cpu(), os.path.join(root.replace('raw_images', ''), args.filename))
+                    torch.save(feat.cpu(), os.path.join(root.replace(args.img_folder, ''), args.filename))
                 except Exception as e:
                     print(e)
                     print("Skipping " + root)

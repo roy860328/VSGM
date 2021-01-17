@@ -18,7 +18,7 @@ class Net(torch.nn.Module):
         normalize = cfg.SCENE_GRAPH.NORMALIZATION
         self.cfg = cfg
         self.PRINT_DEBUG = PRINT_DEBUG
-        self.word_embed_downsample = nn.Linear(cfg.SCENE_GRAPH.NODE_FEATURE_SIZE, middle_size)
+        self.node_embed_downsample = nn.Linear(cfg.SCENE_GRAPH.NODE_FEATURE_SIZE, middle_size)
         self.conv1 = GCNConv(input_size, middle_size, cached=True,
                              normalize=normalize,
                              )
@@ -50,6 +50,7 @@ class Net(torch.nn.Module):
                 self.CHOSE_IMPORTENT_NODE_OUTPUT_SHAPE,
                 self.EMBED_FEATURE_SIZE
             )
+
     def forward(self, data, CHOSE_IMPORTENT_NODE=False, hidden_state=None):
         '''
         data.x
@@ -88,7 +89,7 @@ class Net(torch.nn.Module):
                 x = x.clone().detach()
                 # torch.Size([10, 24])
                 attributes = attributes.clone().detach()
-                x = self.word_embed_downsample(x)
+                x = self.node_embed_downsample(x)
                 # torch.Size([10, 16])
                 x = torch.cat([x, attributes], dim=1)
                 nodes_tensor = x
@@ -110,7 +111,7 @@ class Net(torch.nn.Module):
             attributes = attributes.clone().detach()
             edge_obj_to_obj = edge_obj_to_obj.clone().detach()
             # torch.Size([2, 16])
-            x = self.word_embed_downsample(x)
+            x = self.node_embed_downsample(x)
             x = F.relu(self.conv1(x, edge_obj_to_obj, edge_weight))
             x = F.dropout(x, training=self.training)
             x = torch.cat([x, attributes], dim=1)
@@ -128,7 +129,6 @@ class Net(torch.nn.Module):
                 # torch.Size([1, 528]) = self.cfg.SCENE_GRAPH.RESULT_FEATURE
                 x = torch.cat([x, chose_nodes], dim=1)
         return x, dict_ANALYZE_GRAPH
-
 
     def chose_importent_node(self, data, hidden_state):
         x, attributes, edge_obj_to_obj, edge_weight = \
@@ -149,7 +149,7 @@ class Net(torch.nn.Module):
                 x = x.clone().detach()
                 # torch.Size([10, 24])
                 attributes = attributes.clone().detach()
-                x = self.word_embed_downsample(x)
+                x = self.node_embed_downsample(x)
                 # torch.Size([10, 16])
                 x = torch.cat([x, attributes], dim=1)
                 nodes_tensor = x
@@ -164,7 +164,7 @@ class Net(torch.nn.Module):
             attributes = attributes.clone().detach()
             edge_obj_to_obj = edge_obj_to_obj.clone().detach()
             # torch.Size([2, 16])
-            x = self.word_embed_downsample(x)
+            x = self.node_embed_downsample(x)
             x = F.relu(self.conv1(x, edge_obj_to_obj, edge_weight))
             x = F.dropout(x, training=self.training)
             x = torch.cat([x, attributes], dim=1)
@@ -175,5 +175,33 @@ class Net(torch.nn.Module):
             nodes_tensor = x
             # torch.Size([1, 400])
             chose_nodes, dict_ANALYZE_GRAPH = self.chose_node_module(nodes_tensor, hidden_state)
+        mapping_feature = self.chose_node_feature_mapping(chose_nodes)
+        return mapping_feature, dict_ANALYZE_GRAPH
+
+    def adjacency_chose_importent_node(self, data, hidden_state, adj, object_feature):
+        x, attributes, edge_obj_to_obj, edge_weight = \
+            data.x, \
+            data.attributes, \
+            data.edge_obj_to_obj, \
+            data.edge_attr
+        adj = adj.clone().detach()
+        object_feature = object_feature.clone().detach()
+        dict_ANALYZE_GRAPH = None
+
+        x = x.clone().detach()
+        attributes = attributes.clone().detach()
+        
+        # torch.Size([2, 16])
+        x = self.node_embed_downsample(x)
+        x = F.relu(self.conv1(x, edge_obj_to_obj, edge_weight))
+        x = F.dropout(x, training=self.training)
+        x = torch.cat([x, attributes], dim=1)
+        # torch.Size([2, 40])
+        x = self.conv2(x, edge_obj_to_obj, edge_weight)
+        # torch.Size([2, 16]) + torch.Size([2, 24]) => torch.Size([2, 40])
+        x = torch.cat([x, attributes], dim=1)
+        nodes_tensor = x
+        # torch.Size([1, 400])
+        chose_nodes, dict_ANALYZE_GRAPH = self.chose_node_module(nodes_tensor, hidden_state)
         mapping_feature = self.chose_node_feature_mapping(chose_nodes)
         return mapping_feature, dict_ANALYZE_GRAPH

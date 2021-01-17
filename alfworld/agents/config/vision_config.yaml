@@ -40,7 +40,7 @@ mask_rcnn:
 general:
   random_seed: 42
   use_cuda: True                                               # disable this when running on machine without cuda
-  visdom: False                                                # plot training/eval curves, run with visdom server
+  visdom: True                                                # plot training/eval curves, run with visdom server
   task: 'alfred'
   training_method: 'dagger'                                    # 'dqn' or 'dagger'
   save_path: './training/'                                     # path to save pytorch models
@@ -57,7 +57,7 @@ general:
 
   evaluate:
     run_eval: True
-    batch_size: 10
+    batch_size: 5
     env:
       type: "AlfredTWEnv"
 

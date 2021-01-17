@@ -58,7 +58,7 @@ class EvalSubgoals(Eval):
                     print("No. of trajectories left: %d" % (task_queue.qsize()))
                     if model.semantic_graph_implement is not None \
                         and model.semantic_graph_implement.use_exploration_frame_feats:
-                        meta_datas = cls.explore_scene(cls, env, traj)
+                        meta_datas = cls.explore_scene(cls, env, traj, resnet)
                         model.semantic_graph_implement.update_exploration_data_to_global_graph(
                             meta_datas["exploration_sgg_meta_data"],
                             0
@@ -125,7 +125,7 @@ class EvalSubgoals(Eval):
             curr_depth_image = env.last_event.depth_frame * (255 / 10000)
             curr_depth_image = curr_depth_image.astype(np.uint8)
             feat['frames_depth'] = curr_depth_image
-            feat['all_meta_datas'] = cls.get_meta_datas(cls, env)
+            feat['all_meta_datas'] = cls.get_meta_datas(cls, env, resnet)
 
             # expert teacher-forcing upto subgoal
             if t < len(expert_init_actions):

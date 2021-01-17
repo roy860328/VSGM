@@ -21,6 +21,7 @@ CUDA_VISIBLE_DEVICES=1 python dagger/train_butler_semantic_dagger.py config/base
 
 ### Train vision
 ```
+python -m visdom.server
 python dagger/train_vision_dagger.py config/vision_config.yaml
 ```
 
