@@ -39,7 +39,6 @@ class SemanticGraphImplement():
         self.EMBED_CURRENT_STATE = self.cfg_semantic.SCENE_GRAPH.EMBED_CURRENT_STATE
         self.EMBED_HISTORY_CHANGED_NODES = self.cfg_semantic.SCENE_GRAPH.EMBED_HISTORY_CHANGED_NODES
         self.RESULT_FEATURE = self.cfg_semantic.SCENE_GRAPH.RESULT_FEATURE
-        self.USE_ADJ_TO_GNN = self.cfg_semantic.SCENE_GRAPH.USE_ADJ_TO_GNN
         # model
         self.graph_embed_model = importlib.import_module(self.cfg_semantic.SCENE_GRAPH.MODEL)
         self.graph_embed_model = self.graph_embed_model.Net(
@@ -123,6 +122,15 @@ class SemanticGraphImplement():
             result = results[0]
             scene_graph.add_local_graph_to_global_graph(rgb_image, result)
 
+    def get_priori_feature(self, env_index, hidden_state):
+        raise NotImplementedError
+        scene_graph = self.scene_graphs[env_index]
+        priori_graph = scene_graph.get_priori_graph()
+        importent_node_feature, dict_ANALYZE_GRAPH = self.graph_embed_model.priori_feature(
+            priori_graph,
+            hidden_state,
+        )
+
     # for alfred model/nn
     def get_graph_feature(self, chose_type, env_index):
         scene_graph = self.scene_graphs[env_index]
@@ -142,6 +150,11 @@ class SemanticGraphImplement():
             graph_feature, dict_ANALYZE_GRAPH = self.graph_embed_model(
                 history_changed_nodes_graph,
             )
+        elif chose_type == "PRIORI_GRAPH":
+            priori_graph = scene_graph.get_priori_graph()
+            graph_feature, dict_ANALYZE_GRAPH = self.graph_embed_model(
+                priori_graph,
+            )
         else:
             raise NotImplementedError
         return graph_feature, dict_ANALYZE_GRAPH
@@ -149,37 +162,35 @@ class SemanticGraphImplement():
     # for alfred model/nn
     def chose_importent_node_feature(self, chose_type, env_index, hidden_state=None):
         scene_graph = self.scene_graphs[env_index]
-        def basic_chose_node():
-            if chose_type == "GLOBAL_GRAPH":
-                # embed graph data
-                global_graph = scene_graph.get_graph_data()
-                importent_node_feature, dict_ANALYZE_GRAPH = self.graph_embed_model.chose_importent_node(
-                    global_graph,
-                    hidden_state,
-                )
-            elif chose_type == "CURRENT_STATE_GRAPH":
-                current_state_graph = scene_graph.get_current_state_graph_data()
-                importent_node_feature, dict_ANALYZE_GRAPH = self.graph_embed_model.chose_importent_node(
-                    current_state_graph,
-                    hidden_state,
-                )
-            elif chose_type == "HISTORY_CHANGED_NODES_GRAPH":
-                history_changed_nodes_graph = scene_graph.get_history_changed_nodes_graph_data()
-                importent_node_feature, dict_ANALYZE_GRAPH = self.graph_embed_model.chose_importent_node(
-                    history_changed_nodes_graph,
-                    hidden_state,
-                )
-            else:
-                raise NotImplementedError
-            return importent_node_feature, dict_ANALYZE_GRAPH
-
-        def adj_chose_node():
-            raise NotImplementedError
-
-        if self.USE_ADJ_TO_GNN:
-            return adj_chose_node()
+        if chose_type == "GLOBAL_GRAPH":
+            # embed graph data
+            global_graph = scene_graph.get_graph_data()
+            importent_node_feature, dict_ANALYZE_GRAPH = self.graph_embed_model.chose_importent_node(
+                global_graph,
+                hidden_state,
+            )
+        elif chose_type == "CURRENT_STATE_GRAPH":
+            current_state_graph = scene_graph.get_current_state_graph_data()
+            importent_node_feature, dict_ANALYZE_GRAPH = self.graph_embed_model.chose_importent_node(
+                current_state_graph,
+                hidden_state,
+            )
+        elif chose_type == "HISTORY_CHANGED_NODES_GRAPH":
+            history_changed_nodes_graph = scene_graph.get_history_changed_nodes_graph_data()
+            importent_node_feature, dict_ANALYZE_GRAPH = self.graph_embed_model.chose_importent_node(
+                history_changed_nodes_graph,
+                hidden_state,
+            )
+        elif chose_type == "PRIORI_GRAPH":
+            priori_graph = scene_graph.get_priori_graph()
+            importent_node_feature, dict_ANALYZE_GRAPH = self.graph_embed_model.chose_importent_node(
+                priori_graph,
+                hidden_state,
+            )
         else:
-            return basic_chose_node()
+            raise NotImplementedError
+        return importent_node_feature, dict_ANALYZE_GRAPH
+
 
     # visual features for state representation
     def extract_visual_features(self, thor=None, store_state=None, hidden_state=None, env_index=None):

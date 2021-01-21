@@ -12,7 +12,10 @@ sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], '..'))
 from alfworld.gen import constants
 
 OBJECTS_DETECTOR = constants.OBJECTS_DETECTOR
+# 1 background + 108 object
+OBJECTS = constants.OBJECTS
 STATIC_RECEPTACLES = constants.STATIC_RECEPTACLES
+# 1 background + 105 object
 ALL_DETECTOR = constants.ALL_DETECTOR
 '''
 # relation
@@ -41,6 +44,8 @@ print('ALL_DETECTOR: ', len(ALL_DETECTOR) + 1)
 def get_object_classes(object_type):
     if object_type == "objects":
         return OBJECTS_DETECTOR
+    elif object_type == "ori_objects":
+        return OBJECTS
     elif object_type == "receptacles":
         return STATIC_RECEPTACLES
     else:

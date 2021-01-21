@@ -18,7 +18,8 @@ class Net(torch.nn.Module):
         normalize = cfg.SCENE_GRAPH.NORMALIZATION
         self.cfg = cfg
         self.PRINT_DEBUG = PRINT_DEBUG
-        self.node_embed_downsample = nn.Linear(cfg.SCENE_GRAPH.NODE_FEATURE_SIZE, middle_size)
+        self.node_word_embed_downsample = nn.Linear(cfg.SCENE_GRAPH.NODE_INPUT_WORD_EMBED_SIZE, middle_size//2)
+        self.node_rgb_feature_downsample = nn.Linear(cfg.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE, middle_size//2)
         self.conv1 = GCNConv(input_size, middle_size, cached=True,
                              normalize=normalize,
                              )
@@ -89,9 +90,10 @@ class Net(torch.nn.Module):
                 x = x.clone().detach()
                 # torch.Size([10, 24])
                 attributes = attributes.clone().detach()
-                x = self.node_embed_downsample(x)
+                word_feature = self.node_word_embed_downsample(x[:, :self.cfg.SCENE_GRAPH.NODE_INPUT_WORD_EMBED_SIZE])
+                rgb_feature = self.node_rgb_feature_downsample(x[:, self.cfg.SCENE_GRAPH.NODE_INPUT_WORD_EMBED_SIZE:])
                 # torch.Size([10, 16])
-                x = torch.cat([x, attributes], dim=1)
+                x = torch.cat([word_feature, rgb_feature, attributes], dim=1)
                 nodes_tensor = x
                 x = self.final_mapping(x)
                 if CHOSE_IMPORTENT_NODE:
@@ -110,8 +112,10 @@ class Net(torch.nn.Module):
             x = x.clone().detach()
             attributes = attributes.clone().detach()
             edge_obj_to_obj = edge_obj_to_obj.clone().detach()
+            word_feature = self.node_word_embed_downsample(x[:, :self.cfg.SCENE_GRAPH.NODE_INPUT_WORD_EMBED_SIZE])
+            rgb_feature = self.node_rgb_feature_downsample(x[:, self.cfg.SCENE_GRAPH.NODE_INPUT_WORD_EMBED_SIZE:])
             # torch.Size([2, 16])
-            x = self.node_embed_downsample(x)
+            x = torch.cat([word_feature, rgb_feature], dim=1)
             x = F.relu(self.conv1(x, edge_obj_to_obj, edge_weight))
             x = F.dropout(x, training=self.training)
             x = torch.cat([x, attributes], dim=1)
@@ -149,9 +153,10 @@ class Net(torch.nn.Module):
                 x = x.clone().detach()
                 # torch.Size([10, 24])
                 attributes = attributes.clone().detach()
-                x = self.node_embed_downsample(x)
-                # torch.Size([10, 16])
-                x = torch.cat([x, attributes], dim=1)
+                word_feature = self.node_word_embed_downsample(x[:, :self.cfg.SCENE_GRAPH.NODE_INPUT_WORD_EMBED_SIZE])
+                rgb_feature = self.node_rgb_feature_downsample(x[:, self.cfg.SCENE_GRAPH.NODE_INPUT_WORD_EMBED_SIZE:])
+                # torch.Size([10, 16]) + [10, 24]
+                x = torch.cat([word_feature, rgb_feature, attributes], dim=1)
                 nodes_tensor = x
                 chose_nodes, dict_ANALYZE_GRAPH = self.chose_node_module(nodes_tensor, hidden_state)
             # don't have node
@@ -163,8 +168,10 @@ class Net(torch.nn.Module):
             x = x.clone().detach()
             attributes = attributes.clone().detach()
             edge_obj_to_obj = edge_obj_to_obj.clone().detach()
+            word_feature = self.node_word_embed_downsample(x[:, :self.cfg.SCENE_GRAPH.NODE_INPUT_WORD_EMBED_SIZE])
+            rgb_feature = self.node_rgb_feature_downsample(x[:, self.cfg.SCENE_GRAPH.NODE_INPUT_WORD_EMBED_SIZE:])
             # torch.Size([2, 16])
-            x = self.node_embed_downsample(x)
+            x = torch.cat([word_feature, rgb_feature], dim=1)
             x = F.relu(self.conv1(x, edge_obj_to_obj, edge_weight))
             x = F.dropout(x, training=self.training)
             x = torch.cat([x, attributes], dim=1)
@@ -178,21 +185,19 @@ class Net(torch.nn.Module):
         mapping_feature = self.chose_node_feature_mapping(chose_nodes)
         return mapping_feature, dict_ANALYZE_GRAPH
 
-    def adjacency_chose_importent_node(self, data, hidden_state, adj, object_feature):
+    def priori_feature(self, data, hidden_state):
         x, attributes, edge_obj_to_obj, edge_weight = \
             data.x, \
             data.attributes, \
             data.edge_obj_to_obj, \
             data.edge_attr
-        adj = adj.clone().detach()
-        object_feature = object_feature.clone().detach()
         dict_ANALYZE_GRAPH = None
 
         x = x.clone().detach()
-        attributes = attributes.clone().detach()
-        
+        word_feature = self.node_word_embed_downsample(x[:, :self.cfg.SCENE_GRAPH.NODE_INPUT_WORD_EMBED_SIZE])
+        rgb_feature = self.node_rgb_feature_downsample(x[:, self.cfg.SCENE_GRAPH.NODE_INPUT_WORD_EMBED_SIZE:])
         # torch.Size([2, 16])
-        x = self.node_embed_downsample(x)
+        x = torch.cat([word_feature, rgb_feature], dim=1)
         x = F.relu(self.conv1(x, edge_obj_to_obj, edge_weight))
         x = F.dropout(x, training=self.training)
         x = torch.cat([x, attributes], dim=1)

@@ -8,7 +8,9 @@ from sklearn.metrics.pairwise import cosine_similarity
 sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT']))
 from agents.semantic_graph import utils
 import importlib
-
+from numpy import genfromtxt
+import json
+from icecream import ic
 
 __all__ = ['GraphData', 'SceneGraph', 'HeteGraphData']
 
@@ -261,20 +263,71 @@ class SceneGraph(object):
         # vision
         self.VISION_FEATURE_SIZE = cfg.SCENE_GRAPH.VISION_FEATURE_SIZE
         self.SAME_VISION_FEATURE_THRESHOLD = cfg.SCENE_GRAPH.SAME_VISION_FEATURE_THRESHOLD
-        # graph
-        self.obj_cls_name_to_features = self._get_obj_cls_name_to_features()
-        self.adj, self.x = self._get_adjacency_matrix_and_all_feature()
-        self.init_graph_data()
-
-    def init_graph_data(self):
-        graphdata = getattr(
+        # graph feature
+        path_object_embedding = self.cfg.SCENE_GRAPH.OBJ_NAME_EMBEDDING
+        path_object_embedding = os.path.join(os.path.dirname(
+            os.path.realpath(__file__)), path_object_embedding)
+        self.obj_cls_name_to_features = self._get_obj_cls_name_to_features(path_object_embedding, _background=True)
+        # create graph
+        self.graphdata_type = getattr(
             importlib.import_module(
                 'agents.semantic_graph.semantic_graph'),
             self.cfg.SCENE_GRAPH.GraphData
             )
-        self.global_graph = graphdata(self.obj_cls_name_to_features, self.GPU)
-        self.current_state_graph = graphdata(self.obj_cls_name_to_features, self.GPU)
-        self.history_changed_nodes_graph = graphdata(self.obj_cls_name_to_features, self.GPU)
+        ic(self.cfg.SCENE_GRAPH.GraphData)
+        self.init_graph_data()
+        # priori_graph
+        if "PRIORI" in cfg.SCENE_GRAPH and cfg.SCENE_GRAPH.PRIORI:
+            self._set_priori_graph()
+
+    def init_graph_data(self, ):
+        self.global_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU)
+        self.current_state_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU)
+        self.history_changed_nodes_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU)
+
+    # adjacency_matrix_and_all_feature
+    def _set_priori_graph(self):
+        path_object_embedding = self.cfg.SCENE_GRAPH.PRIORI_OBJ_NAME_EMBEDDING
+        path_object_embedding = os.path.join(os.environ['GRAPH_ANALYSIS'], path_object_embedding)
+        path_object_rgb_feature = self.cfg.SCENE_GRAPH.PRIORI_OBJ_RBG_FEATURE_EMBEDDING
+        path_object_rgb_feature = os.path.join(os.path.dirname(
+            os.path.realpath(__file__)), path_object_rgb_feature)
+        path_object_attribute = self.cfg.SCENE_GRAPH.PRIORI_OBJ_ATTRIBUTE_FEATURE
+        path_object_attribute = os.path.join(os.path.dirname(
+            os.path.realpath(__file__)), path_object_attribute)
+
+        with open(path_object_rgb_feature, 'r') as f:
+            rgb_features = json.load(f)
+        with open(path_object_attribute, 'r') as f:
+            attributes = json.load(f)
+        path_ADJ = self.cfg.SCENE_GRAPH.PRIORI_OBJ_ADJ
+        path_ADJ_file = os.path.join(os.environ['GRAPH_ANALYSIS'], path_ADJ)
+        adj = genfromtxt(path_ADJ_file, delimiter=',').astype(int)
+        obj_cls_name_to_features = self._get_obj_cls_name_to_features(path_object_embedding)
+        self.priori_graph = self.graphdata_type(obj_cls_name_to_features, self.GPU)
+
+        # node word feature
+        for i, (k, word_feature) in enumerate(obj_cls_name_to_features.items()):
+            '''
+            i: 0~104
+            k: "0"~"104"
+            word_feature: shape = [300]
+            '''
+            # rgb feature
+            rgb_feature = [rgb_features[str(i)]]
+            rgb_feature = torch.tensor(rgb_feature).float()
+            attribute = torch.tensor(attributes[str(i)]).float()
+            self.priori_graph.add_node(
+                obj_cls=i,
+                attr_feature=attribute,
+                feature_img=rgb_feature
+                )
+        # node relation
+        for src in range(len(adj)):
+            for dst in range(len(adj)):
+                if adj[src, dst] > 0:
+                    self.priori_graph.update_relation(src, dst, 0)
+        print("need to check word & rgb feature & relation is ok")
 
     def init_current_state_data(self):
         graphdata = getattr(
@@ -284,7 +337,7 @@ class SceneGraph(object):
             )
         self.current_state_graph = graphdata(self.obj_cls_name_to_features, self.GPU)
 
-    def _get_obj_cls_name_to_features(self):
+    def _get_obj_cls_name_to_features(self, path, _background=False):
         def get_feature(csv_nodes_data):
             feature = [csv_nodes_data['feature'].to_list()]
             for i in range(1, 300):
@@ -292,25 +345,30 @@ class SceneGraph(object):
             feature = torch.tensor(feature).float().transpose(0, 1)
             obj_cls_name_to_features = {}
             for i, obj_cls_name in enumerate(csv_nodes_data['Id'].to_list()):
-                # for avoid class 0 __background__
-                obj_cls_name += 1
+                if _background:
+                    # for avoid class 0 __background__
+                    obj_cls_name += 1
                 obj_cls_name_to_features[obj_cls_name] = feature[i]
             return obj_cls_name_to_features
-        path_object_embedding = self.cfg.SCENE_GRAPH.OBJ_NAME_EMBEDDING
-        path_object_embedding = os.path.join(os.path.dirname(
-            os.path.realpath(__file__)), path_object_embedding)
-        csv_obj_features = pd.read_csv(path_object_embedding)
+        csv_obj_features = pd.read_csv(path)
         obj_cls_name_to_features = get_feature(csv_obj_features)
         return obj_cls_name_to_features
 
     def get_graph_data(self):
+        # print("global_graph")
         return self.global_graph
 
     def get_history_changed_nodes_graph_data(self):
+        # print("history_changed_nodes_graph")
         return self.history_changed_nodes_graph
 
     def get_current_state_graph_data(self):
+        # print("current_state_graph")
         return self.current_state_graph
+
+    def get_priori_graph(self):
+        # print("priori_graph")
+        return self.priori_graph
 
     def analyze_graph(self, dict_ANALYZE_GRAPH):
         '''

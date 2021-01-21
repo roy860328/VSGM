@@ -36,10 +36,6 @@ class Module(Base):
         '''
         semantic
         '''
-        self.config = args.config_file
-        self.config['general']['training']['batch_size'] = self.args.batch
-        # for choose node attention input size
-        self.config['general']['model']['block_hidden_dim'] = 2*args.dhid
         self.semantic_graph_implement = None
 
         # encoder and self-attention

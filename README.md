@@ -7,6 +7,12 @@ pip install rdflib==4.2.2
 pip install fasttext
 pip install pytorch-nlp
 pip install imageio
+pip install icecream
+pip install imageio-ffmpeg
+
+from icecream import ic
+ic(1)
+
 ```
 
 
@@ -18,11 +24,13 @@ cd gcn/alfred
 # linux
 export ALFRED_ROOT=/home/alfred/
 export ALFWORLD_ROOT=/home/alfworld/
+export GRAPH_ANALYSIS=/home/graph_analysis/
 export GRAPH_RCNN_ROOT=/home/graph-rcnn.pytorch/
 
 # windows
 SET ALFRED_ROOT=D:\alfred\alfred
 SET ALFWORLD_ROOT=D:\alfred\alfworld
+SET GRAPH_ANALYSIS=D:\alfred\graph_analysis
 SET GRAPH_RCNN_ROOT=D:\alfred\alfworld\agents\sgg\graph-rcnn.pytorch
 ```
 
@@ -45,10 +53,11 @@ python models/utils/extract_resnet.py --data data/full_2.1.0 --batch 32 --gpu --
 ## MOCA
 
 ```
+export ALFRED_ROOT=/home/moca/
 cd /home/moca
 CUDA_VISIBLE_DEVICES=1 python models/train/train_seq2seq.py --model seq2seq_im_mask --dout exp/moca_{model},name,pm_and_subgoals_01 --splits data/splits/oct21.json --batch 8 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --gpu
 # eval
-CUDA_VISIBLE_DEVICES=0 python models/eval_moca/eval_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/memory_semantic_graph.yaml --model_path exp/moca_seq2seq_im_moca,name,pm_and_subgoals_01_13-01-2021_10-59-32/best_seen.pth --model seq2seq_im_moca --data data/full_2.1.0/ --eval_split train --gpu
+python models/eval/eval_seq2seq.py --model models.model.seq2seq_im_mask --model_path exp/moca_seq2seq_im_mask,name,pm_and_subgoals_01/best_seen.pth --eval_split valid_seen --gpu --num_threads 2
 ```
 
 
@@ -59,17 +68,59 @@ CUDA_VISIBLE_DEVICES=1 python models/train/train_semantic.py models/config/witho
 CUDA_VISIBLE_DEVICES=0 python models/eval_moca/eval_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/memory_semantic_graph.yaml --model_path exp/moca_memoryseq2seq_im_moca_semantic,name,pm_and_subgoals_01_12-01-2021_03-37-50/best_seen.pth --model seq2seq_im_moca_semantic --data data/full_2.1.0/ --eval_split train --gpu
 ```
 
-## MOCA + Importent nodes graph feature
+## MOCA + Importent nodes & rgb node feature
 ```
-CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/importent_semantic_graph.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_importent_nodes --dout exp/importent_nodes_moca --splits data/splits/oct21.json --batch 20 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --demb 100 --dhid 256 --gpu
+CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/importent_semantic_graph.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_importent_nodes --dout exp/importent_rgb_nodes_DynamicNode_moca --splits data/splits/oct21.json --batch 20 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --demb 100 --dhid 256 --gpu
 
 CUDA_VISIBLE_DEVICES=0 python models/eval_moca/eval_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/importent_semantic_graph.yaml --model_path exp/importent_nodes_moca_16-01-2021_11-02-31/best_seen.pth --model seq2seq_im_moca_importent_nodes --data data/full_2.1.0/ --eval_split train --gpu
 ```
 
+## MOCA + Priori
+```
+CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/priori_semantic_graph.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_importent_nodes --dout exp/priori --splits data/splits/oct21.json --batch 12 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --demb 100 --dhid 256 --gpu --not_save_config
+
+```
+
+## MOCA + Priori + Graph attention
+```
+CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/gan_semantic_graph.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_importent_nodes --dout exp/graph_attention --splits data/splits/oct21.json --batch 8 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --demb 100 --dhid 256 --not_save_config --gpu
+```
 
 ---
 ---
 
+# Decompose
+## define
+action_navi_low = ['<<pad>>', '<<seg>>', '<<stop>>', 'LookDown_15', 'MoveAhead_25', 'RotateLeft_90', 'LookUp_15', 'RotateRight_90']
+action_operation_low = ['PickupObject', 'SliceObject', 'OpenObject', 'PutObject', 'CloseObject', 'ToggleObjectOn', 'ToggleObjectOff']
+
+1.index_to_word => [0-X]
+action_navi_low_dict_word_to_index => {k:0, k1:1 ...}
+action_operation_low_dict_word_to_index => {k:8, k1:8+1 ...}
+
+2.old_action_low_index_to_navi_or_operation: redefine embed value for train
+out_action_navi_or_operation: navi = 0, operation = 1,
+ignore_index=self.pad for train model
+
+3.
+```
+feat['action_low'] # new action low index. for training data (gold)
+feat['action_navi_low'] # for training data loss
+feat['action_operation_low'] # for training data loss
+feat['action_navi_or_operation'] # for training data loss
+F.cross_entropy(, reduction='none', ignore_index=0)
+```
+
+## MOCA + Priori + Decompose
+```
+CUDA_VISIBLE_DEVICES=1 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/decompose_semantic_graph.yaml --data data/full_2.1.0/ --model seq2seq_im_decomposed --dout exp/decomposed_Priori --splits data/splits/oct21.json --batch 8 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --demb 100 --dhid 256 --not_save_config --gpu --action_navi_loss_wt 0.8 --action_oper_loss_wt 1 --action_navi_or_oper_loss_wt 1 --mask_loss_wt 1 --mask_label_loss_wt 1
+```
+'action_low', 'action_navi_low', 'action_operation_low', 'action_navi_or_operation' need pad value = 0
+
+---
+---
+
+# Alfred baseline
 
 ## Seq2Seq
 ```

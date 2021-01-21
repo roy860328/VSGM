@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents'))
 sys.path.insert(0, os.environ["GRAPH_RCNN_ROOT"])
 from lib.scene_parser.rcnn.structures.bounding_box import BoxList
 import sgg.parser_scene as parser_scene
+from icecream import ic
 
 
 # Transform
@@ -247,6 +248,10 @@ def main(cfg):
         "0": [0]*512,
         # ...
     }
+    object_attribute = {
+        "0": [0]*23,
+        # ...
+    }
     save_path = os.path.join(os.getcwd(), "semantic_graph/rgb_feature")
     if os.path.isfile(os.path.join(save_path, "object_rgb_feature.json")):
         with open(os.path.join(save_path, "object_rgb_feature.json"), "r") as f:
@@ -255,44 +260,87 @@ def main(cfg):
     object_not_save = [i for i in range(len(alfred_dataset.object_classes))]
     # object_not_save = [0, 3, 14, 25, 51, 57, 59, 62, 69, 73, 79, 87, 97, 99, 103]
     print("Always not found: ", [alfred_dataset.object_classes[i] for i in [0, 3, 14, 51, 57, 59, 69, 97, 99]])
+    print(alfred_dataset.object_classes)
 
-    indices = list(range(len(alfred_dataset)))
-    shuffle(indices)
-    for i in indices:
-        img, target, idx = alfred_dataset[i]
-        dict_target = {
-            "labels": target.extra_fields["labels"],
-            "obj_relations": target.extra_fields["pred_labels"],
-            "relation_labels": target.extra_fields["relation_labels"],
-            "attributes": target.extra_fields["attributes"],
-            "objectIds": target.extra_fields["objectIds"],
-        }
-        img = F.to_pil_image(img)
-        for ind, label in enumerate(target.extra_fields["labels"].numpy().astype(int)):
-            if label in object_not_save:
-                bbox = target.bbox[ind].numpy().astype(int)
-                crop_img = img.crop(bbox)
-                if crop_img.size[0] * crop_img.size[1] < 3000:# or min(bbox) == 0 or max(bbox) == 400:
-                    continue
-                object_not_save.remove(label)
-                print("remove: ", label)
-                print("bbox:", bbox)
-                print("object: ", alfred_dataset.object_classes[label])
-                rgb_feature = extractor.featurize([crop_img], batch=1)
-                object_vision_feature[str(label)] = rgb_feature.to('cpu').numpy().tolist()
-                print(rgb_feature.shape)
-                crop_img.save(os.path.join(save_path, alfred_dataset.object_classes[label] + "_{}.jpg".format(label)))
-                time.sleep(1)
-                print("Can't find object class: ", object_not_save)
-                with open(os.path.join(save_path, "object_rgb_feature.json"), "w") as f:
-                    json.dump(object_vision_feature, f)
-        # [0, 3, 14, 51, 57, 59, 69, 97, 99]
-        if len(object_not_save) <= 9:
-            break
-        img.close()
-        # import pdb; pdb.set_trace()
-    print("Can't find object class: ", object_not_save)
 
+    def gen_object_rgb_feature():
+        indices = list(range(len(alfred_dataset)))
+        shuffle(indices)
+        for i in indices:
+            img, target, idx = alfred_dataset[i]
+            dict_target = {
+                "labels": target.extra_fields["labels"],
+                "obj_relations": target.extra_fields["pred_labels"],
+                "relation_labels": target.extra_fields["relation_labels"],
+                "attributes": target.extra_fields["attributes"],
+                "objectIds": target.extra_fields["objectIds"],
+            }
+            img = F.to_pil_image(img)
+            for ind, label in enumerate(target.extra_fields["labels"].numpy().astype(int)):
+                if label in object_not_save:
+                    bbox = target.bbox[ind].numpy().astype(int)
+                    crop_img = img.crop(bbox)
+                    if crop_img.size[0] * crop_img.size[1] < 3000:# or min(bbox) == 0 or max(bbox) == 400:
+                        continue
+                    object_not_save.remove(label)
+                    print("remove: ", label)
+                    print("bbox:", bbox)
+                    print("object: ", alfred_dataset.object_classes[label])
+                    rgb_feature = extractor.featurize([crop_img], batch=1)
+                    GAP_rgb_feature = rgb_feature[0].mean([1, 2]).reshape(-1)
+                    object_vision_feature[str(label)] = GAP_rgb_feature.to('cpu').numpy().tolist()
+                    print(GAP_rgb_feature.shape)
+                    crop_img.save(os.path.join(save_path, alfred_dataset.object_classes[label] + "_{}.jpg".format(label)))
+                    time.sleep(1)
+                    print("Can't find object class: ", object_not_save)
+            # [0, 3, 14, 51, 57, 59, 69, 97, 99]
+            if len(object_not_save) <= 9:
+                break
+            img.close()
+            # import pdb; pdb.set_trace()
+        print("Can't find object class: ", object_not_save)
+        for object_label in object_not_save:
+            object_vision_feature[str(object_label)] = [0]*512
+        with open(os.path.join(save_path, "object_rgb_feature.json"), "w") as f:
+            json.dump(object_vision_feature, f)
+
+    def gen_object_attr():
+        indices = list(range(len(alfred_dataset)))
+        shuffle(indices)
+        for i in indices:
+            img, target, idx = alfred_dataset[i]
+            dict_target = {
+                "labels": target.extra_fields["labels"],
+                "obj_relations": target.extra_fields["pred_labels"],
+                "relation_labels": target.extra_fields["relation_labels"],
+                "attributes": target.extra_fields["attributes"],
+                "objectIds": target.extra_fields["objectIds"],
+            }
+            img = F.to_pil_image(img)
+            for ind, label in enumerate(target.extra_fields["labels"].numpy().astype(int)):
+                if label in object_not_save:
+                    attribute = target.extra_fields["attributes"][ind].numpy().astype(int).tolist()
+                    object_not_save.remove(label)
+                    object_attribute[str(label)] = attribute
+                    ic(attribute)
+                    print("remove: ", label)
+                    print("object: ", alfred_dataset.object_classes[label])
+                    time.sleep(1)
+                    print("Can't find object class: ", object_not_save)
+            # [0, 3, 14, 51, 57, 59, 69, 97, 99]
+            if len(object_not_save) <= 9:
+                break
+            img.close()
+            # import pdb; pdb.set_trace()
+        print("Can't find object class: ", object_not_save)
+        for object_label in object_not_save:
+            object_attribute[str(object_label)] = [0]*23
+        with open(os.path.join(save_path, "object_attribute.json"), "w") as f:
+            json.dump(object_attribute, f)
+
+    gen_object_attr()
+    object_not_save = [i for i in range(len(alfred_dataset.object_classes))]
+    gen_object_rgb_feature()
 
 def get_resnet_model(cfg):
     sys.path.append(os.path.join(os.environ['ALFRED_ROOT'], 'models'))

@@ -14,9 +14,11 @@ from torchvision.transforms.functional import to_tensor
 from torchvision.models.detection import maskrcnn_resnet50_fpn
 import matplotlib.pyplot as plt
 import random
+# debug
+from models.utils.eval_debug import EvalDebug
+eval_debug = EvalDebug()
 
 classes = ['0'] + constants.OBJECTS + ['AppleSliced', 'ShowerCurtain', 'TomatoSliced', 'LettuceSliced', 'Lamp', 'ShowerHead', 'EggCracked', 'BreadSliced', 'PotatoSliced', 'Faucet']
-
 
 class EvalTask(Eval):
     '''
@@ -44,7 +46,7 @@ class EvalTask(Eval):
                 print("No. of trajectories left: %d" % (task_queue.qsize()))
                 if model.semantic_graph_implement is not None \
                     and model.semantic_graph_implement.use_exploration_frame_feats:
-                    meta_datas = cls.explore_scene(cls, env, traj, resnet)
+                    meta_datas = cls.explore_scene(cls, env, traj, resnet, eval_debug)
                     model.semantic_graph_implement.update_exploration_data_to_global_graph(
                         meta_datas["exploration_sgg_meta_data"],
                         0
@@ -85,6 +87,7 @@ class EvalTask(Eval):
         nav_actions = ['MoveAhead_25', 'RotateLeft_90', 'RotateRight_90', 'LookDown_15', 'LookUp_15']
 
         prev_class = 0
+        pred_class = 0
         prev_center = torch.zeros(2)
 
         done, success = False, False
@@ -112,6 +115,7 @@ class EvalTask(Eval):
             action = m_pred['action_low']
             if prev_image == curr_image and prev_action == action and prev_action in nav_actions and action in nav_actions and action == 'MoveAhead_25':
                 dist_action = m_out['out_action_low'][0][0].detach().cpu()
+                raise
                 idx_rotateR = model.vocab['action_low'].word2index('RotateRight_90')
                 idx_rotateL = model.vocab['action_low'].word2index('RotateLeft_90')
                 action = 'RotateLeft_90' if dist_action[idx_rotateL] > dist_action[idx_rotateR] else 'RotateRight_90'
@@ -174,11 +178,20 @@ class EvalTask(Eval):
             prev_image = curr_image
             prev_action = action
 
+            dict_mask = {
+                "mask": mask,
+                "pred_class": pred_class,
+                "object": classes[pred_class]
+            }
+            eval_debug.add_data(t, curr_image, curr_depth_image, dict_mask, action, err)
+            pred_class = 0
+
         # check if goal was satisfied
         goal_satisfied = env.get_goal_satisfied()
         if goal_satisfied:
             print("Goal Reached")
             success = True
+        eval_debug.record(model.args.dout, traj_data, goal_instr, err, success)
 
         # goal_conditions
         pcs = env.get_goal_conditions_met()
@@ -295,4 +308,3 @@ class EvalTask(Eval):
         save_path = os.path.join(save_path, 'task_results_' + self.args.eval_split + '_' + datetime.now().strftime("%Y%m%d_%H%M%S_%f") + '.json')
         with open(save_path, 'w') as r:
             json.dump(results, r, indent=4, sort_keys=True)
-

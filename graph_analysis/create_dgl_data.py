@@ -21,7 +21,7 @@ EDGE_PATH_LOWACTION_BEHAVE_SUBGOAL = save_path + "lowaction-interact-subgoal.csv
 EDGE_PATH_SUBGOAL_BEHAVE_LOWACTION = save_path + "subgoal-interact-lowaction.csv"
 
 
-def create_node_object():
+def create_node_object(rgb_feature=False):
     # load
     ft_model = fastText_embedding.load_model()
     objects = load_object(objects_txt)
@@ -33,7 +33,7 @@ def create_node_object():
         string_csv += ','.join(str(vector) for vector in vectors)
         string_csv += "\n"
     # csv
-    nodes = open(save_path + "object_alfworld.csv", "w")
+    nodes = open(save_path + "object.csv", "w")
     nodes.write(string_csv)
 
 

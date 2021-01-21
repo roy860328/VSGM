@@ -1,6 +1,6 @@
 ALFREDTEST:
   data_path: "/home/alfworld/detector/data/test/"
-  object_types: "all"
+  object_types: "ori_objects"
   height: 400
   weight: 400
   balance_scenes: True

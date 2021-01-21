@@ -47,7 +47,7 @@ def load_config(args):
     # print(config)
 
     output_dir = config["general"]["save_path"]
-    if output_dir != '.' and args.semantic_config_file is not None and not args.test:
+    if output_dir != '.' and args.semantic_config_file is not None and not args.not_save_config:
         from shutil import copyfile
         # import pdb; pdb.set_trace()
         folder_count = len(glob.glob(os.path.join(output_dir + "*", "")))
@@ -82,7 +82,7 @@ if __name__ == '__main__':
     parser.add_argument("-p", "--params", nargs="+", metavar="my.setting=value", default=[],
                         help="override params of the config file,"
                              " e.g. -p 'training.gamma=0.95'")
-    parser.add_argument('--test', help='test without save config', action='store_true')
+    parser.add_argument('--not_save_config', help='test without save config', action='store_true')
 
     # settings
     parser.add_argument('--seed', help='random seed', default=123, type=int)
@@ -106,10 +106,14 @@ if __name__ == '__main__':
     parser.add_argument('--dframe', help='image feature vec size', default=3*7*7, type=int)
     parser.add_argument('--demb', help='language embedding size', default=100, type=int)
     parser.add_argument('--pframe', help='image pixel size (assuming square shape eg: 300x300)', default=300, type=int)
-    parser.add_argument('--mask_loss_wt', help='weight of mask loss', default=1., type=float)
     parser.add_argument('--action_loss_wt', help='weight of action loss', default=1., type=float)
     parser.add_argument('--subgoal_aux_loss_wt', help='weight of subgoal completion predictor', default=0.2, type=float)
     parser.add_argument('--pm_aux_loss_wt', help='weight of progress monitor', default=0.2, type=float)
+    parser.add_argument('--action_navi_loss_wt', help='weight of action loss', default=1., type=float)
+    parser.add_argument('--action_oper_loss_wt', help='weight of action loss', default=1.5, type=float)
+    parser.add_argument('--action_navi_or_oper_loss_wt', help='weight of action loss', default=1.5, type=float)
+    parser.add_argument('--mask_loss_wt', help='weight of mask loss', default=1., type=float)
+    parser.add_argument('--mask_label_loss_wt', help='weight of mask loss', default=1., type=float)
 
     # dropouts
     parser.add_argument('--zero_goal', help='zero out goal language', action='store_true')
@@ -187,9 +191,13 @@ if __name__ == '__main__':
         model = M.Module(args, vocab)
         optimizer = None
     # to gpu
+    torch.cuda.device_count()
+    # torch.cuda.set_device('cuda:%d' % args.gpu_id)
+    # print(torch.cuda.current_device())
+
     if args.gpu:
         from torch import nn
-        model = model.to(torch.device("cuda:%d" % args.gpu_id))
+        model = model.to(torch.device("cuda"))
         if not optimizer is None:
             optimizer_to(optimizer, torch.device("cuda:%d" % args.gpu_id))
 

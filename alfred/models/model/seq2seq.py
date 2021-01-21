@@ -28,9 +28,10 @@ class Module(nn.Module):
 
         # emb modules
         self.emb_word = nn.Embedding(len(vocab['word']), args.demb)
-        # self.vocab['action_low'].index2word(list(range(0, len(vocab['action_low']))))
+
         # self.vocab['action_high'].index2word(list(range(0, len(vocab['action_high']))))
         # self.vocab['word'].index2word(list(range(0, len(vocab['word']))))
+        # self.vocab['action_low'].index2word(list(range(0, len(vocab['action_low']))))
         self.emb_action_low = nn.Embedding(len(vocab['action_low']), args.demb)
 
         # end tokens

@@ -12,6 +12,7 @@ from models.utils.metric import compute_f1, compute_exact
 from gen.utils.image_util import decompress_mask
 from PIL import Image
 import gen.constants as constants
+# # 1 background + 108 object + 10
 classes = [0] + constants.OBJECTS + ['AppleSliced', 'ShowerCurtain', 'TomatoSliced', 'LettuceSliced', 'Lamp', 'ShowerHead', 'EggCracked', 'BreadSliced', 'PotatoSliced', 'Faucet']
 from nn.resnet import Resnet
 '''
@@ -96,7 +97,7 @@ class Module(Base):
     def finish_of_episode(self):
         self.semantic_graph_implement.reset_all_scene_graph()
 
-    def _load_meta_data(self, root, list_img_traj):
+    def _load_meta_data(self, root, list_img_traj, device):
         def sequences_to_one():
             print("_load with path", root)
             meta_datas = {
@@ -141,7 +142,7 @@ class Module(Base):
             all_meta_data = sequences_to_one()
             with open(all_meta_data_path, 'w') as f:
                 json.dump(all_meta_data, f)
-        exporlation_ims = torch.load(os.path.join(root, self.feat_exploration_pt))
+        exporlation_ims = torch.load(os.path.join(root, self.feat_exploration_pt)).to(device)
         all_meta_data["exploration_imgs"] = exporlation_ims
         return all_meta_data
 
@@ -213,7 +214,7 @@ class Module(Base):
             # load Resnet features from disk
             if load_frames and not self.test_mode:
                 root = self.get_task_root(ex)
-                all_meta_data = self._load_meta_data(root, ex["images"])
+                all_meta_data = self._load_meta_data(root, ex["images"], device)
                 feat['all_meta_datas'].append(all_meta_data)  # add stop frame
 
                 im = torch.load(os.path.join(root, self.feat_pt))

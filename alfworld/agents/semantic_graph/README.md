@@ -13,7 +13,7 @@ pip install torch-geometric
 ## Word embedding 
 For semantic_graph object class name to fasttext word embedding
 
-### Get Object feature x.csv
+### Get Object feature '.csv'
 change graph_analysis/data/objects.txt
 ```
 cd graph_analysis
@@ -23,13 +23,13 @@ You will create csv file at 'graph_analysis/data_dgl/object_alfworld.csv'
 
 ## Get rgb_feature feature data
 ```
-python sgg/alfred_data_format.py config/test_base.yaml --semantic_config_file config/ semantic_graph.yaml --sgg_config_file sgg/graph-rcnn.pytorch/configs/attribute.yaml
+python sgg/alfred_data_format.py config/test_base.yaml --semantic_config_file config/ semantic_graph.yaml --sgg_config_file sgg/graph-rcnn.pytorch/configs/attribute.yaml --not_save_config
 ```
 
 
-## Test Oracle Global Graph is OK
+## Test Memory Graph is OK
 ```
-python semantic_graph/semantic_graph.py config/semantic_graph_base.yaml config/semantic_graph.yaml
+python semantic_graph/semantic_graph.py config/semantic_graph_base.yaml --semantic_config_file config/semantic_graph.yaml --not_save_config
 ```
 
 - obj_cls_name_to_features

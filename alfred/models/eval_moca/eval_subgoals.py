@@ -160,6 +160,7 @@ class EvalSubgoals(Eval):
                 action = m_pred['action_low']
                 if prev_image == curr_image and m_prev_action == action and m_prev_action in nav_actions and action in nav_actions and action == 'MoveAhead_25':
                     dist_action = m_out['out_action_low'][0][0].detach().cpu()
+                    raise
                     idx_rotateR = model.vocab['action_low'].word2index('RotateRight_90')
                     idx_rotateL = model.vocab['action_low'].word2index('RotateLeft_90')
                     action = 'RotateLeft_90' if dist_action[idx_rotateL] > dist_action[idx_rotateR] else 'RotateRight_90'

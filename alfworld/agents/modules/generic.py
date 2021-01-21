@@ -187,6 +187,7 @@ def load_config():
     parser.add_argument("config_file", help="path to config file")
     parser.add_argument("--semantic_config_file", default=None, help="path to config file")
     parser.add_argument("--sgg_config_file", default=None, help="path to config file")
+    parser.add_argument("--not_save_config", help='not save yaml', action='store_true')
     parser.add_argument("-p", "--params", nargs="+", metavar="my.setting=value", default=[],
                         help="override params of the config file,"
                              " e.g. -p 'training.gamma=0.95'")
@@ -220,7 +221,7 @@ def load_config():
     # print(config)
 
     output_dir = config["general"]["save_path"]
-    if output_dir != '.' and args.semantic_config_file is not None:
+    if output_dir != '.' and args.semantic_config_file is not None and not args.not_save_config:
         from shutil import copyfile
         # import pdb; pdb.set_trace()
         folder_count = len(glob.glob(os.path.join(output_dir + "*", "")))

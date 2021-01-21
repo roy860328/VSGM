@@ -18,7 +18,15 @@ class Module(seq2seq_im_moca_semantic):
         '''
         super().__init__(args, vocab, importent_nodes=True)
         IMPORTENT_NDOES_FEATURE = self.config['semantic_cfg'].SCENE_GRAPH.EMBED_FEATURE_SIZE
-        decoder = vnn.ImportentNodesConvFrameMaskDecoderProgressMonitor
+        args_scene_graph = self.config['semantic_cfg'].SCENE_GRAPH
+        if args_scene_graph.MODEL == "hete_gan":
+            decoder = vnn.GANDec
+        elif "PRIORI" in args_scene_graph and args_scene_graph.PRIORI:
+            decoder = vnn.PrioriDec
+        else:
+            decoder = vnn.ImportentNodesDynamicNode
+        # else:
+        #     decoder = vnn.ImportentNodes
         self.dec = decoder(self.emb_action_low, args.dframe, 2*args.dhid,
                            self.semantic_graph_implement, IMPORTENT_NDOES_FEATURE,
                            pframe=args.pframe,
@@ -61,6 +69,7 @@ class Module(seq2seq_im_moca_semantic):
         feat_global_graph = []
         feat_current_state_graph = []
         feat_history_changed_nodes_graph = []
+        feat_priori_graph = []
         for env_index in range(len(all_meta_datas)):
             b_store_state = all_meta_datas[env_index]
             # get_meta_datas(cls, env, resnet):
@@ -88,13 +97,20 @@ class Module(seq2seq_im_moca_semantic):
                     env_index=env_index,
                     hidden_state=self.r_state['state_t_goal'][0][env_index:env_index+1],
                     )
-            # graph_embed_features is list (actually dont need list)
+            priori_importent_features, _ = \
+                self.semantic_graph_implement.chose_importent_node_feature(
+                    chose_type="PRIORI_GRAPH",
+                    env_index=env_index,
+                    hidden_state=self.r_state['state_t_instr'][0][env_index:env_index+1],
+                    )
             feat_global_graph.append(global_graph_importent_features)
             feat_current_state_graph.append(current_state_graph_importent_features)
             feat_history_changed_nodes_graph.append(history_changed_nodes_graph_importent_features)
+            feat_priori_graph.append(priori_importent_features)
         feat_global_graph = torch.cat(feat_global_graph, dim=0)
         feat_current_state_graph = torch.cat(feat_current_state_graph, dim=0)
         feat_history_changed_nodes_graph = torch.cat(feat_history_changed_nodes_graph, dim=0)
+        feat_priori_graph = torch.cat(feat_priori_graph, dim=0)
 
         # decode and save embedding and hidden states
         out_action_low, out_action_low_mask, state_t_goal, state_t_instr, \
