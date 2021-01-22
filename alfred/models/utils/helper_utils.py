@@ -1,5 +1,6 @@
 import torch
 
+
 def delete_keys_from_dict(dict_del, lst_keys):
     """
     Delete the keys present in lst_keys from the dictionary.

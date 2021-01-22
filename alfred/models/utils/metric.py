@@ -32,6 +32,7 @@ def get_tokens(s):
 
 
 def compute_exact(a_gold, a_pred):
+    import icecream.ic as ic
     return int(normalize_answer(a_gold) == normalize_answer(a_pred))
 
 
@@ -49,3 +50,31 @@ def compute_f1(a_gold, a_pred):
     recall = 1.0 * num_same / len(gold_toks)
     f1 = (2 * precision * recall) / (precision + recall)
     return f1
+
+
+class AccuracyMetric():
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.store = {}
+
+    def write_summary(self, summary_writer, n_iter, loss_name="train/precision"):
+        for k, v in self.store.items():
+            precision = self.get_precision(k)
+            summary_writer.add_scalar(loss_name + "_" + k, precision, n_iter)
+
+    def get_precision(self, k):
+        return self.store[k]["corrects"] / self.store[k]["num_samples"]
+
+    def __call__(self, name, label, predict):
+        if name not in self.store:
+            self.store[name] = {
+                "corrects": 0.,
+                "num_samples": 0.
+            }
+        predict = predict.clone().detach().max(1)[1].view(-1)
+        correct = predict.eq(label).view(-1).float().sum(0)
+        num_samples = len(label)
+        self.store[name]["corrects"] += correct
+        self.store[name]["num_samples"] += num_samples

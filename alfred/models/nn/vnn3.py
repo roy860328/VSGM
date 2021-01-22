@@ -96,6 +96,8 @@ class MaskDecoder(nn.Module):
         x = F.relu(self.bn1(x))
 
         x = self.dconv1(x)
+        # https://github.com/GuYuc/WS-DAN.PyTorch/blob/87779124f619ceeb445ddfb0246c8a22ff324db4/models/inception.py#L374
+        x = F.relu(x, inplace=True)
         x = F.interpolate(x, size=(self.pframe, self.pframe))
 
         return x
@@ -237,7 +239,7 @@ class DecomposeDec(nn.Module):
         self.actor_oper = nn.Linear(dhid+dhid+dframe+demb+IMPORTENT_NDOES_FEATURE, demb)
         self.action_navi_or_operation = nn.Linear(dhid+dhid+dframe+demb+IMPORTENT_NDOES_FEATURE, num_action_navi_or_operation)
         print("self.actor_navi: ", dhid+dhid+dframe+demb+IMPORTENT_NDOES_FEATURE)
-        self.mask_dec = MaskDecoder(dhid=dhid+dhid+dframe+demb+IMPORTENT_NDOES_FEATURE, pframe=self.pframe)
+        self.mask_dec = MaskDecoder(dhid=dhid+dframe+IMPORTENT_NDOES_FEATURE, pframe=self.pframe)
         self.mask_dec_label = nn.Sequential(
             nn.Linear(dhid, dhid//2), nn.ReLU(),
             nn.Linear(dhid//2, 119)
@@ -302,7 +304,9 @@ class DecomposeDec(nn.Module):
 
         # decode mask (goal decoder)
         cont_t_goal = h_t_goal #torch.cat([h_t_goal, inp_t_goal], dim=1)
+        mask_input = torch.cat([cont_t_goal, vis_feat_t_instr, feat_priori_graph], dim=1)
         masks_label_t = self.mask_dec_label(cont_t_goal)
+        mask_t = self.mask_dec(mask_input)
 
         # update hidden state (instr decoder)
         state_t_instr = self.cell_instr(inp_t_instr, state_tm1_instr)
@@ -311,7 +315,6 @@ class DecomposeDec(nn.Module):
 
         # decode action (instr decoder)
         cont_t_instr = torch.cat([h_t_instr, inp_t_instr], dim=1)
-        mask_t = self.mask_dec(cont_t_instr)
         action_navi_emb_t = self.actor_navi(self.actor_dropout(cont_t_instr))
         action_oper_emb_t = self.actor_oper(self.actor_dropout(cont_t_instr))
         action_navi_or_operation_t = self.action_navi_or_operation(self.actor_dropout(cont_t_instr))
@@ -328,7 +331,6 @@ class DecomposeDec(nn.Module):
         subgoal_t = torch.sigmoid(self.subgoal(cont_t_instr_with_subgoal))
         progress_t = torch.sigmoid(self.progress(cont_t_instr_with_progress))
         action_navi_or_operation_t = torch.sigmoid(action_navi_or_operation_t)
-        masks_label_t = torch.sigmoid(masks_label_t)
 
         return action_navi_t, action_oper_t, mask_t, action_navi_or_operation_t, masks_label_t,\
             state_t_goal, state_t_instr, lang_attn_t_goal, lang_attn_t_instr, subgoal_t, progress_t

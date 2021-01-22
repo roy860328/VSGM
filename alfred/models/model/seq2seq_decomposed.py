@@ -8,6 +8,7 @@ import numpy as np
 from torch import nn
 from tensorboardX import SummaryWriter
 from tqdm import trange
+from models.utils.metric import AccuracyMetric
 
 
 not_perfect_list = [
@@ -112,6 +113,7 @@ class Module(nn.Module):
 
         # initialize summary writer for tensorboardX
         self.summary_writer = SummaryWriter(log_dir=args.dout)
+        self.training_precision = AccuracyMetric()
 
         # dump config
         fconfig = os.path.join(args.dout, 'config.json')
@@ -157,6 +159,8 @@ class Module(nn.Module):
                 semantic
                 '''
                 self.finish_of_episode()
+            self.training_precision.write_summary(self.summary_writer, train_iter, loss_name="train/precision")
+            self.training_precision.reset()
 
             ## compute metrics for train (too memory heavy!)
             # m_train = {k: sum(v) / len(v) for k, v in m_train.items()}

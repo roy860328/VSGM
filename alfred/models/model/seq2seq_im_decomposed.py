@@ -281,14 +281,15 @@ class Module(Base):
                 seqs = [torch.tensor(vv, device=device, dtype=torch.float) for vv in v]
                 pad_seq = pad_sequence(seqs, batch_first=True, padding_value=self.pad)
                 feat[k] = pad_seq
-            elif k in {'action_navi_low', 'action_operation_low', 'action_navi_or_operation'}:
+            elif k in {'action_navi_or_operation'}:
                 seqs = [torch.tensor(vv, device=device, dtype=torch.long) for vv in v]
-                pad_seq = pad_sequence(seqs, batch_first=True, padding_value=self.pad)
+                pad_seq = pad_sequence(seqs, batch_first=True, padding_value=-100)
                 feat[k] = pad_seq
                 # seqs = torch.tensor([vvv for vv in v for vvv in vv], device=device, dtype=torch.long)
                 # feat[k] = seqs
             elif k in {'all_meta_datas'}:
                 pass
+            # 'action_navi_low', 'action_operation_low', 'frames' ...
             else:
                 # default: tensorize and pad sequence
                 seqs = [torch.tensor(vv, device=device, dtype=torch.float if ('frames' in k) else torch.long) for vv in v]
@@ -564,22 +565,38 @@ class Module(Base):
         l_alow_navi_or_operation = feat['action_navi_or_operation'].view(-1)
         # action navi loss
         pad_valid = (l_alow_navi != self.pad)
+        p_alow_navi = p_alow_navi[pad_valid]
+        l_alow_navi = l_alow_navi[pad_valid]
         alow_navi_loss = F.cross_entropy(p_alow_navi, l_alow_navi, reduction='none')
-        alow_navi_loss *= pad_valid.float()
         alow_navi_loss = alow_navi_loss.mean()
         losses['action_navi_low'] = alow_navi_loss * self.args.action_navi_loss_wt
+        self.training_precision(name="navi_low", label=l_alow_navi, predict=p_alow_navi)
         # action oper loss
         pad_valid = (l_alow_oper != self.pad)
+        p_alow_oper = p_alow_oper[pad_valid]
+        l_alow_oper = l_alow_oper[pad_valid]
         alow_oper_loss = F.cross_entropy(p_alow_oper, l_alow_oper, reduction='none')
-        alow_oper_loss *= pad_valid.float()
         alow_oper_loss = alow_oper_loss.mean()
         losses['action_oper_low'] = alow_oper_loss * self.args.action_oper_loss_wt
+        self.training_precision(name="oper_low", label=l_alow_oper, predict=p_alow_oper)
         # navi_or_operation loss
-        pad_valid = (l_alow_navi_or_operation != self.pad)
-        alow_navi_or_operation_loss = F.cross_entropy(p_alow_navi_or_operation, l_alow_navi_or_operation, reduction='none')
-        alow_navi_or_operation_loss *= pad_valid.float()
+        pad_valid = (l_alow_navi_or_operation != -100)
+        p_alow_navi_or_operation = p_alow_navi_or_operation[pad_valid]
+        l_alow_navi_or_operation = l_alow_navi_or_operation[pad_valid]
+        alow_navi_or_operation_loss = F.cross_entropy(p_alow_navi_or_operation, l_alow_navi_or_operation, reduction='none', ignore_index=-100)
         alow_navi_or_operation_loss = alow_navi_or_operation_loss.mean()
         losses['action_navi_or_operation_low'] = alow_navi_or_operation_loss * self.args.action_navi_or_oper_loss_wt
+        self.training_precision(name="navi_or_operation", label=l_alow_navi_or_operation, predict=p_alow_navi_or_operation)
+
+        # mask label
+        p_alow_mask = out['out_action_low_mask_label'].view(-1, len(classes))
+        l_alow_mask_label = feat['action_low_mask_label'].view(-1)
+        valid = feat['action_low_valid_interact'].view(-1)
+        # mask label loss
+        pad_valid = (valid != self.pad)
+        p_alow_mask = p_alow_mask[pad_valid]
+        losses['action_low_mask_label'] = self.ce_loss(p_alow_mask, l_alow_mask_label) * self.args.mask_loss_wt
+        self.training_precision(name="mask_label", label=l_alow_mask_label, predict=p_alow_mask)
 
         # mask
         p_alow_mask = out['out_action_low_mask']
@@ -590,14 +607,6 @@ class Module(Base):
         flat_alow_mask = torch.cat(feat['action_low_mask'], dim=0)
         alow_mask_loss = self.weighted_mask_loss(flat_p_alow_mask, flat_alow_mask)
         losses['action_low_mask'] = alow_mask_loss * self.args.mask_loss_wt
-
-        # mask label
-        p_alow_mask = out['out_action_low_mask_label']
-        valid = feat['action_low_valid_interact']
-        # mask label loss
-        valid_idxs = valid.view(-1).nonzero().view(-1)
-        flat_p_alow_mask = p_alow_mask.view(p_alow_mask.shape[0] * p_alow_mask.shape[1], p_alow_mask.shape[2])[valid_idxs]
-        losses['action_low_mask_label'] = self.ce_loss(flat_p_alow_mask, feat['action_low_mask_label']) * self.args.mask_loss_wt
 
         # subgoal completion loss
         if self.args.subgoal_aux_loss_wt > 0:
