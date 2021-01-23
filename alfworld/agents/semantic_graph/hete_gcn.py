@@ -26,6 +26,7 @@ class Net(torch.nn.Module):
         self.conv2 = GCNConv(middle_size + ATTRIBUTE_FEATURE_SIZE, output_size, cached=True,
                              normalize=normalize,
                              )
+        self.dropout = nn.Dropout()
         # self.attri_linear = nn.Linear(ATTRIBUTE_FEATURE_SIZE, ATTRIBUTE_FEATURE_SIZE
         #                               )
         graph_embed_model = getattr(graph_embed, cfg.SCENE_GRAPH.EMBED_TYPE)
@@ -94,8 +95,10 @@ class Net(torch.nn.Module):
                 rgb_feature = self.node_rgb_feature_downsample(x[:, self.cfg.SCENE_GRAPH.NODE_INPUT_WORD_EMBED_SIZE:])
                 # torch.Size([10, 16])
                 x = torch.cat([word_feature, rgb_feature, attributes], dim=1)
+                x = F.relu(self.dropout(x))
                 nodes_tensor = x
                 x = self.final_mapping(x)
+                x = F.relu(self.dropout(x))
                 if CHOSE_IMPORTENT_NODE:
                     chose_nodes, dict_ANALYZE_GRAPH = self.chose_node_module(nodes_tensor, hidden_state)
                     x = torch.cat([x, chose_nodes], dim=1)
@@ -116,17 +119,20 @@ class Net(torch.nn.Module):
             rgb_feature = self.node_rgb_feature_downsample(x[:, self.cfg.SCENE_GRAPH.NODE_INPUT_WORD_EMBED_SIZE:])
             # torch.Size([2, 16])
             x = torch.cat([word_feature, rgb_feature], dim=1)
+            x = F.relu(self.dropout(x))
             x = F.relu(self.conv1(x, edge_obj_to_obj, edge_weight))
-            x = F.dropout(x, training=self.training)
+            x = self.dropout(x)
             x = torch.cat([x, attributes], dim=1)
             # torch.Size([2, 40])
             x = self.conv2(x, edge_obj_to_obj, edge_weight)
+            x = F.relu(self.dropout(x))
             # torch.Size([2, 16]) + torch.Size([2, 24]) => torch.Size([2, 40])
             x = torch.cat([x, attributes], dim=1)
             nodes_tensor = x
 
             # torch.Size([1, 128])
             x = self.final_mapping(x)
+            x = F.relu(self.dropout(x))
             if CHOSE_IMPORTENT_NODE:
                 # torch.Size([1, 400])
                 chose_nodes, dict_ANALYZE_GRAPH = self.chose_node_module(nodes_tensor, hidden_state)
@@ -157,6 +163,7 @@ class Net(torch.nn.Module):
                 rgb_feature = self.node_rgb_feature_downsample(x[:, self.cfg.SCENE_GRAPH.NODE_INPUT_WORD_EMBED_SIZE:])
                 # torch.Size([10, 16]) + [10, 24]
                 x = torch.cat([word_feature, rgb_feature, attributes], dim=1)
+                x = F.relu(self.dropout(x))
                 nodes_tensor = x
                 chose_nodes, dict_ANALYZE_GRAPH = self.chose_node_module(nodes_tensor, hidden_state)
             # don't have node
@@ -172,16 +179,19 @@ class Net(torch.nn.Module):
             rgb_feature = self.node_rgb_feature_downsample(x[:, self.cfg.SCENE_GRAPH.NODE_INPUT_WORD_EMBED_SIZE:])
             # torch.Size([2, 16])
             x = torch.cat([word_feature, rgb_feature], dim=1)
+            x = F.relu(self.dropout(x))
             x = F.relu(self.conv1(x, edge_obj_to_obj, edge_weight))
-            x = F.dropout(x, training=self.training)
+            x = self.dropout(x)
             x = torch.cat([x, attributes], dim=1)
             # torch.Size([2, 40])
             x = self.conv2(x, edge_obj_to_obj, edge_weight)
+            x = F.relu(self.dropout(x))
             # torch.Size([2, 16]) + torch.Size([2, 24]) => torch.Size([2, 40])
             x = torch.cat([x, attributes], dim=1)
             nodes_tensor = x
             # torch.Size([1, 400])
             chose_nodes, dict_ANALYZE_GRAPH = self.chose_node_module(nodes_tensor, hidden_state)
+            # print(x.requires_grad)
         mapping_feature = self.chose_node_feature_mapping(chose_nodes)
         return mapping_feature, dict_ANALYZE_GRAPH
 
@@ -198,11 +208,13 @@ class Net(torch.nn.Module):
         rgb_feature = self.node_rgb_feature_downsample(x[:, self.cfg.SCENE_GRAPH.NODE_INPUT_WORD_EMBED_SIZE:])
         # torch.Size([2, 16])
         x = torch.cat([word_feature, rgb_feature], dim=1)
+        x = F.relu(self.dropout(x))
         x = F.relu(self.conv1(x, edge_obj_to_obj, edge_weight))
-        x = F.dropout(x, training=self.training)
+        x = self.dropout(x)
         x = torch.cat([x, attributes], dim=1)
         # torch.Size([2, 40])
         x = self.conv2(x, edge_obj_to_obj, edge_weight)
+        x = F.relu(self.dropout(x))
         # torch.Size([2, 16]) + torch.Size([2, 24]) => torch.Size([2, 40])
         x = torch.cat([x, attributes], dim=1)
         nodes_tensor = x

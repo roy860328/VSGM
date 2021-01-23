@@ -64,6 +64,21 @@ class ResnetVisualEncoder(nn.Module):
         return x
 
 
+class AttentionConv2d(nn.Module):
+
+    def __init__(self, in_channels, out_channels, **kwargs):
+        super(AttentionConv2d, self).__init__()
+        self.maskConv = nn.Conv2d(in_channels, out_channels, bias=False, **kwargs)
+        self.bn = nn.BatchNorm2d(out_channels, eps=0.001)
+
+    def forward(self, input):
+        attention = self.maskConv(input)
+        attention = F.relu(self.bn(attention), inplace=True)
+        x = input * attention
+
+        return x
+
+
 class MaskDecoder(nn.Module):
     '''
     mask decoder
@@ -81,6 +96,7 @@ class MaskDecoder(nn.Module):
         self.bn1 = nn.BatchNorm2d(16)
         self.dconv3 = nn.ConvTranspose2d(64, 32, kernel_size=4, stride=2, padding=1)
         self.dconv2 = nn.ConvTranspose2d(32, 16, kernel_size=4, stride=2, padding=1)
+        self.attentions = AttentionConv2d(16, 16, kernel_size=1)
         self.dconv1 = nn.ConvTranspose2d(16, 1, kernel_size=4, stride=2, padding=1)
 
     def forward(self, x):
@@ -94,6 +110,7 @@ class MaskDecoder(nn.Module):
         x = self.upsample(x)
         x = self.dconv2(x)
         x = F.relu(self.bn1(x))
+        x = self.attentions(x)
 
         x = self.dconv1(x)
         # https://github.com/GuYuc/WS-DAN.PyTorch/blob/87779124f619ceeb445ddfb0246c8a22ff324db4/models/inception.py#L374
@@ -304,14 +321,16 @@ class DecomposeDec(nn.Module):
 
         # decode mask (goal decoder)
         cont_t_goal = h_t_goal #torch.cat([h_t_goal, inp_t_goal], dim=1)
-        mask_input = torch.cat([cont_t_goal, vis_feat_t_instr, feat_priori_graph], dim=1)
         masks_label_t = self.mask_dec_label(cont_t_goal)
-        mask_t = self.mask_dec(mask_input)
 
         # update hidden state (instr decoder)
         state_t_instr = self.cell_instr(inp_t_instr, state_tm1_instr)
         state_t_instr = [self.hstate_dropout(x) for x in state_t_instr]
         h_t_instr, _ = state_t_instr[0], state_t_instr[1]
+
+        mask_input = torch.cat([h_t_instr, vis_feat_t_instr, feat_priori_graph], dim=1)
+        mask_input = self.input_dropout(mask_input)
+        mask_t = self.mask_dec(mask_input)
 
         # decode action (instr decoder)
         cont_t_instr = torch.cat([h_t_instr, inp_t_instr], dim=1)

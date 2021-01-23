@@ -102,19 +102,10 @@ class DotAttnChoseImportentNode(nn.Module):
         '''
         choose nodes
         '''
-        chose_nodes = None
-        sort_nodes_index = torch.argsort(score, dim=0, descending=True).to('cpu').numpy()
-        chose_node_count = 0
-        for index in sort_nodes_index:
-            if chose_node_count < self.NUM_CHOSE_NODE:
-                chose_node_count += 1
-                node = nodes[index].unsqueeze(0)
-                if chose_nodes is None:
-                    chose_nodes = node
-                else:
-                    chose_nodes = torch.cat((chose_nodes, node), dim=1)
-            else:
-                break
+        weight_nodes = score.expand_as(nodes).mul(nodes)
+        indices = torch.argsort(score, dim=0, descending=True)[:self.NUM_CHOSE_NODE]
+        chose_nodes = weight_nodes[indices].view(1, -1)
+
         # can chose nodes smaller than OUTPUT_SHAPE, cat zeros vectors
         if chose_nodes is None or self.OUTPUT_SHAPE != chose_nodes.shape[-1]:
             tensor_zeros = torch.zeros((chose_nodes.shape[0], self.OUTPUT_SHAPE - chose_nodes.shape[-1]))
@@ -123,7 +114,7 @@ class DotAttnChoseImportentNode(nn.Module):
             chose_nodes = torch.cat((chose_nodes, tensor_zeros), dim=1)
         dict_ANALYZE_GRAPH = {}
         dict_ANALYZE_GRAPH["score"] = score.clone().detach().to('cpu')
-        dict_ANALYZE_GRAPH["sort_nodes_index"] = sort_nodes_index[:self.NUM_CHOSE_NODE+5]
+        dict_ANALYZE_GRAPH["sort_nodes_index"] = indices[:self.NUM_CHOSE_NODE+5]
         return chose_nodes, dict_ANALYZE_GRAPH
 
     def softmax(self, nodes, hidden_state):
@@ -131,7 +122,7 @@ class DotAttnChoseImportentNode(nn.Module):
         nodes: torch.Size([3, 40])
         hidden_state : torch.Size([1, 40])
         '''
-        # import pdb; pdb.set_trace()
-        # nodes * hidden_state -> torch.Size([3, 1]) -> torch.Size([3])
-        score = torch.matmul(nodes, hidden_state.T).reshape(-1)
+        # nodes * hidden_state -> torch.Size([3, 1])
+        score = torch.matmul(nodes, hidden_state.T)
+        score = F.softmax(score, dim=0)
         return score

@@ -23,8 +23,9 @@ from semantic_graph import SceneGraph
 from sgg import alfred_data_format, sgg
 
 
-class SemanticGraphImplement():
+class SemanticGraphImplement(torch.nn.Module):
     def __init__(self, config):
+        super(SemanticGraphImplement, self).__init__()
         '''
         NEW
         '''

@@ -100,7 +100,8 @@ action_operation_low_dict_word_to_index => {k:8, k1:8+1 ...}
 
 2.old_action_low_index_to_navi_or_operation: redefine embed value for train
 out_action_navi_or_operation: navi = 0, operation = 1,
-ignore_index=self.pad for train model
+ignore_index=0 for 'action_navi_low', 'action_operation_low' ...
+ignore_index=-100 for 'action_navi_or_operation'
 
 3.
 ```
