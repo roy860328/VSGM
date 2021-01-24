@@ -36,6 +36,7 @@ GENERAL:
 SCENE_GRAPH:
   GPU: True
   ORACLE: True
+  NORMALIZATION: True
   # 
   OBJ_NAME_EMBEDDING: "word_embed/object_alfworld.csv"
   # PRIORI

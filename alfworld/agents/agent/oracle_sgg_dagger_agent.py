@@ -55,7 +55,8 @@ class SemanticGraphImplement(torch.nn.Module):
             self.scene_graphs.append(scene_graph)
 
         # initialize model
-        self.trans_MetaData = alfred_data_format.TransMetaData(self.cfg_semantic)
+        self.trans_MetaData = alfred_data_format.TransMetaData(
+            self.cfg_semantic, self.scene_graphs[0].obj_cls_name_to_features, self.scene_graphs[0].adj)
         if not self.isORACLE:
             self.cfg_sgg = config['sgg_cfg']
             self.detector = sgg.load_pretrained_model(

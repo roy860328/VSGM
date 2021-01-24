@@ -20,10 +20,10 @@ class Net(torch.nn.Module):
         self.PRINT_DEBUG = PRINT_DEBUG
         self.node_word_embed_downsample = nn.Linear(cfg.SCENE_GRAPH.NODE_INPUT_WORD_EMBED_SIZE, middle_size//2)
         self.node_rgb_feature_downsample = nn.Linear(cfg.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE, middle_size//2)
-        self.conv1 = GCNConv(input_size, middle_size, cached=True,
+        self.conv1 = GCNConv(input_size, middle_size, cached=not normalize,
                              normalize=normalize,
                              )
-        self.conv2 = GCNConv(middle_size + ATTRIBUTE_FEATURE_SIZE, output_size, cached=True,
+        self.conv2 = GCNConv(middle_size + ATTRIBUTE_FEATURE_SIZE, output_size, cached=not normalize,
                              normalize=normalize,
                              )
         self.dropout = nn.Dropout()

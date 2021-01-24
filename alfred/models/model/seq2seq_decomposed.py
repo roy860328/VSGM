@@ -9,7 +9,7 @@ from torch import nn
 from tensorboardX import SummaryWriter
 from tqdm import trange
 from models.utils.metric import AccuracyMetric
-
+from icecream import ic
 
 not_perfect_list = [
     'pick_and_place_simple-SprayBottle-None-Toilet-422/trial_T20190909_124852_071149',
@@ -113,7 +113,7 @@ class Module(nn.Module):
 
         # initialize summary writer for tensorboardX
         self.summary_writer = SummaryWriter(log_dir=args.dout)
-        self.training_precision = AccuracyMetric()
+        self.accuracy_metric = AccuracyMetric()
 
         # dump config
         fconfig = os.path.join(args.dout, 'config.json')
@@ -139,7 +139,7 @@ class Module(nn.Module):
                 out = self.forward(feat)
                 preds = self.extract_preds(out, batch, feat)
                 # p_train.update(preds)
-                loss = self.compute_loss(out, batch, feat)
+                loss = self.compute_loss(out, batch, feat, loss_type="train")
                 for k, v in loss.items():
                     ln = 'loss_' + k
                     m_train[ln].append(v.item())
@@ -159,8 +159,8 @@ class Module(nn.Module):
                 semantic
                 '''
                 self.finish_of_episode()
-            self.training_precision.write_summary(self.summary_writer, train_iter, loss_name="train/precision")
-            self.training_precision.reset()
+            self.accuracy_metric.write_summary(self.summary_writer, train_iter, loss_name="train/precision")
+            self.accuracy_metric.reset()
 
             ## compute metrics for train (too memory heavy!)
             # m_train = {k: sum(v) / len(v) for k, v in m_train.items()}
@@ -246,11 +246,11 @@ class Module(nn.Module):
             #     json.dump(self.make_debug(p_train, train), f, indent=2)
 
             # write stats
-            for split in stats.keys():
-                if isinstance(stats[split], dict):
-                    for k, v in stats[split].items():
-                        self.summary_writer.add_scalar(split + '/' + k, v, train_iter)
-            pprint.pprint(stats)
+            # for split in stats.keys():
+            #     if isinstance(stats[split], dict):
+            #         for k, v in stats[split].items():
+            #             self.summary_writer.add_scalar(split + '/' + k, v, train_iter)
+            ic(stats)
 
     def run_pred(self, dev, args=None, name='dev', iter=0):
         '''
@@ -262,23 +262,26 @@ class Module(nn.Module):
         self.eval()
         total_loss = list()
         dev_iter = iter
-        for batch, feat in self.iterate(dev, args.batch):
-            out = self.forward(feat)
-            preds = self.extract_preds(out, batch, feat)
-            p_dev.update(preds)
-            loss = self.compute_loss(out, batch, feat)
-            for k, v in loss.items():
-                ln = 'loss_' + k
-                m_dev[ln].append(v.item())
-                self.summary_writer.add_scalar("%s/%s" % (name, ln), v.item(), dev_iter)
-            sum_loss = sum(loss.values())
-            self.summary_writer.add_scalar("%s/loss" % (name), sum_loss, dev_iter)
-            total_loss.append(float(sum_loss.detach().cpu()))
-            dev_iter += len(batch)
-            '''
-            semantic
-            '''
-            self.finish_of_episode()
+        with torch.no_grad():
+            for batch, feat in self.iterate(dev, args.batch):
+                out = self.forward(feat)
+                preds = self.extract_preds(out, batch, feat)
+                p_dev.update(preds)
+                loss = self.compute_loss(out, batch, feat)
+                for k, v in loss.items():
+                    ln = 'loss_' + k
+                    m_dev[ln].append(v.item())
+                    self.summary_writer.add_scalar("%s/%s" % (name, ln), v.item(), dev_iter)
+                sum_loss = sum(loss.values())
+                self.summary_writer.add_scalar("%s/loss" % (name), sum_loss, dev_iter)
+                total_loss.append(float(sum_loss.detach().cpu()))
+                dev_iter += len(batch)
+                '''
+                semantic
+                '''
+                self.finish_of_episode()
+            self.accuracy_metric.write_summary(self.summary_writer, dev_iter, loss_name=name+"/precision")
+            self.accuracy_metric.reset()
 
         m_dev = {k: sum(v) / len(v) for k, v in m_dev.items()}
         total_loss = sum(total_loss) / len(total_loss)

@@ -570,7 +570,7 @@ class Module(Base):
         alow_navi_loss = F.cross_entropy(p_alow_navi, l_alow_navi, reduction='none')
         alow_navi_loss = alow_navi_loss.mean()
         losses['action_navi_low'] = alow_navi_loss * self.args.action_navi_loss_wt
-        self.training_precision(name="navi_low", label=l_alow_navi, predict=p_alow_navi)
+        self.accuracy_metric(name="navi_low", label=l_alow_navi, predict=p_alow_navi)
         # action oper loss
         pad_valid = (l_alow_oper != self.pad)
         p_alow_oper = p_alow_oper[pad_valid]
@@ -578,7 +578,7 @@ class Module(Base):
         alow_oper_loss = F.cross_entropy(p_alow_oper, l_alow_oper, reduction='none')
         alow_oper_loss = alow_oper_loss.mean()
         losses['action_oper_low'] = alow_oper_loss * self.args.action_oper_loss_wt
-        self.training_precision(name="oper_low", label=l_alow_oper, predict=p_alow_oper)
+        self.accuracy_metric(name="oper_low", label=l_alow_oper, predict=p_alow_oper)
         # navi_or_operation loss
         pad_valid = (l_alow_navi_or_operation != -100)
         p_alow_navi_or_operation = p_alow_navi_or_operation[pad_valid]
@@ -586,7 +586,7 @@ class Module(Base):
         alow_navi_or_operation_loss = F.cross_entropy(p_alow_navi_or_operation, l_alow_navi_or_operation, reduction='none', ignore_index=-100)
         alow_navi_or_operation_loss = alow_navi_or_operation_loss.mean()
         losses['action_navi_or_operation_low'] = alow_navi_or_operation_loss * self.args.action_navi_or_oper_loss_wt
-        self.training_precision(name="navi_or_operation", label=l_alow_navi_or_operation, predict=p_alow_navi_or_operation)
+        self.accuracy_metric(name="navi_or_operation", label=l_alow_navi_or_operation, predict=p_alow_navi_or_operation)
 
         # mask label
         p_alow_mask = out['out_action_low_mask_label'].view(-1, len(classes))
@@ -596,7 +596,7 @@ class Module(Base):
         pad_valid = (valid != self.pad)
         p_alow_mask = p_alow_mask[pad_valid]
         losses['action_low_mask_label'] = self.ce_loss(p_alow_mask, l_alow_mask_label) * self.args.mask_loss_wt
-        self.training_precision(name="mask_label", label=l_alow_mask_label, predict=p_alow_mask)
+        self.accuracy_metric(name="mask_label", label=l_alow_mask_label, predict=p_alow_mask)
 
         # mask
         p_alow_mask = out['out_action_low_mask']

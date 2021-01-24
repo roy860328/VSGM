@@ -17,13 +17,17 @@ from icecream import ic
 # Transform
 class TransMetaData():
 
-    def __init__(self, cfg):
+    def __init__(self, cfg, SceneGraph_obj_cls_name_to_features, adj_object_relation):
         super(TransMetaData, self).__init__()
         self.cfg = cfg
         self.transforms = parser_scene.get_transform(cfg, train=True)
         # para
         self.object_classes = parser_scene.get_object_classes(cfg.ALFREDTEST.object_types)
         self.object_classes.insert(0, '__background__')
+        assert len(adj_object_relation) == len(self.object_classes)
+        assert len(SceneGraph_obj_cls_name_to_features) == len(self.object_classes), \
+            "object_classes object list must be same with SceneGraph_obj_cls_name_to_features because add_oracle_local_graph_to_global_graph need object_classes feature. \
+                Please read alfworld/agents/semantic_graph/word_embed/README.md"
         ''' graph-rcnn need '''
         self.class_to_ind = parser_scene.get_dict_class_to_ind(self.object_classes)
         self.ind_to_classes = sorted(self.class_to_ind, key=lambda k:

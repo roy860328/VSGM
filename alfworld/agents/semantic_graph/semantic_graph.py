@@ -11,6 +11,7 @@ import importlib
 from numpy import genfromtxt
 import json
 from icecream import ic
+import numpy as np
 
 __all__ = ['GraphData', 'SceneGraph', 'HeteGraphData']
 
@@ -210,6 +211,17 @@ class HeteGraphData(GraphData):
             self.x[ind][-ind_feature_img:] = feature_img
         return ind, isFeatureChange
 
+    def update_adj_relation(self, node_src, obj_cls, adj, relation=1):
+        '''
+        '''
+        has_relation_list = (adj[obj_cls] == 1)
+        candidate_nodes = adj[obj_cls][has_relation_list]
+        for candidate_node in candidate_nodes:
+            # check node_dst in graph
+            for obj_cls_to_ind_node_dst in self.obj_cls_to_ind[candidate_node]:
+                self.update_relation(node_src, obj_cls_to_ind_node_dst, relation)
+                self.update_relation(obj_cls_to_ind_node_dst, node_src, relation)
+
     def update_relation(self, node_src, node_dst, relation):
         '''
         node_src : 320
@@ -263,12 +275,23 @@ class SceneGraph(object):
         # vision
         self.VISION_FEATURE_SIZE = cfg.SCENE_GRAPH.VISION_FEATURE_SIZE
         self.SAME_VISION_FEATURE_THRESHOLD = cfg.SCENE_GRAPH.SAME_VISION_FEATURE_THRESHOLD
+        '''
+        Load node data feature & relation
+        '''
         # graph feature
         path_object_embedding = self.cfg.SCENE_GRAPH.OBJ_NAME_EMBEDDING
         path_object_embedding = os.path.join(os.path.dirname(
             os.path.realpath(__file__)), path_object_embedding)
+        path_ADJ = self.cfg.SCENE_GRAPH.PRIORI_OBJ_ADJ
+        path_ADJ_file = os.path.join(os.environ['GRAPH_ANALYSIS'], path_ADJ)
         self.obj_cls_name_to_features = self._get_obj_cls_name_to_features(path_object_embedding, _background=True)
+        adj = genfromtxt(path_ADJ_file, delimiter=',').astype(int)
+        self.adj = np.zeros((adj.shape[0]+1, adj.shape[0]+1))
+        self.adj[1:, 1:] = adj
+
+        '''
         # create graph
+        '''
         self.graphdata_type = getattr(
             importlib.import_module(
                 'agents.semantic_graph.semantic_graph'),
@@ -280,7 +303,7 @@ class SceneGraph(object):
         if "PRIORI" in cfg.SCENE_GRAPH and cfg.SCENE_GRAPH.PRIORI:
             self._set_priori_graph()
 
-    def init_graph_data(self, ):
+    def init_graph_data(self):
         self.global_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU)
         self.current_state_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU)
         self.history_changed_nodes_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU)
@@ -300,17 +323,14 @@ class SceneGraph(object):
             rgb_features = json.load(f)
         with open(path_object_attribute, 'r') as f:
             attributes = json.load(f)
-        path_ADJ = self.cfg.SCENE_GRAPH.PRIORI_OBJ_ADJ
-        path_ADJ_file = os.path.join(os.environ['GRAPH_ANALYSIS'], path_ADJ)
-        adj = genfromtxt(path_ADJ_file, delimiter=',').astype(int)
-        obj_cls_name_to_features = self._get_obj_cls_name_to_features(path_object_embedding)
+        obj_cls_name_to_features = self._get_obj_cls_name_to_features(path_object_embedding, _background=True)
         self.priori_graph = self.graphdata_type(obj_cls_name_to_features, self.GPU)
 
         # node word feature
         for i, (k, word_feature) in enumerate(obj_cls_name_to_features.items()):
             '''
-            i: 0~104
-            k: "0"~"104"
+            i: "0"~"104"
+            k: "1"~"105"
             word_feature: shape = [300]
             '''
             # rgb feature
@@ -318,15 +338,18 @@ class SceneGraph(object):
             rgb_feature = torch.tensor(rgb_feature).float()
             attribute = torch.tensor(attributes[str(i)]).float()
             self.priori_graph.add_node(
-                obj_cls=i,
+                obj_cls=k,
                 attr_feature=attribute,
                 feature_img=rgb_feature
                 )
         # node relation
-        for src in range(len(adj)):
-            for dst in range(len(adj)):
+        # import pdb; pdb.set_trace()
+        assert len(obj_cls_name_to_features) == len(self.adj)-1
+        adj = self.adj
+        for src in range(1, len(adj)):
+            for dst in range(1, len(adj)):
                 if adj[src, dst] > 0:
-                    self.priori_graph.update_relation(src, dst, 0)
+                    self.priori_graph.update_relation(src-1, dst-1, 0)
         print("need to check word & rgb feature & relation is ok")
 
     def init_current_state_data(self):
@@ -443,21 +466,30 @@ class SceneGraph(object):
             # EMBED_CURRENT_STATE
             current_state_node_ind = self.current_state_graph.add_node(obj_cls, obj_attribute, tar_id, feature_img=feature_img)
             # [317, 318, 148, 149, 150, 151, 152, 319, 320, 321, 322, 154, 323, 155, 157, 158, 159, 160, 161, 324]
-            global_graph_current_frame_obj_cls_to_node_index.append(ind)
-            current_state_graph_current_frame_obj_cls_to_node_index.append(current_state_node_ind)
+            global_graph_current_frame_obj_cls_to_node_index.append((ind, obj_cls, isFindNode))
+            current_state_graph_current_frame_obj_cls_to_node_index.append((current_state_node_ind, obj_cls, isFindNode))
+        '''
         # relation
-        for obj_relation_triplet in obj_relations:
-            src_obj_ind, dst_obj_ind, relation = obj_relation_triplet
-            src_node_ind = global_graph_current_frame_obj_cls_to_node_index[src_obj_ind]
-            dst_node_ind = global_graph_current_frame_obj_cls_to_node_index[dst_obj_ind]
-            self.global_graph.update_relation(src_node_ind, dst_node_ind, relation)
-        # relation
-        # EMBED_CURRENT_STATE
-        for obj_relation_triplet in obj_relations:
-            src_obj_ind, dst_obj_ind, relation = obj_relation_triplet
-            src_node_ind = current_state_graph_current_frame_obj_cls_to_node_index[src_obj_ind]
-            dst_node_ind = current_state_graph_current_frame_obj_cls_to_node_index[dst_obj_ind]
-            self.current_state_graph.update_relation(src_node_ind, dst_node_ind, relation)
+        '''
+        for node_ind, obj_cls, isFindNode in global_graph_current_frame_obj_cls_to_node_index:
+            if not isFindNode:
+                self.global_graph.update_adj_relation(node_ind, obj_cls, self.adj)
+
+        for node_ind, obj_cls, isFindNode in current_state_graph_current_frame_obj_cls_to_node_index:
+            if not isFindNode:
+                self.current_state_graph.update_adj_relation(node_ind, obj_cls, self.adj)
+        # for obj_relation_triplet in obj_relations:
+        #     src_obj_ind, dst_obj_ind, relation = obj_relation_triplet
+        #     src_node_ind = global_graph_current_frame_obj_cls_to_node_index[src_obj_ind]
+        #     dst_node_ind = global_graph_current_frame_obj_cls_to_node_index[dst_obj_ind]
+        #     self.global_graph.update_relation(src_node_ind, dst_node_ind, relation)
+        # # relation
+        # # EMBED_CURRENT_STATE
+        # for obj_relation_triplet in obj_relations:
+        #     src_obj_ind, dst_obj_ind, relation = obj_relation_triplet
+        #     src_node_ind = current_state_graph_current_frame_obj_cls_to_node_index[src_obj_ind]
+        #     dst_node_ind = current_state_graph_current_frame_obj_cls_to_node_index[dst_obj_ind]
+        #     self.current_state_graph.update_relation(src_node_ind, dst_node_ind, relation)
 
     def add_local_graph_to_global_graph(self, img, sgg_results):
         self.init_current_state_data()
