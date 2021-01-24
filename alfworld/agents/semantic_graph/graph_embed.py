@@ -113,8 +113,8 @@ class DotAttnChoseImportentNode(nn.Module):
                 tensor_zeros = tensor_zeros.to('cuda')
             chose_nodes = torch.cat((chose_nodes, tensor_zeros), dim=1)
         dict_ANALYZE_GRAPH = {}
-        dict_ANALYZE_GRAPH["score"] = score.clone().detach().to('cpu')
-        dict_ANALYZE_GRAPH["sort_nodes_index"] = indices[:self.NUM_CHOSE_NODE+5]
+        dict_ANALYZE_GRAPH["score"] = score[indices].view(-1).clone().detach().to('cpu').tolist()
+        dict_ANALYZE_GRAPH["sort_nodes_index"] = indices[:self.NUM_CHOSE_NODE+5].view(-1).clone().detach().tolist()
         return chose_nodes, dict_ANALYZE_GRAPH
 
     def softmax(self, nodes, hidden_state):

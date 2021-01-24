@@ -265,18 +265,18 @@ class HeteGraphData(GraphData):
 class SceneGraph(object):
     """docstring for SceneGraph"""
 
-    def __init__(self, cfg):
+    def __init__(self, cfg, object_classes_index_to_name):
         super(SceneGraph, self).__init__()
         #
         self.cfg = cfg
         self.isORACLE = cfg.SCENE_GRAPH.ORACLE
         self.GPU = cfg.SCENE_GRAPH.GPU
         self.GRAPH_RESULT_PATH = cfg.SCENE_GRAPH.GRAPH_RESULT_PATH
-        # self.EMBED_CURRENT_STATE = self.cfg_semantic.SCENE_GRAPH.EMBED_CURRENT_STATE
-        # self.EMBED_HISTORY_CHANGED_NODES = self.cfg_semantic.SCENE_GRAPH.EMBED_HISTORY_CHANGED_NODES
         # vision
         self.VISION_FEATURE_SIZE = cfg.SCENE_GRAPH.VISION_FEATURE_SIZE
         self.SAME_VISION_FEATURE_THRESHOLD = cfg.SCENE_GRAPH.SAME_VISION_FEATURE_THRESHOLD
+        # object class name
+        self.object_classes_index_to_name = object_classes_index_to_name
         '''
         Load node data feature & relation
         '''
@@ -304,6 +304,11 @@ class SceneGraph(object):
         # priori_graph
         if "PRIORI" in cfg.SCENE_GRAPH and cfg.SCENE_GRAPH.PRIORI:
             self._set_priori_graph()
+
+        assert len(self.adj) == len(self.object_classes_index_to_name)
+        assert len(self.obj_cls_name_to_features) == len(self.object_classes_index_to_name)-1, \
+            "object_classes_index_to_name object list must be same with obj_cls_name_to_features because add_oracle_local_graph_to_global_graph need object_classes feature. \
+                Please read alfworld/agents/semantic_graph/word_embed/README.md"
 
     def init_graph_data(self):
         self.global_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU)
@@ -395,18 +400,31 @@ class SceneGraph(object):
         # print("priori_graph")
         return self.priori_graph
 
-    def analyze_graph(self, dict_ANALYZE_GRAPH):
+    def analyze_graph(self, dict_ANALYZE_GRAPH, graph_type="GLOBAL_GRAPH"):
         '''
         dict_ANALYZE_GRAPH = {
             "score": score.clone().detach().to('cpu'),
             "sort_nodes_index": sort_nodes_index.clone().detach().to('cpu'),
         }
         '''
+        if graph_type == "GLOBAL_GRAPH":
+            graph = self.global_graph
+        elif graph_type == "CURRENT_STATE_GRAPH":
+            graph = self.current_state_graph
+        elif graph_type == "HISTORY_CHANGED_NODES_GRAPH":
+            graph = self.history_changed_nodes_graph
+        elif graph_type == "PRIORI_GRAPH":
+            graph = self.priori_graph
+        else:
+            raise NotImplementedError
+
         dict_objectIds_to_score = {}
         try:
-            for nodes_index in dict_ANALYZE_GRAPH["sort_nodes_index"]:
-                objectIds = self.global_graph.ind_to_obj_id[nodes_index]
-                dict_objectIds_to_score[objectIds] = dict_ANALYZE_GRAPH["score"][nodes_index]
+            for i, nodes_index in enumerate(dict_ANALYZE_GRAPH["sort_nodes_index"]):
+                obj_cls = graph.list_node_obj_cls[nodes_index]
+                obj_name = self.object_classes_index_to_name[obj_cls]
+                score = np.round(dict_ANALYZE_GRAPH["score"][i], decimals=2)
+                dict_objectIds_to_score[obj_name] = score
         except Exception as e:
             pass
         return dict_objectIds_to_score
@@ -418,6 +436,7 @@ class SceneGraph(object):
 
     def compare_existing_node(self, obj_cls, feature, compare_feature_len=0):
         obj_id = None
+        raise "Care for use which graph"
         nodes = self.global_graph.x
         obj_cls_to_ind = self.global_graph.obj_cls_to_ind
         for suspect_node_ind in obj_cls_to_ind[obj_cls]:

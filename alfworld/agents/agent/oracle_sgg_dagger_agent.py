@@ -49,14 +49,13 @@ class SemanticGraphImplement(torch.nn.Module):
             )
         if self.use_gpu:
             self.graph_embed_model.cuda()
+        self.trans_MetaData = alfred_data_format.TransMetaData(
+            self.cfg_semantic)
         self.scene_graphs = []
         for i in range(config['general']['training']['batch_size']):
-            scene_graph = SceneGraph(self.cfg_semantic)
+            scene_graph = SceneGraph(self.cfg_semantic, self.trans_MetaData.object_classes)
             self.scene_graphs.append(scene_graph)
-
         # initialize model
-        self.trans_MetaData = alfred_data_format.TransMetaData(
-            self.cfg_semantic, self.scene_graphs[0].obj_cls_name_to_features, self.scene_graphs[0].adj)
         if not self.isORACLE:
             self.cfg_sgg = config['sgg_cfg']
             self.detector = sgg.load_pretrained_model(

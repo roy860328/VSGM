@@ -6,11 +6,13 @@ import cv2
 SAVE_FOLDER_NAME = "eval_video"
 font = cv2.FONT_HERSHEY_SIMPLEX
 toptomLeftCornerOfText = (10, 30)
+topmiddleLeftCornerOfText = (10, 70)
 middleLeftCornerOfText = (10, 230)
 bottomLeftCornerOfText = (10, 270)
 topmiddleOfText = (600, 30)
 fontScale = 0.7
-fontColor = (255, 0, 0)
+r_fontColor = (255, 0, 0)
+g_fontColor = (0, 255, 0)
 lineType = 2
 
 
@@ -23,14 +25,11 @@ class EvalDebug():
     def reset_data(self):
         self.images = []
         self.depths = []
-        self.dict_masks = []
         self.list_actions = []
         self.fail_reason_list = []
         self.fail_reason = ""
 
-    def add_data(self, step, image, depth, dict_mask, action, fail_reason):
-        if action == "":
-            action = "."
+    def add_data(self, step, image, depth, dict_action, fail_reason):
         if fail_reason != "":
             # string-
             fail_reason = str(fail_reason)
@@ -38,14 +37,13 @@ class EvalDebug():
             self.fail_reason += "\n"
         else:
             fail_reason = "."
-        if dict_mask["mask"] is None:
-            dict_mask["mask"] = (np.ones(depth.shape)*255).astype(np.uint8)
+        if dict_action["mask"] is None:
+            dict_action["mask"] = (np.ones(depth.shape)*255).astype(np.uint8)
         else:
-            dict_mask["mask"] = (dict_mask["mask"]*255).astype(np.uint8)
+            dict_action["mask"] = (dict_action["mask"]*255).astype(np.uint8)
         self.images.append(image)
         self.depths.append(depth)
-        self.dict_masks.append(dict_mask)
-        self.list_actions.append(action)
+        self.list_actions.append(dict_action)
         self.fail_reason_list.append(fail_reason)
 
 
@@ -53,48 +51,6 @@ class EvalDebug():
         save_fail_case = os.path.join(save_dir, file_name + "_fail.txt")
         with open(save_fail_case, 'w') as f:
             f.write(self.fail_reason)
-
-    def images_to_video(self, file_name, save_dir, goal_instr, fps):
-        file_name += ".mp4"
-        save_video_dir = os.path.join(save_dir, file_name)
-        writer = imageio.get_writer(save_video_dir, fps=fps)
-        # data
-        for image, depth, dict_mask, action, fail_reason in zip(self.images, self.depths, self.dict_masks, self.list_actions, self.fail_reason_list):
-            depth = np.expand_dims(depth, axis=2)
-            depth = np.tile(depth, (1, 3))
-            mask = np.expand_dims(dict_mask["mask"], axis=2)
-            mask = np.tile(mask, (1, 3))
-            cat_image = np.concatenate([image, depth, mask], axis=1)
-            # action
-            cv2.putText(cat_image, action,
-                        toptomLeftCornerOfText,
-                        font,
-                        fontScale,
-                        fontColor,
-                        lineType)
-            # fail_reason
-            cv2.putText(cat_image, fail_reason,
-                        middleLeftCornerOfText,
-                        font,
-                        fontScale,
-                        fontColor,
-                        lineType)
-            # goal_instr
-            cv2.putText(cat_image, goal_instr,
-                        bottomLeftCornerOfText,
-                        font,
-                        fontScale,
-                        fontColor,
-                        lineType)
-            # dict_mask
-            cv2.putText(cat_image, str(dict_mask["pred_class"]) + dict_mask["object"],
-                        topmiddleOfText,
-                        font,
-                        fontScale,
-                        fontColor,
-                        lineType)
-            writer.append_data(cat_image)
-        writer.close()
 
     def record(self, save_dir, traj_data, goal_instr, fail_reason, success, fps=2):
         # path
@@ -112,3 +68,80 @@ class EvalDebug():
         self.images_to_video(file_name, save_dir, goal_instr, fps)
         self.store_fail_case(file_name, save_dir)
         self.reset_data()
+
+    def images_to_video(self, file_name, save_dir, goal_instr, fps):
+        file_name += ".mp4"
+        save_video_dir = os.path.join(save_dir, file_name)
+        writer = imageio.get_writer(save_video_dir, fps=fps)
+        # data
+        for image, depth, dict_action, fail_reason in zip(self.images, self.depths, self.list_actions, self.fail_reason_list):
+            '''
+            Process image
+            '''
+            depth = np.expand_dims(depth, axis=2)
+            depth = np.tile(depth, (1, 3))
+            mask = np.expand_dims(dict_action["mask"], axis=2)
+            mask = np.tile(mask, (1, 3))
+            cat_image = np.concatenate([image, depth, mask], axis=1)
+            '''
+            Process string
+            '''
+            # action
+            if len(dict_action["action_navi_or_operation"])<1\
+                or dict_action["action_navi_or_operation"][0, 0]>dict_action["action_navi_or_operation"][0, 1]:
+                color = r_fontColor
+            else:
+                color = g_fontColor
+            if len(dict_action["action_navi_or_operation"])>0:
+                p = dict_action["action_navi_or_operation"].tolist()
+                p = np.round(p, decimals=2)
+            else:
+                p = []
+            str_action_low = dict_action["action_low"]
+            str_navi_oper = "navi: " + dict_action["action_navi_low"] +\
+                ", oper: " + dict_action["action_operation_low"]
+            str_p_navi_or_operation = "p navi/oper: " + str(p)
+            str_current_state_dict_ANALYZE_GRAPH = "current " + str(dict_action["current_state_dict_ANALYZE_GRAPH"])
+            str_history_changed_dict_ANALYZE_GRAPH = "history " + str(dict_action["history_changed_dict_ANALYZE_GRAPH"])
+            str_priori_dict_ANALYZE_GRAPH = "priori " + str(dict_action["priori_dict_ANALYZE_GRAPH"])
+            str_mask = str(dict_action["pred_class"]) + ", " + dict_action["object"]
+            '''
+            write
+            '''
+            self.writeText(
+                cat_image, str_action_low, toptomLeftCornerOfText, color)
+            # navi oper
+            self.writeText(
+                cat_image, str_navi_oper, topmiddleLeftCornerOfText, r_fontColor)
+            # action_navi_or_operation
+            self.writeText(
+                cat_image, str_p_navi_or_operation, (topmiddleLeftCornerOfText[0], topmiddleLeftCornerOfText[1]+30), r_fontColor)
+            '''
+            ANALYZE_GRAPH
+            '''
+            self.writeText(
+                cat_image, str_current_state_dict_ANALYZE_GRAPH, (topmiddleLeftCornerOfText[0], topmiddleLeftCornerOfText[1]+60), r_fontColor, fontscale=0.6)
+            self.writeText(
+                cat_image, str_history_changed_dict_ANALYZE_GRAPH, (topmiddleLeftCornerOfText[0], topmiddleLeftCornerOfText[1]+90), r_fontColor, fontscale=0.6)
+            self.writeText(
+                cat_image, str_priori_dict_ANALYZE_GRAPH, (topmiddleLeftCornerOfText[0], topmiddleLeftCornerOfText[1]+120), r_fontColor, fontscale=0.6)
+
+            # fail_reason
+            self.writeText(
+                cat_image, fail_reason, middleLeftCornerOfText, r_fontColor)
+            # goal_instr
+            self.writeText(
+                cat_image, goal_instr, bottomLeftCornerOfText, r_fontColor)
+            # dict_mask
+            self.writeText(
+                cat_image, str_mask, topmiddleOfText, r_fontColor)
+            writer.append_data(cat_image)
+        writer.close()
+
+    def writeText(self, img, string, position, color, fontscale=fontScale):
+        cv2.putText(img, string,
+                    position,
+                    font,
+                    fontscale,
+                    color,
+                    lineType)

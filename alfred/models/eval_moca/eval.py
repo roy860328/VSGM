@@ -179,12 +179,19 @@ class Eval(object):
                     "exploration_sgg_meta_data": meta_data,
                 }
                 meta_datas["exploration_sgg_meta_data"].append(meta_data)
-                dict_mask = {
+                dict_action = {
+                    'action_low': ".",
+                    'action_navi_low': ".",
+                    'action_operation_low': ".",
+                    'action_navi_or_operation': [],
+                    'current_state_dict_ANALYZE_GRAPH': {},
+                    'history_changed_dict_ANALYZE_GRAPH': {},
+                    'priori_dict_ANALYZE_GRAPH': {},
                     "mask": None,
                     "pred_class": 0,
                     "object": "0",
                 }
-                eval_debug.add_data(0, np_image, np_image[:, :, 0], dict_mask, "", "")
+                eval_debug.add_data(0, np_image, np_image[:, :, 0], dict_action, "")
         return meta_datas
 
     def get_meta_datas(cls, env, resnet):

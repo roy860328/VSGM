@@ -115,9 +115,8 @@ class EvalTask(Eval):
             action = m_pred['action_low']
             if prev_image == curr_image and prev_action == action and prev_action in nav_actions and action in nav_actions and action == 'MoveAhead_25':
                 dist_action = m_out['out_action_low'][0][0].detach().cpu()
-                raise
-                idx_rotateR = model.vocab['action_low'].word2index('RotateRight_90')
-                idx_rotateL = model.vocab['action_low'].word2index('RotateLeft_90')
+                idx_rotateR = model.action_low_word_to_index['RotateRight_90']
+                idx_rotateL = model.action_low_word_to_index['RotateLeft_90']
                 action = 'RotateLeft_90' if dist_action[idx_rotateL] > dist_action[idx_rotateR] else 'RotateRight_90'
 
             if action == cls.STOP_TOKEN:
@@ -178,12 +177,21 @@ class EvalTask(Eval):
             prev_image = curr_image
             prev_action = action
 
-            dict_mask = {
+            dict_action = {
+                # action
+                'action_low': m_pred["action_low"],
+                'action_navi_low': m_pred["action_navi_low"],
+                'action_operation_low': m_pred["action_operation_low"],
+                'action_navi_or_operation': m_pred["action_navi_or_operation"],
+                'current_state_dict_ANALYZE_GRAPH': m_out["current_state_dict_ANALYZE_GRAPH"],
+                'history_changed_dict_ANALYZE_GRAPH': m_out["history_changed_dict_ANALYZE_GRAPH"],
+                'priori_dict_ANALYZE_GRAPH': m_out["priori_dict_ANALYZE_GRAPH"],
+                # mask
                 "mask": mask,
                 "pred_class": pred_class,
                 "object": classes[pred_class]
             }
-            eval_debug.add_data(t, curr_image, curr_depth_image, dict_mask, action, err)
+            eval_debug.add_data(t, curr_image, curr_depth_image, dict_action, err)
             pred_class = 0
 
         # check if goal was satisfied

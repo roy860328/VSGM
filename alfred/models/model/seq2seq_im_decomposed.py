@@ -26,6 +26,7 @@ from agents.agent import oracle_sgg_dagger_agent
 import json
 import glob
 from icecream import ic
+import numpy as np
 
 class Module(Base):
 
@@ -430,19 +431,19 @@ class Module(Base):
                     chose_type="GLOBAL_GRAPH",
                     env_index=env_index,
                     )
-            current_state_graph_importent_features, _ = \
+            current_state_graph_importent_features, current_state_dict_objectIds_to_score = \
                 self.semantic_graph_implement.chose_importent_node_feature(
                     chose_type="CURRENT_STATE_GRAPH",
                     env_index=env_index,
                     hidden_state=self.r_state['state_t_instr'][0][env_index:env_index+1],
                     )
-            history_changed_nodes_graph_importent_features, _ = \
+            history_changed_nodes_graph_importent_features, history_changed_dict_objectIds_to_score = \
                 self.semantic_graph_implement.chose_importent_node_feature(
                     chose_type="HISTORY_CHANGED_NODES_GRAPH",
                     env_index=env_index,
                     hidden_state=self.r_state['state_t_goal'][0][env_index:env_index+1],
                     )
-            priori_importent_features, _ = \
+            priori_importent_features, priori_dict_dict_objectIds_to_score = \
                 self.semantic_graph_implement.chose_importent_node_feature(
                     chose_type="PRIORI_GRAPH",
                     env_index=env_index,
@@ -480,23 +481,38 @@ class Module(Base):
         self.r_state['state_t_instr'] = state_t_instr
         self.r_state['e_t'] = e_t
 
+        out_action_low = [out_action_oper[i:i+1] if is_o else out_action_navi[i:i+1] for i, is_o in enumerate(out_action_navi_or_operation.max(1)[1].tolist())]
+        out_action_low = torch.stack(out_action_low, dim=1)
+
+        assert len(all_meta_datas) == 1, "if not the analyze_graph object ind is error"
+        current_state_dict_ANALYZE_GRAPH = self.semantic_graph_implement.scene_graphs[0].analyze_graph(
+            current_state_dict_objectIds_to_score, graph_type="CURRENT_STATE_GRAPH")
+        history_changed_dict_ANALYZE_GRAPH = self.semantic_graph_implement.scene_graphs[0].analyze_graph(
+            history_changed_dict_objectIds_to_score, graph_type="HISTORY_CHANGED_NODES_GRAPH")
+        priori_dict_ANALYZE_GRAPH = self.semantic_graph_implement.scene_graphs[0].analyze_graph(
+            priori_dict_dict_objectIds_to_score, graph_type="PRIORI_GRAPH")
+
         # output formatting
-        feat['out_action_navi'] = out_action_navi.unsqueeze(0)
-        feat['out_action_oper'] = out_action_oper.unsqueeze(0)
+        feat['out_action_low'] = out_action_low
+        feat['out_action_navi_low'] = out_action_navi.unsqueeze(0)
+        feat['out_action_operation_low'] = out_action_oper.unsqueeze(0)
         feat['out_action_navi_or_operation'] = out_action_navi_or_operation.unsqueeze(0)
         feat['out_action_low_mask'] = out_action_low_mask.unsqueeze(0)
-        feat['out_action_low_masks_label'] = out_action_low_masks_label.unsqueeze(0)
+        feat['out_action_low_mask_label'] = out_action_low_masks_label.unsqueeze(0)
+        feat['current_state_dict_ANALYZE_GRAPH'] = current_state_dict_ANALYZE_GRAPH
+        feat['history_changed_dict_ANALYZE_GRAPH'] = history_changed_dict_ANALYZE_GRAPH
+        feat['priori_dict_ANALYZE_GRAPH'] = priori_dict_ANALYZE_GRAPH
 
         return feat
-
 
     def extract_preds(self, out, batch, feat, clean_special_tokens=True):
         '''
         output processing
         '''
         pred = {}
-        for ex, alow_navi_or_operation, alow_navi, alow_operation, alow_mask, alow_mask_label in \
-            zip(batch, feat['out_action_navi_or_operation'].max(2)[1].tolist(), feat['out_action_navi_low'].max(2)[1].tolist(), feat['out_action_operation_low'].max(2)[1].tolist(), feat['out_action_low_mask'], feat['out_action_low_mask_label'].max(2)[1].tolist()):
+        for ex, logits_alow_navi_or_operation, alow_navi, alow_operation, alow_mask, alow_mask_label in \
+            zip(batch, feat['out_action_navi_or_operation'], feat['out_action_navi_low'].max(2)[1].tolist(), feat['out_action_operation_low'].max(2)[1].tolist(), feat['out_action_low_mask'], feat['out_action_low_mask_label'].max(2)[1].tolist()):
+            alow_navi_or_operation = logits_alow_navi_or_operation.max(1)[1].tolist()
             # remove padding tokens
             if self.pad in alow_navi:
                 pad_start_idx = alow_navi.index(self.pad)
@@ -527,6 +543,7 @@ class Module(Base):
                 'action_low': ' '.join(action_low),
                 'action_navi_low': ' '.join(alow_navi_words),
                 'action_operation_low': ' '.join(alow_operation_words),
+                'action_navi_or_operation': logits_alow_navi_or_operation,
                 'action_low_mask': p_mask,
                 'alow_mask_label': alow_mask_label,
             }
