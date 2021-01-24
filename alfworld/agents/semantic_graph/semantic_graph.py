@@ -25,7 +25,7 @@ class GraphData(Data):
         self.obj_id_to_ind = {}
         # {0: 'ButterKnife|-00.06|+01.11|+00.25', 1: 'Lettuce|-00.06|+01.19|-00.76', 2: 'Statue|+00.22|+01.11|-00.51', 3: 'CounterTop|-00.08|+01.15|00.00', 4: 'Knife|+00.22|+01.14|+00.25', 5: 'LightSwitch|+02.33|+01.31|-00.16', 6: 'DishSponge|-00.06|+01.11|-00.25', 7: 'Vase|-00.34|+01.11|+00.25', 8: 'Book|+00.16|+01.10|+00.62'}
         self.ind_to_obj_id = {}
-        # {15: [0], 50: [1], 85: [2], 24: [3], 45: [4], 52: [5], 30: [6], 102: [7], 10: [8]}
+        # {15: [0, 9, 10], 50: [1], 85: [2], 24: [3], 45: [4, 11], 52: [5], 30: [6], 102: [7], 10: [8]}
         self.obj_cls_to_ind = defaultdict(list)
         # list[0] = x[0] label
         # [15, 50, 85, 24, 45, 52, 30, 102, 10]
@@ -211,21 +211,23 @@ class HeteGraphData(GraphData):
             self.x[ind][-ind_feature_img:] = feature_img
         return ind, isFeatureChange
 
-    def update_adj_relation(self, node_src, obj_cls, adj, relation=1):
+    def update_adj_relation(self, node_src_ind, obj_cls, adj, relation_type=1):
         '''
+        obj_cls: int, 1~105
+        candidate_nodes_relation: [0, 1, 1, ..., 1, 0]
         '''
-        has_relation_list = (adj[obj_cls] == 1)
-        candidate_nodes = adj[obj_cls][has_relation_list]
-        for candidate_node in candidate_nodes:
-            # check node_dst in graph
-            for obj_cls_to_ind_node_dst in self.obj_cls_to_ind[candidate_node]:
-                self.update_relation(node_src, obj_cls_to_ind_node_dst, relation)
-                self.update_relation(obj_cls_to_ind_node_dst, node_src, relation)
+        candidate_nodes_relation = adj[obj_cls]
+        candidate_obj_cls_has_relation_list = np.where(candidate_nodes_relation == 1)[0]
+        for candidate_obj_cls in candidate_obj_cls_has_relation_list:
+            # check if node_dst in graph
+            for obj_cls_to_ind_node_dst_ind in self.obj_cls_to_ind[candidate_obj_cls]:
+                self.update_relation(node_src_ind, obj_cls_to_ind_node_dst_ind, relation_type)
+                self.update_relation(obj_cls_to_ind_node_dst_ind, node_src_ind, relation_type)
 
     def update_relation(self, node_src, node_dst, relation):
         '''
-        node_src : 320
-        node_dst : 321
+        node_src : 320, node index in this graph
+        node_dst : 321, node index in this graph
         relation : 1
         '''
         tensor_node = torch.tensor([[node_src], [node_dst]], dtype=torch.long).contiguous()
@@ -476,8 +478,10 @@ class SceneGraph(object):
                 self.global_graph.update_adj_relation(node_ind, obj_cls, self.adj)
 
         for node_ind, obj_cls, isFindNode in current_state_graph_current_frame_obj_cls_to_node_index:
-            if not isFindNode:
-                self.current_state_graph.update_adj_relation(node_ind, obj_cls, self.adj)
+            # no matter isFindNode is True or False,
+            # self.current_state_graph always need to add adj relation
+            # if not isFindNode:
+            self.current_state_graph.update_adj_relation(node_ind, obj_cls, self.adj)
         # for obj_relation_triplet in obj_relations:
         #     src_obj_ind, dst_obj_ind, relation = obj_relation_triplet
         #     src_node_ind = global_graph_current_frame_obj_cls_to_node_index[src_obj_ind]

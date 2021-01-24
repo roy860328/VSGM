@@ -112,9 +112,9 @@ feat['action_navi_or_operation'] # for training data loss
 F.cross_entropy(, reduction='none', ignore_index=0)
 ```
 
-## MOCA + Priori + Decompose
+## Decompose + Adj Relation + Priori + MOCA 
 ```
-CUDA_VISIBLE_DEVICES=1 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/decompose_semantic_graph.yaml --data data/full_2.1.0/ --model seq2seq_im_decomposed --dout exp/decomposed_Priori --splits data/splits/oct21.json --batch 8 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --demb 100 --dhid 256 --not_save_config --gpu --action_navi_loss_wt 0.8 --action_oper_loss_wt 1 --action_navi_or_oper_loss_wt 1 --mask_loss_wt 1 --mask_label_loss_wt 1
+CUDA_VISIBLE_DEVICES=1 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/decompose_semantic_graph.yaml --data data/full_2.1.0/ --model seq2seq_im_decomposed --dout exp/adj_relation_decomposed_priori --splits data/splits/oct21.json --batch 4 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --not_save_config --gpu --action_navi_loss_wt 0.8 --action_oper_loss_wt 1 --action_navi_or_oper_loss_wt 1 --mask_loss_wt 1 --mask_label_loss_wt 1
 ```
 'action_low', 'action_navi_low', 'action_operation_low', 'action_navi_or_operation' need pad value = 0
 

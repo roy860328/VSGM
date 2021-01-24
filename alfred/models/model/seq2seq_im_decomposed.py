@@ -598,15 +598,15 @@ class Module(Base):
         losses['action_low_mask_label'] = self.ce_loss(p_alow_mask, l_alow_mask_label) * self.args.mask_loss_wt
         self.accuracy_metric(name="mask_label", label=l_alow_mask_label, predict=p_alow_mask)
 
-        # mask
-        p_alow_mask = out['out_action_low_mask']
-        valid = feat['action_low_valid_interact']
-        # mask loss
-        valid_idxs = valid.view(-1).nonzero().view(-1)
-        flat_p_alow_mask = p_alow_mask.view(p_alow_mask.shape[0]*p_alow_mask.shape[1], *p_alow_mask.shape[2:])[valid_idxs]
-        flat_alow_mask = torch.cat(feat['action_low_mask'], dim=0)
-        alow_mask_loss = self.weighted_mask_loss(flat_p_alow_mask, flat_alow_mask)
-        losses['action_low_mask'] = alow_mask_loss * self.args.mask_loss_wt
+        # # mask
+        # p_alow_mask = out['out_action_low_mask']
+        # valid = feat['action_low_valid_interact']
+        # # mask loss
+        # valid_idxs = valid.view(-1).nonzero().view(-1)
+        # flat_p_alow_mask = p_alow_mask.view(p_alow_mask.shape[0]*p_alow_mask.shape[1], *p_alow_mask.shape[2:])[valid_idxs]
+        # flat_alow_mask = torch.cat(feat['action_low_mask'], dim=0)
+        # alow_mask_loss = self.weighted_mask_loss(flat_p_alow_mask, flat_alow_mask)
+        # losses['action_low_mask'] = alow_mask_loss * self.args.mask_loss_wt
 
         # subgoal completion loss
         if self.args.subgoal_aux_loss_wt > 0:
