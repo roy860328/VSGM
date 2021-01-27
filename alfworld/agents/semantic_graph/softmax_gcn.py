@@ -41,17 +41,14 @@ class Net(torch.nn.Module):
         if cfg.SCENE_GRAPH.CHOSE_IMPORTENT_NODE:
             # nn.linear bert_hidden_size -> NODE_FEATURE_SIZE
             bert_hidden_size = config['general']['model']['block_hidden_dim']
-            self.CHOSE_IMPORTENT_NODE_OUTPUT_SHAPE = NODE_FEATURE_SIZE * NUM_CHOSE_NODE
-            self.chose_node_module = graph_embed.DotAttnChoseImportentNode(
+            self.CHOSE_IMPORTENT_NODE_OUTPUT_SHAPE = self.EMBED_FEATURE_SIZE
+            self.chose_node_module = graph_embed.WeightedSoftmaxSum(
                 bert_hidden_size,
                 NODE_FEATURE_SIZE,
+                self.EMBED_FEATURE_SIZE,
                 NUM_CHOSE_NODE,
                 cfg.SCENE_GRAPH.GPU,
                 PRINT_DEBUG=PRINT_DEBUG
-            )
-            self.chose_node_feature_mapping = nn.Linear(
-                self.CHOSE_IMPORTENT_NODE_OUTPUT_SHAPE,
-                self.EMBED_FEATURE_SIZE
             )
 
     def forward(self, data, CHOSE_IMPORTENT_NODE=False, hidden_state=None):
@@ -193,33 +190,4 @@ class Net(torch.nn.Module):
             # torch.Size([1, 400])
             chose_nodes, dict_ANALYZE_GRAPH = self.chose_node_module(nodes_tensor, hidden_state)
             # print(x.requires_grad)
-        mapping_feature = self.chose_node_feature_mapping(chose_nodes)
-        return mapping_feature, dict_ANALYZE_GRAPH
-
-    def priori_feature(self, data, hidden_state):
-        x, attributes, edge_obj_to_obj, edge_weight = \
-            data.x, \
-            data.attributes, \
-            data.edge_obj_to_obj, \
-            data.edge_attr
-        dict_ANALYZE_GRAPH = None
-
-        x = x.clone().detach()
-        word_feature = self.node_word_embed_downsample(x[:, :self.cfg.SCENE_GRAPH.NODE_INPUT_WORD_EMBED_SIZE])
-        rgb_feature = self.node_rgb_feature_downsample(x[:, self.cfg.SCENE_GRAPH.NODE_INPUT_WORD_EMBED_SIZE:])
-        # torch.Size([2, 16])
-        x = torch.cat([word_feature, rgb_feature], dim=1)
-        x = F.relu(self.dropout(x))
-        x = F.relu(self.conv1(x, edge_obj_to_obj, edge_weight))
-        x = self.dropout(x)
-        x = torch.cat([x, attributes], dim=1)
-        # torch.Size([2, 40])
-        x = self.conv2(x, edge_obj_to_obj, edge_weight)
-        x = F.relu(self.dropout(x))
-        # torch.Size([2, 16]) + torch.Size([2, 24]) => torch.Size([2, 40])
-        x = torch.cat([x, attributes], dim=1)
-        nodes_tensor = x
-        # torch.Size([1, 400])
-        chose_nodes, dict_ANALYZE_GRAPH = self.chose_node_module(nodes_tensor, hidden_state)
-        mapping_feature = self.chose_node_feature_mapping(chose_nodes)
-        return mapping_feature, dict_ANALYZE_GRAPH
+        return chose_nodes, dict_ANALYZE_GRAPH

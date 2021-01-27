@@ -89,7 +89,8 @@ if __name__ == '__main__':
 
     # parse arguments
     args = parser.parse_args()
-
+    config = load_config(args)
+    args.config_file = config
     # import torch
     # device = torch.device("cuda:%d" % args.gpu_id if args.gpu else "cpu")
     # if args.gpu and torch.cuda.is_available():

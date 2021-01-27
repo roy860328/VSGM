@@ -208,9 +208,15 @@ class Module(Base):
         '''
         emb_lang_goal_instr = feat['lang_goal_instr']
         self.lang_dropout(emb_lang_goal_instr.data)
+        # batch 2, batch 1 len = 145, batch 2 len = 95
+        # len(emb_lang_goal_instr.data) = 240
+        # enc_lang_goal_instr = (240, 145, 2, 2)
         enc_lang_goal_instr, _ = self.enc(emb_lang_goal_instr)
+        # return back origin tensor
+        # len(enc_lang_goal_instr) = 2, enc_lang_goal_instr[1].shape = torch.Size([145, 1024])
         enc_lang_goal_instr, _ = pad_packed_sequence(enc_lang_goal_instr, batch_first=True)
         self.lang_dropout(enc_lang_goal_instr)
+        # torch.Size([2, 1024])
         cont_lang_goal_instr = self.enc_att(enc_lang_goal_instr)
 
         return cont_lang_goal_instr, enc_lang_goal_instr

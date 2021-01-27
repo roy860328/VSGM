@@ -5,8 +5,8 @@ import numpy as np
 import cv2
 SAVE_FOLDER_NAME = "eval_video"
 font = cv2.FONT_HERSHEY_SIMPLEX
-toptomLeftCornerOfText = (10, 30)
-topmiddleLeftCornerOfText = (10, 70)
+toptomLeftCornerOfText = (10, 20)
+topmiddleLeftCornerOfText = (10, 50)
 middleLeftCornerOfText = (10, 230)
 bottomLeftCornerOfText = (10, 270)
 topmiddleOfText = (600, 30)
@@ -47,12 +47,14 @@ class EvalDebug():
         self.fail_reason_list.append(fail_reason)
 
 
-    def store_fail_case(self, file_name, save_dir):
-        save_fail_case = os.path.join(save_dir, file_name + "_fail.txt")
+    def store_state_case(self, file_name, save_dir, goal_instr, step_instr):
+        save_fail_case = os.path.join(save_dir, file_name + "_state.txt")
         with open(save_fail_case, 'w') as f:
+            f.write("Goal: " + goal_instr + "\nstep_instr: ")
+            f.write("\nstep_instr: ".join(step_instr) + "\n")
             f.write(self.fail_reason)
 
-    def record(self, save_dir, traj_data, goal_instr, fail_reason, success, fps=2):
+    def record(self, save_dir, traj_data, goal_instr, step_instr, fail_reason, success, fps=2):
         # path
         if success:
             file_name = "S_"
@@ -66,7 +68,7 @@ class EvalDebug():
             os.makedirs(save_dir)
 
         self.images_to_video(file_name, save_dir, goal_instr, fps)
-        self.store_fail_case(file_name, save_dir)
+        self.store_state_case(file_name, save_dir, goal_instr, step_instr)
         self.reset_data()
 
     def images_to_video(self, file_name, save_dir, goal_instr, fps):
@@ -101,10 +103,12 @@ class EvalDebug():
             str_navi_oper = "navi: " + dict_action["action_navi_low"] +\
                 ", oper: " + dict_action["action_operation_low"]
             str_p_navi_or_operation = "p navi/oper: " + str(p)
-            str_current_state_dict_ANALYZE_GRAPH = "current " + str(dict_action["current_state_dict_ANALYZE_GRAPH"])
-            str_history_changed_dict_ANALYZE_GRAPH = "history " + str(dict_action["history_changed_dict_ANALYZE_GRAPH"])
-            str_priori_dict_ANALYZE_GRAPH = "priori " + str(dict_action["priori_dict_ANALYZE_GRAPH"])
+            str_global_graph_dict_ANALYZE_GRAPH = "global " + str(dict_action["global_graph_dict_ANALYZE_GRAPH"]).replace(":", "").replace(" ", "")
+            str_current_state_dict_ANALYZE_GRAPH = "current " + str(dict_action["current_state_dict_ANALYZE_GRAPH"]).replace(":", "").replace(" ", "")
+            str_history_changed_dict_ANALYZE_GRAPH = "history " + str(dict_action["history_changed_dict_ANALYZE_GRAPH"]).replace(":", "").replace(" ", "")
+            str_priori_dict_ANALYZE_GRAPH = "priori " + str(dict_action["priori_dict_ANALYZE_GRAPH"]).replace(":", "").replace(" ", "")
             str_mask = str(dict_action["pred_class"]) + ", " + dict_action["object"]
+            str_subgoal_progress = str(dict_action["subgoal_t"]) + ", " + str(dict_action["progress_t"])
             '''
             write
             '''
@@ -120,11 +124,13 @@ class EvalDebug():
             ANALYZE_GRAPH
             '''
             self.writeText(
-                cat_image, str_current_state_dict_ANALYZE_GRAPH, (topmiddleLeftCornerOfText[0], topmiddleLeftCornerOfText[1]+60), r_fontColor, fontscale=0.6)
+                cat_image, str_global_graph_dict_ANALYZE_GRAPH, (topmiddleLeftCornerOfText[0], topmiddleLeftCornerOfText[1]+60), r_fontColor, fontscale=0.6)
             self.writeText(
-                cat_image, str_history_changed_dict_ANALYZE_GRAPH, (topmiddleLeftCornerOfText[0], topmiddleLeftCornerOfText[1]+90), r_fontColor, fontscale=0.6)
+                cat_image, str_current_state_dict_ANALYZE_GRAPH, (topmiddleLeftCornerOfText[0], topmiddleLeftCornerOfText[1]+90), r_fontColor, fontscale=0.6)
             self.writeText(
-                cat_image, str_priori_dict_ANALYZE_GRAPH, (topmiddleLeftCornerOfText[0], topmiddleLeftCornerOfText[1]+120), r_fontColor, fontscale=0.6)
+                cat_image, str_history_changed_dict_ANALYZE_GRAPH, (topmiddleLeftCornerOfText[0], topmiddleLeftCornerOfText[1]+120), r_fontColor, fontscale=0.6)
+            self.writeText(
+                cat_image, str_priori_dict_ANALYZE_GRAPH, (topmiddleLeftCornerOfText[0], topmiddleLeftCornerOfText[1]+150), r_fontColor, fontscale=0.6)
 
             # fail_reason
             self.writeText(
@@ -135,6 +141,9 @@ class EvalDebug():
             # dict_mask
             self.writeText(
                 cat_image, str_mask, topmiddleOfText, r_fontColor)
+            # goal persent: subgoal_t progress_t
+            self.writeText(
+                cat_image, str_subgoal_progress, (topmiddleOfText[0], topmiddleOfText[1]+270), r_fontColor)
             writer.append_data(cat_image)
         writer.close()
 

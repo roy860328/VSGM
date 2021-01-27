@@ -122,9 +122,9 @@ class Module(nn.Module):
 
         # debugging: use to check if training loop works without waiting for full epoch
         if self.args.fast_epoch:
-            train = train[:100]
-            valid_seen = valid_seen[:100]
-            valid_unseen = valid_unseen[:100]
+            train = train[:10]
+            valid_seen = valid_seen[:10]
+            valid_unseen = valid_unseen[:10]
 
         # initialize summary writer for tensorboardX
         self.summary_writer = SummaryWriter(log_dir=args.dout)
@@ -154,7 +154,7 @@ class Module(nn.Module):
                 out = self.forward(feat)
                 preds = self.extract_preds(out, batch, feat)
                 # p_train.update(preds)
-                loss = self.compute_loss(out, batch, feat)
+                loss = self.compute_loss(out, batch, feat, epoch)
                 for k, v in loss.items():
                     ln = 'loss_' + k
                     m_train[ln].append(v.item())

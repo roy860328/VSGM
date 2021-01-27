@@ -15,6 +15,7 @@ from torchvision.models.detection import maskrcnn_resnet50_fpn
 import matplotlib.pyplot as plt
 import random
 # debug
+from icecream import ic
 from models.utils.eval_debug import EvalDebug
 eval_debug = EvalDebug()
 
@@ -76,6 +77,7 @@ class EvalTask(Eval):
 
         # goal instr
         goal_instr = traj_data['turk_annotations']['anns'][r_idx]['task_desc']
+        step_instr = traj_data['turk_annotations']['anns'][r_idx]['high_descs']
 
         maskrcnn = maskrcnn_resnet50_fpn(num_classes=119)
         maskrcnn.eval()
@@ -91,6 +93,7 @@ class EvalTask(Eval):
         prev_center = torch.zeros(2)
 
         done, success = False, False
+        err = ""
         fails = 0
         t = 0
         reward = 0
@@ -119,14 +122,10 @@ class EvalTask(Eval):
                 idx_rotateL = model.action_low_word_to_index['RotateLeft_90']
                 action = 'RotateLeft_90' if dist_action[idx_rotateL] > dist_action[idx_rotateR] else 'RotateRight_90'
 
-            if action == cls.STOP_TOKEN:
-                print("\tpredicted STOP")
-                break
-
             # mask prediction
             mask = None
             if model.has_interaction(action):
-                class_dist = m_pred['action_low_mask'][0]
+                class_dist = m_pred['action_low_mask_label'][0]
                 pred_class = np.argmax(class_dist)
 
                 # mask generation
@@ -156,6 +155,38 @@ class EvalTask(Eval):
 
                     mask = np.squeeze(masks[0].numpy(), axis=0)
 
+            '''
+            eval_debug.add_data
+            '''
+            try:
+                dict_action = {
+                    # action
+                    'action_low': m_pred["action_low"],
+                    'action_navi_low': m_pred["action_navi_low"],
+                    'action_operation_low': m_pred["action_operation_low"],
+                    'action_navi_or_operation': m_pred["action_navi_or_operation"],
+                    # goal
+                    'subgoal_t': m_out["out_subgoal_t"],
+                    'progress_t': m_out["out_progress_t"],
+                    # ANALYZE_GRAPH
+                    'global_graph_dict_ANALYZE_GRAPH': m_out["global_graph_dict_ANALYZE_GRAPH"],
+                    'current_state_dict_ANALYZE_GRAPH': m_out["current_state_dict_ANALYZE_GRAPH"],
+                    'history_changed_dict_ANALYZE_GRAPH': m_out["history_changed_dict_ANALYZE_GRAPH"],
+                    'priori_dict_ANALYZE_GRAPH': m_out["priori_dict_ANALYZE_GRAPH"],
+                    # mask
+                    "mask": mask,
+                    "pred_class": pred_class,
+                    "object": classes[pred_class]
+                }
+            except Exception as e:
+                ic(pred_class)
+                ic(len(classes))
+            eval_debug.add_data(t, curr_image, curr_depth_image, dict_action, err)
+
+            if action == cls.STOP_TOKEN:
+                print("\tpredicted STOP")
+                break
+
             # print action
             if args.debug:
                 print(action)
@@ -176,22 +207,6 @@ class EvalTask(Eval):
 
             prev_image = curr_image
             prev_action = action
-
-            dict_action = {
-                # action
-                'action_low': m_pred["action_low"],
-                'action_navi_low': m_pred["action_navi_low"],
-                'action_operation_low': m_pred["action_operation_low"],
-                'action_navi_or_operation': m_pred["action_navi_or_operation"],
-                'current_state_dict_ANALYZE_GRAPH': m_out["current_state_dict_ANALYZE_GRAPH"],
-                'history_changed_dict_ANALYZE_GRAPH': m_out["history_changed_dict_ANALYZE_GRAPH"],
-                'priori_dict_ANALYZE_GRAPH': m_out["priori_dict_ANALYZE_GRAPH"],
-                # mask
-                "mask": mask,
-                "pred_class": pred_class,
-                "object": classes[pred_class]
-            }
-            eval_debug.add_data(t, curr_image, curr_depth_image, dict_action, err)
             pred_class = 0
 
         # check if goal was satisfied
@@ -199,7 +214,7 @@ class EvalTask(Eval):
         if goal_satisfied:
             print("Goal Reached")
             success = True
-        eval_debug.record(model.args.dout, traj_data, goal_instr, err, success)
+        eval_debug.record(model.args.dout, traj_data, goal_instr, step_instr, err, success)
 
         # goal_conditions
         pcs = env.get_goal_conditions_met()

@@ -127,7 +127,7 @@ class SemanticGraphImplement(torch.nn.Module):
         raise NotImplementedError
         scene_graph = self.scene_graphs[env_index]
         priori_graph = scene_graph.get_priori_graph()
-        importent_node_feature, dict_ANALYZE_GRAPH = self.graph_embed_model.priori_feature(
+        importent_node_feature, dict_objectIds_to_score = self.graph_embed_model.priori_feature(
             priori_graph,
             hidden_state,
         )
@@ -138,27 +138,27 @@ class SemanticGraphImplement(torch.nn.Module):
         if chose_type == "GLOBAL_GRAPH":
             # embed graph data
             global_graph = scene_graph.get_graph_data()
-            graph_feature, dict_ANALYZE_GRAPH = self.graph_embed_model(
+            graph_feature, dict_objectIds_to_score = self.graph_embed_model(
                 global_graph,
             )
         elif chose_type == "CURRENT_STATE_GRAPH":
             current_state_graph = scene_graph.get_current_state_graph_data()
-            graph_feature, dict_ANALYZE_GRAPH = self.graph_embed_model(
+            graph_feature, dict_objectIds_to_score = self.graph_embed_model(
                 current_state_graph,
             )
         elif chose_type == "HISTORY_CHANGED_NODES_GRAPH":
             history_changed_nodes_graph = scene_graph.get_history_changed_nodes_graph_data()
-            graph_feature, dict_ANALYZE_GRAPH = self.graph_embed_model(
+            graph_feature, dict_objectIds_to_score = self.graph_embed_model(
                 history_changed_nodes_graph,
             )
         elif chose_type == "PRIORI_GRAPH":
             priori_graph = scene_graph.get_priori_graph()
-            graph_feature, dict_ANALYZE_GRAPH = self.graph_embed_model(
+            graph_feature, dict_objectIds_to_score = self.graph_embed_model(
                 priori_graph,
             )
         else:
             raise NotImplementedError
-        return graph_feature, dict_ANALYZE_GRAPH
+        return graph_feature, dict_objectIds_to_score
 
     # for alfred model/nn
     def chose_importent_node_feature(self, chose_type, env_index, hidden_state=None):
@@ -166,31 +166,31 @@ class SemanticGraphImplement(torch.nn.Module):
         if chose_type == "GLOBAL_GRAPH":
             # embed graph data
             global_graph = scene_graph.get_graph_data()
-            importent_node_feature, dict_ANALYZE_GRAPH = self.graph_embed_model.chose_importent_node(
+            importent_node_feature, dict_objectIds_to_score = self.graph_embed_model.chose_importent_node(
                 global_graph,
                 hidden_state,
             )
         elif chose_type == "CURRENT_STATE_GRAPH":
             current_state_graph = scene_graph.get_current_state_graph_data()
-            importent_node_feature, dict_ANALYZE_GRAPH = self.graph_embed_model.chose_importent_node(
+            importent_node_feature, dict_objectIds_to_score = self.graph_embed_model.chose_importent_node(
                 current_state_graph,
                 hidden_state,
             )
         elif chose_type == "HISTORY_CHANGED_NODES_GRAPH":
             history_changed_nodes_graph = scene_graph.get_history_changed_nodes_graph_data()
-            importent_node_feature, dict_ANALYZE_GRAPH = self.graph_embed_model.chose_importent_node(
+            importent_node_feature, dict_objectIds_to_score = self.graph_embed_model.chose_importent_node(
                 history_changed_nodes_graph,
                 hidden_state,
             )
         elif chose_type == "PRIORI_GRAPH":
             priori_graph = scene_graph.get_priori_graph()
-            importent_node_feature, dict_ANALYZE_GRAPH = self.graph_embed_model.chose_importent_node(
+            importent_node_feature, dict_objectIds_to_score = self.graph_embed_model.chose_importent_node(
                 priori_graph,
                 hidden_state,
             )
         else:
             raise NotImplementedError
-        return importent_node_feature, dict_ANALYZE_GRAPH
+        return importent_node_feature, dict_objectIds_to_score
 
 
     # visual features for state representation

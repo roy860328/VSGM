@@ -58,6 +58,10 @@ class Module(Base):
         # frame mask decoder
         if self.config['semantic_cfg'].GENERAL.DECODER == "DecomposeDec":
             decoder = vnn.DecomposeDec
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "DecomposeDec2":
+            decoder = vnn.DecomposeDec2
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "ContrastiveDecompose":
+            decoder = vnn.ContrastiveDecompose
         else:
             raise NotImplementedError()
         self.dec = decoder(self.emb, self.num_action_navi_or_operation,
@@ -69,7 +73,14 @@ class Module(Base):
                            actor_dropout=args.actor_dropout,
                            input_dropout=args.input_dropout,
                            teacher_forcing=args.dec_teacher_forcing)
-
+        self.USE_Contrastive = True if self.config['semantic_cfg'].GENERAL.DECODER == "ContrastiveDecompose" else False
+        if self.USE_Contrastive:
+            self.mlp_goal_enc = nn.Linear(args.dhid*2, args.dhid*2)
+            self.mlp_inst_enc = nn.Linear(args.dhid*2, args.dhid*2)
+            self.mlp_dec_lstm_enc = nn.Linear(args.dhid*2, args.dhid*2)
+            self.mlp_graph_enc = nn.Linear(IMPORTENT_NDOES_FEATURE, args.dhid*2)
+            self.fn_cos = nn.CosineSimilarity(dim=2, eps=1e-6)
+            self.fn_logsoftmax = nn.LogSoftmax(dim=1)
         # dropouts
         self.vis_dropout = nn.Dropout(args.vis_dropout)
         self.lang_dropout = nn.Dropout(args.lang_dropout, inplace=True)
@@ -341,6 +352,7 @@ class Module(Base):
         self.lang_dropout(emb_lang.data)
         
         enc_lang, _ = self.enc_goal(emb_lang)
+        # torch.Size([2, 8, 512]) -> torch.Size([2, 8, 512])
         enc_lang, _ = pad_packed_sequence(enc_lang, batch_first=True)
         
         self.lang_dropout(enc_lang)
@@ -358,6 +370,7 @@ class Module(Base):
         self.lang_dropout(emb_lang.data)
         
         enc_lang, _ = self.enc_instr(emb_lang)
+        # torch.Size([2, 58, 512]) -> torch.Size([2, 58, 512])
         enc_lang, _ = pad_packed_sequence(enc_lang, batch_first=True)
         
         self.lang_dropout(enc_lang)
@@ -411,6 +424,7 @@ class Module(Base):
         semantic graph
         '''
         # batch = 1
+
         all_meta_datas = feat['all_meta_datas']
         feat_global_graph = []
         feat_current_state_graph = []
@@ -422,33 +436,9 @@ class Module(Base):
             t_store_state = b_store_state["sgg_meta_data"]
             # cls.resnet.featurize([curr_image], batch=1).unsqueeze(0)
             t_store_state["rgb_image"] = feat['frames'][env_index, 0]
-            self.semantic_graph_implement.store_data_to_graph(
-                store_state=t_store_state,
-                env_index=env_index
-            )
-            global_graph_importent_features, _ = \
-                self.semantic_graph_implement.get_graph_feature(
-                    chose_type="GLOBAL_GRAPH",
-                    env_index=env_index,
-                    )
-            current_state_graph_importent_features, current_state_dict_objectIds_to_score = \
-                self.semantic_graph_implement.chose_importent_node_feature(
-                    chose_type="CURRENT_STATE_GRAPH",
-                    env_index=env_index,
-                    hidden_state=self.r_state['state_t_instr'][0][env_index:env_index+1],
-                    )
-            history_changed_nodes_graph_importent_features, history_changed_dict_objectIds_to_score = \
-                self.semantic_graph_implement.chose_importent_node_feature(
-                    chose_type="HISTORY_CHANGED_NODES_GRAPH",
-                    env_index=env_index,
-                    hidden_state=self.r_state['state_t_goal'][0][env_index:env_index+1],
-                    )
-            priori_importent_features, priori_dict_dict_objectIds_to_score = \
-                self.semantic_graph_implement.chose_importent_node_feature(
-                    chose_type="PRIORI_GRAPH",
-                    env_index=env_index,
-                    hidden_state=self.r_state['state_t_instr'][0][env_index:env_index+1],
-                    )
+            global_graph_importent_features, current_state_graph_importent_features, history_changed_nodes_graph_importent_features, priori_importent_features,\
+                global_graph_dict_objectIds_to_score, current_state_dict_objectIds_to_score, history_changed_dict_objectIds_to_score, priori_dict_dict_objectIds_to_score =\
+                self.dec.store_and_get_graph_feature(t_store_state, env_index, self.r_state['state_t_goal'], self.r_state['state_t_instr'])
             feat_global_graph.append(global_graph_importent_features)
             feat_current_state_graph.append(current_state_graph_importent_features)
             feat_history_changed_nodes_graph.append(history_changed_nodes_graph_importent_features)
@@ -460,7 +450,7 @@ class Module(Base):
 
         # decode and save embedding and hidden states
         out_action_navi, out_action_oper, out_action_low_mask, out_action_navi_or_operation, out_action_low_masks_label,\
-            state_t_goal, state_t_instr, lang_attn_t_goal, lang_attn_t_instr, *_ = \
+            state_t_goal, state_t_instr, lang_attn_t_goal, lang_attn_t_instr, subgoal_t, progress_t, weighted_lang_t_goal, weighted_lang_t_instr = \
             self.dec.step(
                 self.r_state['enc_lang_goal'],
                 self.r_state['enc_lang_instr'],
@@ -485,6 +475,8 @@ class Module(Base):
         out_action_low = torch.stack(out_action_low, dim=1)
 
         assert len(all_meta_datas) == 1, "if not the analyze_graph object ind is error"
+        global_graph_dict_ANALYZE_GRAPH = self.semantic_graph_implement.scene_graphs[0].analyze_graph(
+            global_graph_dict_objectIds_to_score, graph_type="GLOBAL_GRAPH")
         current_state_dict_ANALYZE_GRAPH = self.semantic_graph_implement.scene_graphs[0].analyze_graph(
             current_state_dict_objectIds_to_score, graph_type="CURRENT_STATE_GRAPH")
         history_changed_dict_ANALYZE_GRAPH = self.semantic_graph_implement.scene_graphs[0].analyze_graph(
@@ -499,6 +491,9 @@ class Module(Base):
         feat['out_action_navi_or_operation'] = out_action_navi_or_operation.unsqueeze(0)
         feat['out_action_low_mask'] = out_action_low_mask.unsqueeze(0)
         feat['out_action_low_mask_label'] = out_action_low_masks_label.unsqueeze(0)
+        feat['out_subgoal_t'] = np.round(subgoal_t.view(-1).item(), decimals=2)
+        feat['out_progress_t'] = np.round(progress_t.view(-1).item(), decimals=2)
+        feat['global_graph_dict_ANALYZE_GRAPH'] = global_graph_dict_ANALYZE_GRAPH
         feat['current_state_dict_ANALYZE_GRAPH'] = current_state_dict_ANALYZE_GRAPH
         feat['history_changed_dict_ANALYZE_GRAPH'] = history_changed_dict_ANALYZE_GRAPH
         feat['priori_dict_ANALYZE_GRAPH'] = priori_dict_ANALYZE_GRAPH
@@ -511,7 +506,7 @@ class Module(Base):
         '''
         pred = {}
         for ex, logits_alow_navi_or_operation, alow_navi, alow_operation, alow_mask, alow_mask_label in \
-            zip(batch, feat['out_action_navi_or_operation'], feat['out_action_navi_low'].max(2)[1].tolist(), feat['out_action_operation_low'].max(2)[1].tolist(), feat['out_action_low_mask'], feat['out_action_low_mask_label'].max(2)[1].tolist()):
+            zip(batch, feat['out_action_navi_or_operation'], feat['out_action_navi_low'].max(2)[1].tolist(), feat['out_action_operation_low'].max(2)[1].tolist(), feat['out_action_low_mask'], feat['out_action_low_mask_label']):
             alow_navi_or_operation = logits_alow_navi_or_operation.max(1)[1].tolist()
             # remove padding tokens
             if self.pad in alow_navi:
@@ -520,6 +515,7 @@ class Module(Base):
                 alow_mask = alow_mask[:pad_start_idx]
                 alow_operation = alow_operation[:pad_start_idx]
                 alow_navi_or_operation = alow_navi_or_operation[:pad_start_idx]
+                alow_mask_label = alow_mask_label[:pad_start_idx]
 
             if clean_special_tokens:
                 # remove <<stop>> tokens
@@ -529,6 +525,7 @@ class Module(Base):
                     alow_mask = alow_mask[:stop_start_idx]
                     alow_operation = alow_operation[:stop_start_idx]
                     alow_navi_or_operation = alow_navi_or_operation[:stop_start_idx]
+                    alow_mask_label = alow_mask_label[:stop_start_idx]
 
             # index to API actions
             # words = self.vocab['action_low'].index2word(alow)
@@ -538,6 +535,7 @@ class Module(Base):
             # ic(alow_navi_words)
 
             p_mask = [alow_mask[t].detach().cpu().numpy() for t in range(alow_mask.shape[0])]
+            p_mask_label = [alow_mask_label[t].detach().cpu().numpy() for t in range(alow_mask_label.shape[0])]
 
             pred[self.get_task_and_ann_id(ex)] = {
                 'action_low': ' '.join(action_low),
@@ -545,7 +543,7 @@ class Module(Base):
                 'action_operation_low': ' '.join(alow_operation_words),
                 'action_navi_or_operation': logits_alow_navi_or_operation,
                 'action_low_mask': p_mask,
-                'alow_mask_label': alow_mask_label,
+                'action_low_mask_label': p_mask_label,
             }
 
         return pred
@@ -560,8 +558,7 @@ class Module(Base):
         action_emb = self.dec.emb(action_num).unsqueeze(0)
         return action_emb
 
-
-    def compute_loss(self, out, batch, feat):
+    def compute_loss(self, out, batch, feat, epoch):
         '''
         loss function for Seq2Seq agent
         '''
@@ -574,6 +571,63 @@ class Module(Base):
         # 'out_action_operation_low'
         # 'out_action_navi_or_operation'
         # GT and predictions
+        if self.USE_Contrastive:
+            contrastive_data = feat['out_contrastive_data']
+            state_t_goal = contrastive_data["state_t_goal"]
+            state_t_instr = contrastive_data["state_t_instr"]
+            global_graph = contrastive_data["global_graph"]
+            current_graph = contrastive_data["current_graph"]
+            history_graph = contrastive_data["history_graph"]
+            weighted_lang_goal = contrastive_data["weighted_lang_t_goal"]
+            weighted_lang_instr = contrastive_data["weighted_lang_t_instr"]
+            '''
+            # non linear
+            '''
+            # torch.Size([2, 48, 512]) -> torch.Size([2, 48, 512])
+            mlp_goal = self.mlp_goal_enc(weighted_lang_goal)
+            mlp_instr = self.mlp_inst_enc(weighted_lang_instr)
+            # torch.Size([2, 48, 512]) -> torch.Size([2, 48, 512])
+            mlp_dec_goal = self.mlp_dec_lstm_enc(state_t_goal)
+            mlp_dec_instr = self.mlp_dec_lstm_enc(state_t_instr)
+            # torch.Size([2, 48, 64]) -> torch.Size([2, 48, 512])
+            mlp_global_graph = self.mlp_graph_enc(global_graph)
+            mlp_current_graph = self.mlp_graph_enc(current_graph)
+            mlp_history_graph = self.mlp_graph_enc(history_graph)
+            '''
+            # loss
+            '''
+            ### lang goal instr
+            # torch.Size([2, 48, 512]) -> fn_cos: torch.Size([2, 48]) -> softmax: torch.Size([2, 48]) -> sum: torch.Size([])
+            loss_lang_goal_instr = self.fn_logsoftmax(
+                self.fn_cos(mlp_goal, mlp_instr)).sum()
+            ### dec_goal dec_instr
+            loss_dec_goal_instr = self.fn_logsoftmax(
+                self.fn_cos(mlp_dec_goal, mlp_dec_instr)).sum()
+            ### graph
+            loss_dec_instr_global_graph = self.fn_logsoftmax(
+                self.fn_cos(mlp_dec_instr, mlp_global_graph)).sum()
+            loss_dec_instr_current_graph = self.fn_logsoftmax(
+                self.fn_cos(mlp_dec_instr, mlp_current_graph)).sum()
+            loss_dec_instr_history_graph = self.fn_logsoftmax(
+                self.fn_cos(mlp_dec_instr, mlp_history_graph)).sum()
+            # loss_dec_instr_history_graph = self.fn_logsoftmax(
+            #     self.fn_cos(mlp_dec_instr[:, -1:, :], mlp_history_graph[:, -1:, :])).sum()
+            '''
+            # loss weight
+            '''
+            loss_lang_goal_instr = -0.5 * loss_lang_goal_instr
+            loss_dec_goal_instr = -0.5 * loss_dec_goal_instr
+            loss_dec_instr_graph = -0.1 * loss_dec_instr_global_graph +\
+                (-0.1 * loss_dec_instr_current_graph) +\
+                (-0.1 * loss_dec_instr_history_graph)
+
+            losses['contrastive_loss_lang_goal_instr'] = loss_lang_goal_instr * self.args.contrastive_loss_wt
+            losses['contrastive_loss_dec_goal_instr'] = loss_dec_goal_instr * self.args.contrastive_loss_wt
+            losses['contrastive_loss_dec_instr_graph'] = loss_dec_instr_graph * self.args.contrastive_loss_wt
+            ic(losses)
+            if epoch == 0:
+                return losses
+
         p_alow_navi = out['out_action_navi_low'].view(-1, len(self.vocab['action_low']))
         l_alow_navi = feat['action_navi_low'].view(-1)
         p_alow_oper = out['out_action_operation_low'].view(-1, len(self.vocab['action_low']))
@@ -644,7 +698,6 @@ class Module(Base):
             losses['progress_aux'] = self.args.pm_aux_loss_wt * progress_loss
         return losses
 
-
     def weighted_mask_loss(self, pred_masks, gt_masks):
         '''
         mask loss that accounts for weight-imbalance between 0 and 1 pixels
@@ -655,7 +708,6 @@ class Module(Base):
         outside = (bce * flipped_mask).sum() / (flipped_mask).sum()
         return inside + outside
 
-
     def flip_tensor(self, tensor, on_zero=1, on_non_zero=0):
         '''
         flip 0 and 1 values in tensor
@@ -664,7 +716,6 @@ class Module(Base):
         res[tensor == 0] = on_zero
         res[tensor != 0] = on_non_zero
         return res
-
 
     def compute_metric(self, preds, data):
         '''

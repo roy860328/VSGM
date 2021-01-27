@@ -77,13 +77,13 @@ CUDA_VISIBLE_DEVICES=0 python models/eval_moca/eval_semantic.py models/config/wi
 
 ## MOCA + Priori
 ```
-CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/priori_semantic_graph.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_importent_nodes --dout exp/priori --splits data/splits/oct21.json --batch 12 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --demb 100 --dhid 256 --gpu --not_save_config
+CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/priori_semantic_graph.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_importent_nodes --dout exp/priori_moca --splits data/splits/oct21.json --batch 5 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --gpu --not_save_config
 
 ```
 
 ## MOCA + Priori + Graph attention
 ```
-CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/gan_semantic_graph.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_importent_nodes --dout exp/graph_attention --splits data/splits/oct21.json --batch 8 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --demb 100 --dhid 256 --not_save_config --gpu
+CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/gan_semantic_graph.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_importent_nodes --dout exp/graph_attention --splits data/splits/oct21.json --batch 8 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --not_save_config --gpu
 ```
 
 ---
@@ -119,6 +119,11 @@ CUDA_VISIBLE_DEVICES=1 python models/train/train_semantic.py models/config/witho
 CUDA_VISIBLE_DEVICES=0 python models/eval_moca/eval_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/decompose_semantic_graph.yaml --model_path exp/fast_epoch_adj_relation_decomposed_priori_24-01-2021_05-45-58/best_seen.pth --model seq2seq_im_decomposed --data data/full_2.1.0/ --eval_split train --gpu
 ```
 'action_low', 'action_navi_low', 'action_operation_low', 'action_navi_or_operation' need pad value = 0
+
+## Decompose2 + fast train
+```
+CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/fast_epoch_base.yaml --semantic_config_file models/config/decompose_semantic_graph2.yaml --data data/full_2.1.0/ --model seq2seq_im_decomposed --dout exp/fast_decomposed2 --splits data/splits/oct21.json --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --not_save_config --gpu --action_navi_loss_wt 0.8 --action_oper_loss_wt 1 --action_navi_or_oper_loss_wt 1 --mask_loss_wt 1 --mask_label_loss_wt 1
+```
 
 ---
 ---

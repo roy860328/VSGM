@@ -472,15 +472,25 @@ class Module(Base):
 
         # action loss
         pad_valid = (l_alow != self.pad)
+        p_alow = p_alow[pad_valid]
+        l_alow = l_alow[pad_valid]
         alow_loss = F.cross_entropy(p_alow, l_alow, reduction='none')
-        alow_loss *= pad_valid.float()
         alow_loss = alow_loss.mean()
         losses['action_low'] = alow_loss * self.args.action_loss_wt
+        self.accuracy_metric(name="action_low", label=l_alow, predict=p_alow)
 
         # mask loss
-        valid_idxs = valid.view(-1).nonzero().view(-1)
-        flat_p_alow_mask = p_alow_mask.view(p_alow_mask.shape[0] * p_alow_mask.shape[1], p_alow_mask.shape[2])[valid_idxs]
-        losses['action_low_mask'] = self.ce_loss(flat_p_alow_mask, feat['action_low_mask_label']) * self.args.mask_loss_wt
+        # valid_idxs = valid.view(-1).nonzero().view(-1)
+        # flat_p_alow_mask = p_alow_mask.view(p_alow_mask.shape[0] * p_alow_mask.shape[1], p_alow_mask.shape[2])[valid_idxs]
+        # losses['action_low_mask'] = self.ce_loss(flat_p_alow_mask, feat['action_low_mask_label']) * self.args.mask_loss_wt
+        p_alow_mask = out['out_action_low_mask'].view(-1, len(classes))
+        l_alow_mask_label = feat['action_low_mask_label'].view(-1)
+        valid = feat['action_low_valid_interact'].view(-1)
+        # mask label loss
+        pad_valid = (valid != self.pad)
+        p_alow_mask = p_alow_mask[pad_valid]
+        losses['action_low_mask_label'] = self.ce_loss(p_alow_mask, l_alow_mask_label) * self.args.mask_loss_wt
+        self.accuracy_metric(name="action_low_mask", label=l_alow_mask_label, predict=p_alow_mask)
 
         # subgoal completion loss
         if self.args.subgoal_aux_loss_wt > 0:

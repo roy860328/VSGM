@@ -76,10 +76,30 @@ class Eval(object):
         if self.args.fast_epoch:
             files = files[:16]
 
+        '''
+        new code
+        '''
+        TASK_TYPES = {1: "pick_and_place_simple",
+                      2: "look_at_obj_in_light",
+                      3: "pick_clean_then_place_in_recep",
+                      4: "pick_heat_then_place_in_recep",
+                      5: "pick_cool_then_place_in_recep",
+                      6: "pick_two_obj_and_place"}
+        task_types = []
+        for tt_id in self.args.config_file['env']['task_types']:
+            if tt_id in TASK_TYPES:
+                task_types.append(TASK_TYPES[tt_id])
+
         if self.args.shuffle:
             random.shuffle(files)
         for traj in files:
-            task_queue.put(traj)
+            '''
+            new code
+            '''
+            for task_type in task_types:
+                if task_type in traj['task']:
+                    task_queue.put(traj)
+                    break
         return task_queue
 
     def spawn_threads(self):
@@ -184,6 +204,10 @@ class Eval(object):
                     'action_navi_low': ".",
                     'action_operation_low': ".",
                     'action_navi_or_operation': [],
+                    # goal
+                    'subgoal_t': ".",
+                    'progress_t': ".",
+                    'global_graph_dict_ANALYZE_GRAPH': {},
                     'current_state_dict_ANALYZE_GRAPH': {},
                     'history_changed_dict_ANALYZE_GRAPH': {},
                     'priori_dict_ANALYZE_GRAPH': {},
