@@ -13,6 +13,10 @@ import torch.nn.functional as F
 from torchvision.utils import save_image
 from torchvision.transforms.functional import to_tensor
 from torchvision.models.detection import maskrcnn_resnet50_fpn
+# debug
+from icecream import ic
+from models.utils.eval_debug import EvalDebug
+eval_debug = EvalDebug()
 
 classes = ['0'] + constants.OBJECTS + ['AppleSliced', 'ShowerCurtain', 'TomatoSliced', 'LettuceSliced', 'Lamp', 'ShowerHead', 'EggCracked', 'BreadSliced', 'PotatoSliced', 'Faucet']
 
@@ -58,7 +62,7 @@ class EvalSubgoals(Eval):
                     print("No. of trajectories left: %d" % (task_queue.qsize()))
                     if model.semantic_graph_implement is not None \
                         and model.semantic_graph_implement.use_exploration_frame_feats:
-                        meta_datas = cls.explore_scene(cls, env, traj, resnet)
+                        meta_datas = cls.explore_scene(cls, env, traj, resnet, eval_debug, traj['turk_annotations']['anns'][r_idx]['task_desc'])
                         model.semantic_graph_implement.update_exploration_data_to_global_graph(
                             meta_datas["exploration_sgg_meta_data"],
                             0
@@ -84,10 +88,14 @@ class EvalSubgoals(Eval):
 
         # expert demonstration to reach eval_idx-1
         expert_init_actions = [a['discrete_action'] for a in traj_data['plan']['low_actions'] if a['high_idx'] < eval_idx]
+        # expert_init_actions = [a['discrete_action'] for a in traj_data['plan']['low_actions']]
 
         # subgoal info
         subgoal_action = traj_data['plan']['high_pddl'][eval_idx]['discrete_action']['action']
         subgoal_instr = traj_data['turk_annotations']['anns'][r_idx]['high_descs'][eval_idx]
+        goal_instr = traj_data['turk_annotations']['anns'][r_idx]['task_desc']
+        step_instr = traj_data['turk_annotations']['anns'][r_idx]['high_descs']
+        current_high_descs = 0
 
         # print subgoal info
         print("Evaluating: %s\nSubgoal %s (%d)\nInstr: %s" % (traj_data['root'], subgoal_action, eval_idx, subgoal_instr))
@@ -102,6 +110,7 @@ class EvalSubgoals(Eval):
         nav_actions = ['MoveAhead_25', 'RotateLeft_90', 'RotateRight_90', 'LookDown_15', 'LookUp_15']
         
         prev_class = 0
+        pred_class = 0
         prev_center = torch.zeros(2)
 
         # extract language features
@@ -111,6 +120,8 @@ class EvalSubgoals(Eval):
         prev_action = None
 
         done, subgoal_success = False, False
+        subgoal_success_and_exceed_3 = 0
+        err = ""
         fails = 0
         t = 0
         reward = 0
@@ -131,7 +142,10 @@ class EvalSubgoals(Eval):
             if t < len(expert_init_actions):
                 # get expert action
                 action = expert_init_actions[t]
-                subgoal_completed = traj_data['plan']['low_actions'][t+1]['high_idx'] != traj_data['plan']['low_actions'][t]['high_idx']
+                if t+1 < len(traj_data['plan']['low_actions']):
+                    subgoal_completed = traj_data['plan']['low_actions'][t+1]['high_idx'] != traj_data['plan']['low_actions'][t]['high_idx']
+                else:
+                    break
                 compressed_mask = action['args']['mask'] if 'mask' in action['args'] else None
                 mask = env.decompress_mask(compressed_mask) if compressed_mask is not None else None
 
@@ -149,6 +163,31 @@ class EvalSubgoals(Eval):
                 # update transition reward
                 _, _ = env.get_transition_reward()
 
+                '''
+                eval_debug.add_data
+                '''
+                dict_action = {
+                    'action_low': action['action'],
+                    'action_navi_low': ".",
+                    'action_operation_low': ".",
+                    'action_navi_or_operation': [],
+                    # goal
+                    'subgoal_t': ".",
+                    'progress_t': ".",
+                    'global_graph_dict_ANALYZE_GRAPH': {},
+                    'current_state_dict_ANALYZE_GRAPH': {},
+                    'history_changed_dict_ANALYZE_GRAPH': {},
+                    'priori_dict_ANALYZE_GRAPH': {},
+                    "mask": mask,
+                    "pred_class": 0,
+                    "object": "0",
+                }
+
+                if len(traj_data['plan']['low_actions']) > t:
+                    current_ground_action = traj_data['plan']['low_actions'][t]
+                    current_high_descs = current_ground_action['high_idx'] if current_ground_action['high_idx'] > current_high_descs else current_high_descs
+                eval_debug.add_data(t, curr_image, curr_depth_image, dict_action, step_instr[current_high_descs], "expert_init_actions")
+
             # subgoal evaluation
             else:
                 # forward model
@@ -160,18 +199,18 @@ class EvalSubgoals(Eval):
                 action = m_pred['action_low']
                 if prev_image == curr_image and m_prev_action == action and m_prev_action in nav_actions and action in nav_actions and action == 'MoveAhead_25':
                     dist_action = m_out['out_action_low'][0][0].detach().cpu()
-                    idx_rotateR = model.action_low_word_to_index['RotateRight_90']
-                    idx_rotateL = model.action_low_word_to_index['RotateLeft_90']
+                    try:
+                        idx_rotateR = model.vocab['action_low'].word2index('RotateRight_90')
+                        idx_rotateL = model.vocab['action_low'].word2index('RotateLeft_90')
+                    except Exception as e:
+                        idx_rotateR = model.action_low_word_to_index['RotateRight_90']
+                        idx_rotateL = model.action_low_word_to_index['RotateLeft_90']
                     action = 'RotateLeft_90' if dist_action[idx_rotateL] > dist_action[idx_rotateR] else 'RotateRight_90'
-
-                if action == cls.STOP_TOKEN:
-                    print("\tpredicted STOP")
-                    break
 
                 # mask generation
                 mask = None
                 if model.has_interaction(action):
-                    class_dist = m_pred['action_low_mask'][0]
+                    class_dist = m_pred['action_low_mask_label'][0]
                     pred_class = np.argmax(class_dist)
 
                     with torch.no_grad():
@@ -182,9 +221,9 @@ class EvalSubgoals(Eval):
                     if sum(out['labels'] == pred_class) == 0:
                         mask = np.zeros((300,300))
                     else:
-                        masks = out['masks'][out['labels'] == np.argmax(class_dist)].detach().cpu()
-                        scores = out['scores'][out['labels'] == np.argmax(class_dist)].detach().cpu()
-                    
+                        masks = out['masks'][out['labels'] == pred_class].detach().cpu()
+                        scores = out['scores'][out['labels'] == pred_class].detach().cpu()
+
                         if prev_class != pred_class:
                             scores, indices = scores.sort(descending=True)
                             masks = masks[indices]
@@ -199,10 +238,49 @@ class EvalSubgoals(Eval):
 
                         mask = np.squeeze(masks[0].numpy(), axis=0)
 
+                '''
+                eval_debug.add_data
+                '''
+                try:
+                    dict_action = {
+                        # action
+                        'action_low': m_pred["action_low"],
+                        'action_navi_low': m_pred["action_navi_low"],
+                        'action_operation_low': m_pred["action_operation_low"],
+                        'action_navi_or_operation': m_pred["action_navi_or_operation"],
+                        # goal
+                        'subgoal_t': m_out["out_subgoal_t"],
+                        'progress_t': m_out["out_progress_t"],
+                        # ANALYZE_GRAPH
+                        'global_graph_dict_ANALYZE_GRAPH': m_out["global_graph_dict_ANALYZE_GRAPH"],
+                        'current_state_dict_ANALYZE_GRAPH': m_out["current_state_dict_ANALYZE_GRAPH"],
+                        'history_changed_dict_ANALYZE_GRAPH': m_out["history_changed_dict_ANALYZE_GRAPH"],
+                        'priori_dict_ANALYZE_GRAPH': m_out["priori_dict_ANALYZE_GRAPH"],
+                        # mask
+                        "mask": mask,
+                        "pred_class": pred_class,
+                        "object": classes[pred_class]
+                    }
+                except Exception as e:
+                    ic(pred_class)
+                    ic(len(classes))
+
+                eval_debug.add_data(t, curr_image, curr_depth_image, dict_action, subgoal_instr, err)
+
+                if action == cls.STOP_TOKEN:
+                    print("\tpredicted STOP")
+                    break
                 # debug
                 if args.debug:
                     print("Pred: ", action)
 
+                # update subgoals
+                curr_subgoal_idx = env.get_subgoal_idx()
+                if curr_subgoal_idx == eval_idx and subgoal_success == False:
+                    subgoal_success = True
+                    subgoal_success_and_exceed_3 = t + 3
+                if subgoal_success and t > subgoal_success_and_exceed_3:
+                    break
                 # update prev action
                 prev_action = str(action)
 
@@ -219,11 +297,6 @@ class EvalSubgoals(Eval):
                 t_reward, t_done = env.get_transition_reward()
                 reward += t_reward
 
-                # update subgoals
-                curr_subgoal_idx = env.get_subgoal_idx()
-                if curr_subgoal_idx == eval_idx:
-                    subgoal_success = True
-                    break
 
                 # terminal tokens predicted
                 if action in cls.TERMINAL_TOKENS:
@@ -235,6 +308,8 @@ class EvalSubgoals(Eval):
 
             prev_image = curr_image
             m_prev_action = action
+
+        eval_debug.record(model.args.dout, traj_data, goal_instr, step_instr, err, subgoal_success, eval_idx="_" + "_".join([str(eval_idx), str(len(expert_init_actions))]))
 
         # metrics
         pl = float(t - len(expert_init_actions)) + 1 # +1 for last action

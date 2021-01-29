@@ -26,10 +26,11 @@ class EvalDebug():
         self.images = []
         self.depths = []
         self.list_actions = []
+        self.lang_instr = []
         self.fail_reason_list = []
         self.fail_reason = ""
 
-    def add_data(self, step, image, depth, dict_action, fail_reason):
+    def add_data(self, step, image, depth, dict_action, lang_instr, fail_reason):
         if fail_reason != "":
             # string-
             fail_reason = str(fail_reason)
@@ -44,6 +45,7 @@ class EvalDebug():
         self.images.append(image)
         self.depths.append(depth)
         self.list_actions.append(dict_action)
+        self.lang_instr.append(lang_instr)
         self.fail_reason_list.append(fail_reason)
 
 
@@ -54,13 +56,13 @@ class EvalDebug():
             f.write("\nstep_instr: ".join(step_instr) + "\n")
             f.write(self.fail_reason)
 
-    def record(self, save_dir, traj_data, goal_instr, step_instr, fail_reason, success, fps=2):
+    def record(self, save_dir, traj_data, goal_instr, step_instr, fail_reason, success, fps=2, eval_idx=""):
         # path
         if success:
             file_name = "S_"
         else:
             file_name = "F_"
-        file_name += str(traj_data['repeat_idx'])
+        file_name += str(traj_data['repeat_idx']) + eval_idx
         fold_name = traj_data['task_type'] + '_' + traj_data['task_id']
 
         save_dir = os.path.join(save_dir, SAVE_FOLDER_NAME, fold_name)
@@ -76,7 +78,8 @@ class EvalDebug():
         save_video_dir = os.path.join(save_dir, file_name)
         writer = imageio.get_writer(save_video_dir, fps=fps)
         # data
-        for image, depth, dict_action, fail_reason in zip(self.images, self.depths, self.list_actions, self.fail_reason_list):
+        for image, depth, dict_action, lang_instr, fail_reason in\
+            zip(self.images, self.depths, self.list_actions, self.lang_instr, self.fail_reason_list):
             '''
             Process image
             '''
@@ -136,8 +139,10 @@ class EvalDebug():
             self.writeText(
                 cat_image, fail_reason, middleLeftCornerOfText, r_fontColor)
             # goal_instr
+            # self.writeText(
+            #     cat_image, goal_instr, bottomLeftCornerOfText, r_fontColor)
             self.writeText(
-                cat_image, goal_instr, bottomLeftCornerOfText, r_fontColor)
+                cat_image, lang_instr, (bottomLeftCornerOfText[0], bottomLeftCornerOfText[1]+20), r_fontColor)
             # dict_mask
             self.writeText(
                 cat_image, str_mask, topmiddleOfText, r_fontColor)

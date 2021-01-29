@@ -14,17 +14,6 @@ from PIL import Image
 import gen.constants as constants
 classes = [0] + constants.OBJECTS + ['AppleSliced', 'ShowerCurtain', 'TomatoSliced', 'LettuceSliced', 'Lamp', 'ShowerHead', 'EggCracked', 'BreadSliced', 'PotatoSliced', 'Faucet']
 from nn.resnet import Resnet
-'''
-semantic
-'''
-import sys
-import importlib
-sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT']))
-from agents.utils import tensorboard
-from agents.agent import oracle_sgg_dagger_agent
-import json
-import glob
-
 
 class Module(Base):
 
@@ -314,7 +303,7 @@ class Module(Base):
 
         # decode and save embedding and hidden states
         out_action_low, out_action_low_mask, state_t_goal, state_t_instr, \
-        lang_attn_t_goal, lang_attn_t_instr, *_ = \
+        lang_attn_t_goal, lang_attn_t_instr, subgoal_t, progress_t = \
             self.dec.step(
                 self.r_state['enc_lang_goal'],
                 self.r_state['enc_lang_instr'],
@@ -332,7 +321,12 @@ class Module(Base):
         # output formatting
         feat['out_action_low'] = out_action_low.unsqueeze(0)
         feat['out_action_low_mask'] = out_action_low_mask.unsqueeze(0)
-
+        feat['out_subgoal_t'] = np.round(subgoal_t.view(-1).item(), decimals=2)
+        feat['out_progress_t'] = np.round(progress_t.view(-1).item(), decimals=2)
+        feat['global_graph_dict_ANALYZE_GRAPH'] = {}
+        feat['current_state_dict_ANALYZE_GRAPH'] = {}
+        feat['history_changed_dict_ANALYZE_GRAPH'] = {}
+        feat['priori_dict_ANALYZE_GRAPH'] = {}
         return feat
 
 
@@ -363,6 +357,10 @@ class Module(Base):
             pred[self.get_task_and_ann_id(ex)] = {
                 'action_low': ' '.join(words),
                 'action_low_mask': p_mask,
+                'action_low_mask_label': p_mask,
+                'action_navi_low': ".",
+                'action_operation_low': ".",
+                'action_navi_or_operation': [],
             }
 
         return pred

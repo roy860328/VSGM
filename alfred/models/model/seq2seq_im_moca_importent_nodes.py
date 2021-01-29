@@ -19,9 +19,11 @@ class Module(seq2seq_im_moca_semantic):
         super().__init__(args, vocab, importent_nodes=True)
         IMPORTENT_NDOES_FEATURE = self.config['semantic_cfg'].SCENE_GRAPH.EMBED_FEATURE_SIZE
         args_scene_graph = self.config['semantic_cfg'].SCENE_GRAPH
-        if args_scene_graph.MODEL == "hete_gan":
+        if self.config['semantic_cfg'].SCENE_GRAPH.MODEL == "hete_gan":
             decoder = vnn.GANDec
-        elif "PRIORI" in args_scene_graph and args_scene_graph.PRIORI:
+        elif "DECODER" in self.config['semantic_cfg'].GENERAL and self.config['semantic_cfg'].GENERAL.DECODER == "softmax_gcn_Dec":
+            decoder = vnn.softmax_gcn_Dec
+        elif "PRIORI" in self.config['semantic_cfg'].SCENE_GRAPH and self.config['semantic_cfg'].SCENE_GRAPH.PRIORI:
             decoder = vnn.PrioriDec
         else:
             decoder = vnn.ImportentNodesDynamicNode
@@ -76,33 +78,9 @@ class Module(seq2seq_im_moca_semantic):
             t_store_state = b_store_state["sgg_meta_data"]
             # cls.resnet.featurize([curr_image], batch=1).unsqueeze(0)
             t_store_state["rgb_image"] = feat['frames'][env_index, 0]
-            self.semantic_graph_implement.store_data_to_graph(
-                store_state=t_store_state,
-                env_index=env_index
-            )
-            global_graph_importent_features, _ = \
-                self.semantic_graph_implement.get_graph_feature(
-                    chose_type="GLOBAL_GRAPH",
-                    env_index=env_index,
-                    )
-            current_state_graph_importent_features, _ = \
-                self.semantic_graph_implement.chose_importent_node_feature(
-                    chose_type="CURRENT_STATE_GRAPH",
-                    env_index=env_index,
-                    hidden_state=self.r_state['state_t_instr'][0][env_index:env_index+1],
-                    )
-            history_changed_nodes_graph_importent_features, _ = \
-                self.semantic_graph_implement.chose_importent_node_feature(
-                    chose_type="HISTORY_CHANGED_NODES_GRAPH",
-                    env_index=env_index,
-                    hidden_state=self.r_state['state_t_goal'][0][env_index:env_index+1],
-                    )
-            priori_importent_features, _ = \
-                self.semantic_graph_implement.chose_importent_node_feature(
-                    chose_type="PRIORI_GRAPH",
-                    env_index=env_index,
-                    hidden_state=self.r_state['state_t_instr'][0][env_index:env_index+1],
-                    )
+            global_graph_importent_features, current_state_graph_importent_features, history_changed_nodes_graph_importent_features, priori_importent_features,\
+                global_graph_dict_objectIds_to_score, current_state_dict_objectIds_to_score, history_changed_dict_objectIds_to_score, priori_dict_dict_objectIds_to_score =\
+                self.dec.store_and_get_graph_feature(t_store_state, env_index, self.r_state['state_t_goal'], self.r_state['state_t_instr'])
             feat_global_graph.append(global_graph_importent_features)
             feat_current_state_graph.append(current_state_graph_importent_features)
             feat_history_changed_nodes_graph.append(history_changed_nodes_graph_importent_features)
@@ -114,7 +92,7 @@ class Module(seq2seq_im_moca_semantic):
 
         # decode and save embedding and hidden states
         out_action_low, out_action_low_mask, state_t_goal, state_t_instr, \
-        lang_attn_t_goal, lang_attn_t_instr, *_ = \
+        lang_attn_t_goal, lang_attn_t_instr, subgoal_t, progress_t = \
             self.dec.step(
                 self.r_state['enc_lang_goal'],
                 self.r_state['enc_lang_instr'],
@@ -124,7 +102,8 @@ class Module(seq2seq_im_moca_semantic):
                 self.r_state['state_t_instr'],
                 feat_global_graph,
                 feat_current_state_graph,
-                feat_history_changed_nodes_graph
+                feat_history_changed_nodes_graph,
+                feat_priori_graph
             )
 
         # save states
@@ -132,8 +111,23 @@ class Module(seq2seq_im_moca_semantic):
         self.r_state['state_t_instr'] = state_t_instr
         self.r_state['e_t'] = self.dec.emb(out_action_low.max(1)[1])
 
+        assert len(all_meta_datas) == 1, "if not the analyze_graph object ind is error"
+        global_graph_dict_ANALYZE_GRAPH = self.semantic_graph_implement.scene_graphs[0].analyze_graph(
+            global_graph_dict_objectIds_to_score, graph_type="GLOBAL_GRAPH")
+        current_state_dict_ANALYZE_GRAPH = self.semantic_graph_implement.scene_graphs[0].analyze_graph(
+            current_state_dict_objectIds_to_score, graph_type="CURRENT_STATE_GRAPH")
+        history_changed_dict_ANALYZE_GRAPH = self.semantic_graph_implement.scene_graphs[0].analyze_graph(
+            history_changed_dict_objectIds_to_score, graph_type="HISTORY_CHANGED_NODES_GRAPH")
+        priori_dict_ANALYZE_GRAPH = self.semantic_graph_implement.scene_graphs[0].analyze_graph(
+            priori_dict_dict_objectIds_to_score, graph_type="PRIORI_GRAPH")
+
         # output formatting
         feat['out_action_low'] = out_action_low.unsqueeze(0)
         feat['out_action_low_mask'] = out_action_low_mask.unsqueeze(0)
-
+        feat['out_subgoal_t'] = np.round(subgoal_t.view(-1).item(), decimals=2)
+        feat['out_progress_t'] = np.round(progress_t.view(-1).item(), decimals=2)
+        feat['global_graph_dict_ANALYZE_GRAPH'] = global_graph_dict_ANALYZE_GRAPH
+        feat['current_state_dict_ANALYZE_GRAPH'] = current_state_dict_ANALYZE_GRAPH
+        feat['history_changed_dict_ANALYZE_GRAPH'] = history_changed_dict_ANALYZE_GRAPH
+        feat['priori_dict_ANALYZE_GRAPH'] = priori_dict_ANALYZE_GRAPH
         return feat

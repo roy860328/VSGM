@@ -170,7 +170,7 @@ class Eval(object):
             openable_points = json.load(f)
         return openable_points
 
-    def explore_scene(cls, env, traj_data, resnet, eval_debug):
+    def explore_scene(cls, env, traj_data, resnet, eval_debug, task_goal):
         '''
         Use pre-computed openable points from ALFRED to store receptacle locations
         '''
@@ -215,7 +215,7 @@ class Eval(object):
                     "pred_class": 0,
                     "object": "0",
                 }
-                eval_debug.add_data(0, np_image, np_image[:, :, 0], dict_action, "")
+                eval_debug.add_data(0, np_image, np_image[:, :, 0], dict_action, task_goal, "")
         return meta_datas
 
     def get_meta_datas(cls, env, resnet):

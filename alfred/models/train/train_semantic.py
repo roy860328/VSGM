@@ -112,7 +112,7 @@ if __name__ == '__main__':
     parser.add_argument('--action_navi_loss_wt', help='weight of action loss', default=0.5, type=float)
     parser.add_argument('--action_oper_loss_wt', help='weight of action loss', default=0.5, type=float)
     parser.add_argument('--action_navi_or_oper_loss_wt', help='weight of action loss', default=0.5, type=float)
-    parser.add_argument('--mask_loss_wt', help='weight of mask loss', default=.3, type=float)
+    parser.add_argument('--mask_loss_wt', help='weight of mask loss', default=1., type=float)
     parser.add_argument('--mask_label_loss_wt', help='weight of mask loss', default=1., type=float)
 
     # dropouts

@@ -166,6 +166,10 @@ class Module(nn.Module):
                 sum_loss.backward()
                 optimizer.step()
 
+                sum_loss = torch.tensor([0.])
+                for k, v in loss.items():
+                    if "contrastive" not in k:
+                        sum_loss += v
                 self.summary_writer.add_scalar('train/loss', sum_loss, train_iter)
                 sum_loss = sum_loss.detach().cpu()
                 total_train_loss.append(float(sum_loss))
@@ -282,12 +286,16 @@ class Module(nn.Module):
                 out = self.forward(feat)
                 preds = self.extract_preds(out, batch, feat)
                 p_dev.update(preds)
-                loss = self.compute_loss(out, batch, feat)
+                loss = self.compute_loss(out, batch, feat, 1)
                 for k, v in loss.items():
                     ln = 'loss_' + k
                     m_dev[ln].append(v.item())
                     self.summary_writer.add_scalar("%s/%s" % (name, ln), v.item(), dev_iter)
                 sum_loss = sum(loss.values())
+                sum_loss = torch.tensor([0.])
+                for k, v in loss.items():
+                    if "contrastive" not in k:
+                        sum_loss += v
                 self.summary_writer.add_scalar("%s/loss" % (name), sum_loss, dev_iter)
                 total_loss.append(float(sum_loss.detach().cpu()))
                 dev_iter += len(batch)

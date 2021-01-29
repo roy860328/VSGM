@@ -47,7 +47,7 @@ class EvalTask(Eval):
                 print("No. of trajectories left: %d" % (task_queue.qsize()))
                 if model.semantic_graph_implement is not None \
                     and model.semantic_graph_implement.use_exploration_frame_feats:
-                    meta_datas = cls.explore_scene(cls, env, traj, resnet, eval_debug)
+                    meta_datas = cls.explore_scene(cls, env, traj, resnet, eval_debug, traj['turk_annotations']['anns'][r_idx]['task_desc'])
                     model.semantic_graph_implement.update_exploration_data_to_global_graph(
                         meta_datas["exploration_sgg_meta_data"],
                         0
@@ -78,6 +78,7 @@ class EvalTask(Eval):
         # goal instr
         goal_instr = traj_data['turk_annotations']['anns'][r_idx]['task_desc']
         step_instr = traj_data['turk_annotations']['anns'][r_idx]['high_descs']
+        current_high_descs = 0
 
         maskrcnn = maskrcnn_resnet50_fpn(num_classes=119)
         maskrcnn.eval()
@@ -118,8 +119,12 @@ class EvalTask(Eval):
             action = m_pred['action_low']
             if prev_image == curr_image and prev_action == action and prev_action in nav_actions and action in nav_actions and action == 'MoveAhead_25':
                 dist_action = m_out['out_action_low'][0][0].detach().cpu()
-                idx_rotateR = model.action_low_word_to_index['RotateRight_90']
-                idx_rotateL = model.action_low_word_to_index['RotateLeft_90']
+                try:
+                    idx_rotateR = model.vocab['action_low'].word2index('RotateRight_90')
+                    idx_rotateL = model.vocab['action_low'].word2index('RotateLeft_90')
+                except Exception as e:
+                    idx_rotateR = model.action_low_word_to_index['RotateRight_90']
+                    idx_rotateL = model.action_low_word_to_index['RotateLeft_90']
                 action = 'RotateLeft_90' if dist_action[idx_rotateL] > dist_action[idx_rotateR] else 'RotateRight_90'
 
             # mask prediction
@@ -181,7 +186,11 @@ class EvalTask(Eval):
             except Exception as e:
                 ic(pred_class)
                 ic(len(classes))
-            eval_debug.add_data(t, curr_image, curr_depth_image, dict_action, err)
+
+            if len(traj_data['plan']['low_actions']) > t:
+                current_ground_action = traj_data['plan']['low_actions'][t]
+                current_high_descs = current_ground_action['high_idx'] if current_ground_action['high_idx'] > current_high_descs else current_high_descs
+            eval_debug.add_data(t, curr_image, curr_depth_image, dict_action, step_instr[current_high_descs], err)
 
             if action == cls.STOP_TOKEN:
                 print("\tpredicted STOP")

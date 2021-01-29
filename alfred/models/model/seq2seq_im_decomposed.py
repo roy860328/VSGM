@@ -599,32 +599,32 @@ class Module(Base):
             ### lang goal instr
             # torch.Size([2, 48, 512]) -> fn_cos: torch.Size([2, 48]) -> softmax: torch.Size([2, 48]) -> sum: torch.Size([])
             loss_lang_goal_instr = self.fn_logsoftmax(
-                self.fn_cos(mlp_goal, mlp_instr)).sum()
+                self.fn_cos(mlp_goal, mlp_instr)).mean()
             ### dec_goal dec_instr
             loss_dec_goal_instr = self.fn_logsoftmax(
-                self.fn_cos(mlp_dec_goal, mlp_dec_instr)).sum()
+                self.fn_cos(mlp_dec_goal, mlp_dec_instr)).mean()
             ### graph
             loss_dec_instr_global_graph = self.fn_logsoftmax(
-                self.fn_cos(mlp_dec_instr, mlp_global_graph)).sum()
+                self.fn_cos(mlp_dec_instr, mlp_global_graph)).mean()
             loss_dec_instr_current_graph = self.fn_logsoftmax(
-                self.fn_cos(mlp_dec_instr, mlp_current_graph)).sum()
+                self.fn_cos(mlp_dec_instr, mlp_current_graph)).mean()
             loss_dec_instr_history_graph = self.fn_logsoftmax(
-                self.fn_cos(mlp_dec_instr, mlp_history_graph)).sum()
+                self.fn_cos(mlp_dec_instr, mlp_history_graph)).mean()
             # loss_dec_instr_history_graph = self.fn_logsoftmax(
             #     self.fn_cos(mlp_dec_instr[:, -1:, :], mlp_history_graph[:, -1:, :])).sum()
             '''
             # loss weight
             '''
-            loss_lang_goal_instr = -0.5 * loss_lang_goal_instr
-            loss_dec_goal_instr = -0.5 * loss_dec_goal_instr
-            loss_dec_instr_graph = -0.1 * loss_dec_instr_global_graph +\
-                (-0.1 * loss_dec_instr_current_graph) +\
-                (-0.1 * loss_dec_instr_history_graph)
+            loss_lang_goal_instr = -1 * loss_lang_goal_instr
+            loss_dec_goal_instr = -1 * loss_dec_goal_instr
+            loss_dec_instr_graph = -0.5 * loss_dec_instr_global_graph +\
+                (-0.5 * loss_dec_instr_current_graph) +\
+                (-0.5 * loss_dec_instr_history_graph)
 
-            losses['contrastive_loss_lang_goal_instr'] = loss_lang_goal_instr * self.args.contrastive_loss_wt
-            losses['contrastive_loss_dec_goal_instr'] = loss_dec_goal_instr * self.args.contrastive_loss_wt
-            losses['contrastive_loss_dec_instr_graph'] = loss_dec_instr_graph * self.args.contrastive_loss_wt
-            ic(losses)
+            losses['contrastive_loss_lang_goal_instr'] = (1/(epoch+1)) * loss_lang_goal_instr * self.args.contrastive_loss_wt
+            losses['contrastive_loss_dec_goal_instr'] = (1/(epoch+1)) * loss_dec_goal_instr * self.args.contrastive_loss_wt
+            losses['contrastive_loss_dec_instr_graph'] = (1/(epoch+1)) * loss_dec_instr_graph * self.args.contrastive_loss_wt
+            # ic(losses)
             if epoch == 0:
                 return losses
 

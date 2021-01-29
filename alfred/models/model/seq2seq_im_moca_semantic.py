@@ -443,6 +443,10 @@ class Module(Base):
             pred[self.get_task_and_ann_id(ex)] = {
                 'action_low': ' '.join(words),
                 'action_low_mask': p_mask,
+                'action_low_mask_label': p_mask,
+                'action_navi_low': ".",
+                'action_operation_low': ".",
+                'action_navi_or_operation': [],
             }
 
         return pred

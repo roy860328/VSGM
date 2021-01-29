@@ -408,7 +408,11 @@ class Module(Base):
             feat_semantic_graph.append(graph_embed_features[0])
         feat_semantic_graph = torch.cat(feat_semantic_graph, dim=0)
         # decode and save embedding and hidden states
-        out_action_low, out_action_low_mask, state_t, *_ = self.dec.step(self.r_state['enc_lang'], feat['frames'][:, 0], e_t=e_t, state_tm1=self.r_state['state_t'], gcn_embedding=None, feat_semantic_graph=feat_semantic_graph)
+        out_action_navi, out_action_oper, out_action_low_mask, out_action_navi_or_operation, out_action_low_masks_label,\
+            state_t_goal, state_t_instr, lang_attn_t_goal, lang_attn_t_instr, subgoal_t, progress_t, weighted_lang_t_goal, weighted_lang_t_instr = \
+        out_action_low, out_action_low_mask, state_t, *_ = \
+            self.dec.step(
+                self.r_state['enc_lang'], feat['frames'][:, 0], e_t=e_t, state_tm1=self.r_state['state_t'], gcn_embedding=None, feat_semantic_graph=feat_semantic_graph)
 
         # save states
         self.r_state['state_t'] = state_t

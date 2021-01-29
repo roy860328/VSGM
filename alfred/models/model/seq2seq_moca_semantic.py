@@ -35,6 +35,7 @@ class Module(nn.Module):
 
         # args and vocab
         self.args = args
+        self.config = args.config_file
         self.vocab = vocab
 
         # emb modules
@@ -56,6 +57,17 @@ class Module(nn.Module):
         training loop
         '''
 
+        TASK_TYPES = {1: "pick_and_place_simple",
+                      2: "look_at_obj_in_light",
+                      3: "pick_clean_then_place_in_recep",
+                      4: "pick_heat_then_place_in_recep",
+                      5: "pick_cool_then_place_in_recep",
+                      6: "pick_two_obj_and_place"}
+        task_types = []
+        for tt_id in self.config['env']['task_types']:
+            if tt_id in TASK_TYPES:
+                task_types.append(TASK_TYPES[tt_id])
+
         # args
         args = args or self.args
 
@@ -63,6 +75,10 @@ class Module(nn.Module):
         train = splits['train']
         valid_seen = splits['valid_seen']
         valid_unseen = splits['valid_unseen']
+
+        train = [t for t in train for task_type in task_types if task_type in t['task']]
+        valid_seen = [t for t in valid_seen for task_type in task_types if task_type in t['task']]
+        valid_unseen = [t for t in valid_unseen for task_type in task_types if task_type in t['task']]
 
         train = [t for t in train if not t['task'] in not_perfect_list]
         valid_seen = [t for t in valid_seen if not t['task'] in not_perfect_list]

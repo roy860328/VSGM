@@ -352,7 +352,8 @@ class DecomposeDec(nn.Module):
         action_navi_or_operation_t = torch.sigmoid(action_navi_or_operation_t)
 
         return action_navi_t, action_oper_t, mask_t, action_navi_or_operation_t, masks_label_t,\
-            state_t_goal, state_t_instr, lang_attn_t_goal, lang_attn_t_instr, subgoal_t, progress_t
+            state_t_goal, state_t_instr, lang_attn_t_goal, lang_attn_t_instr, subgoal_t, progress_t,\
+            weighted_lang_t_goal, weighted_lang_t_instr
 
     def forward(self, enc_goal, enc_instr, frames, all_meta_datas, gold=None, max_decode=150, state_0_goal=None, state_0_instr=None):
         max_t = gold.size(1) if self.training else min(max_decode, frames.shape[1])
@@ -408,7 +409,8 @@ class DecomposeDec(nn.Module):
             feat_priori_graph = torch.cat(feat_priori_graph, dim=0)
 
             action_navi_t, action_oper_t, mask_t, action_navi_or_operation_t, masks_label_t,\
-                state_t_goal, state_t_instr, attn_score_t_goal, attn_score_t_instr, subgoal_t, progress_t = \
+                state_t_goal, state_t_instr, attn_score_t_goal, attn_score_t_instr, subgoal_t, progress_t,\
+                weighted_lang_t_goal, weighted_lang_t_instr = \
                 self.step(
                     enc_goal,
                     enc_instr,
@@ -635,7 +637,8 @@ class DecomposeDec2(nn.Module):
         action_navi_or_operation_t = torch.sigmoid(action_navi_or_operation_t)
 
         return action_navi_t, action_oper_t, mask_t, action_navi_or_operation_t, masks_label_t,\
-            state_t_goal, state_t_instr, lang_attn_t_goal, lang_attn_t_instr, subgoal_t, progress_t
+            state_t_goal, state_t_instr, lang_attn_t_goal, lang_attn_t_instr, subgoal_t, progress_t,\
+            weighted_lang_t_goal, weighted_lang_t_instr
 
     def forward(self, enc_goal, enc_instr, frames, all_meta_datas, gold=None, max_decode=150, state_0_goal=None, state_0_instr=None):
         max_t = gold.size(1) if self.training else min(max_decode, frames.shape[1])
@@ -691,7 +694,8 @@ class DecomposeDec2(nn.Module):
             feat_priori_graph = torch.cat(feat_priori_graph, dim=0)
 
             action_navi_t, action_oper_t, mask_t, action_navi_or_operation_t, masks_label_t,\
-                state_t_goal, state_t_instr, attn_score_t_goal, attn_score_t_instr, subgoal_t, progress_t = \
+                state_t_goal, state_t_instr, attn_score_t_goal, attn_score_t_instr, subgoal_t, progress_t,\
+                weighted_lang_t_goal, weighted_lang_t_instr = \
                 self.step(
                     enc_goal,
                     enc_instr,

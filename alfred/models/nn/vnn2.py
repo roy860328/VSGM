@@ -299,9 +299,6 @@ class MOCAConvFrameMaskDecoderProgressMonitor(nn.Module):
         subgoals = []
         progresses = []
         for t in range(max_t):
-            print(enc_goal.shape)
-            print(enc_instr.shape)
-            import pdb; pdb.set_trace()
             action_t, mask_t, state_t_goal, state_t_instr, attn_score_t_goal, attn_score_t_instr, subgoal_t, progress_t = \
                 self.step(enc_goal, enc_instr, frames[:, t], e_t, state_t_goal, state_t_instr)
             masks.append(mask_t)
@@ -317,7 +314,6 @@ class MOCAConvFrameMaskDecoderProgressMonitor(nn.Module):
             else:
                 w_t = action_t.max(1)[1]
             e_t = self.emb(w_t)
-            raise
 
         results = {
             'out_action_low': torch.stack(actions, dim=1),
@@ -1072,33 +1068,8 @@ class PrioriDec(nn.Module):
                             exploration_imgs=exploration_imgs,
                         )
                     t_store_state["rgb_image"] = frames[env_index, t]
-                    self.semantic_graph_implement.store_data_to_graph(
-                        store_state=t_store_state,
-                        env_index=env_index
-                    )
-                    global_graph_importent_features, _ = \
-                        self.semantic_graph_implement.get_graph_feature(
-                            chose_type="GLOBAL_GRAPH",
-                            env_index=env_index,
-                            )
-                    current_state_graph_importent_features, _ = \
-                        self.semantic_graph_implement.chose_importent_node_feature(
-                            chose_type="CURRENT_STATE_GRAPH",
-                            env_index=env_index,
-                            hidden_state=state_t_instr[0][env_index:env_index+1],
-                            )
-                    history_changed_nodes_graph_importent_features, _ = \
-                        self.semantic_graph_implement.chose_importent_node_feature(
-                            chose_type="HISTORY_CHANGED_NODES_GRAPH",
-                            env_index=env_index,
-                            hidden_state=state_t_goal[0][env_index:env_index+1],
-                            )
-                    priori_importent_features, _ = \
-                        self.semantic_graph_implement.chose_importent_node_feature(
-                            chose_type="PRIORI_GRAPH",
-                            env_index=env_index,
-                            hidden_state=state_t_instr[0][env_index:env_index+1],
-                            )
+                    global_graph_importent_features, current_state_graph_importent_features, history_changed_nodes_graph_importent_features, priori_importent_features, *_ =\
+                        self.store_and_get_graph_feature(t_store_state, env_index, state_t_goal, state_t_instr)
                 else:
                     global_graph_importent_features = torch.zeros(
                         1, self.IMPORTENT_NDOES_FEATURE).to(frames.device)
@@ -1154,6 +1125,40 @@ class PrioriDec(nn.Module):
             'state_t_instr': state_t_instr,
         }
         return results
+
+    def store_and_get_graph_feature(self, t_store_state, env_index, state_t_goal, state_t_instr):
+        self.semantic_graph_implement.store_data_to_graph(
+            store_state=t_store_state,
+            env_index=env_index
+        )
+        global_graph_importent_features, global_graph_dict_objectIds_to_score = \
+            self.semantic_graph_implement.get_graph_feature(
+                chose_type="GLOBAL_GRAPH",
+                env_index=env_index,
+                )
+        current_state_graph_importent_features, current_state_dict_objectIds_to_score = \
+            self.semantic_graph_implement.chose_importent_node_feature(
+                chose_type="CURRENT_STATE_GRAPH",
+                env_index=env_index,
+                hidden_state=state_t_instr[0][env_index:env_index+1],
+                )
+        history_changed_nodes_graph_importent_features, history_changed_dict_objectIds_to_score = \
+            self.semantic_graph_implement.chose_importent_node_feature(
+                chose_type="HISTORY_CHANGED_NODES_GRAPH",
+                env_index=env_index,
+                hidden_state=state_t_goal[0][env_index:env_index+1],
+                )
+        priori_importent_features, priori_dict_dict_objectIds_to_score = \
+            self.semantic_graph_implement.chose_importent_node_feature(
+                chose_type="PRIORI_GRAPH",
+                env_index=env_index,
+                hidden_state=state_t_instr[0][env_index:env_index+1],
+                )
+        return global_graph_importent_features, current_state_graph_importent_features,\
+               history_changed_nodes_graph_importent_features, priori_importent_features,\
+               global_graph_dict_objectIds_to_score, current_state_dict_objectIds_to_score,\
+               history_changed_dict_objectIds_to_score, priori_dict_dict_objectIds_to_score
+
 
 class GANDec(nn.Module):
     '''
@@ -1389,3 +1394,246 @@ class GANDec(nn.Module):
             'state_t_instr': state_t_instr,
         }
         return results
+
+
+class softmax_gcn_Dec(nn.Module):
+    '''
+    action decoder with subgoal and progress monitoring
+    '''
+
+    def __init__(self, emb, dframe, dhid, semantic_graph_implement, IMPORTENT_NDOES_FEATURE,
+                 pframe=300, attn_dropout=0., hstate_dropout=0., actor_dropout=0., input_dropout=0.,
+                 teacher_forcing=False):
+        super().__init__()
+        demb = emb.weight.size(1)
+
+        self.semantic_graph_implement = semantic_graph_implement
+        # self.IMPORTENT_NDOES_FEATURE must same with semantic_graph_implement output shape
+        # torch.zeros(1, self.IMPORTENT_NDOES_FEATURE).to(frames.device)
+        self.IMPORTENT_NDOES_FEATURE = IMPORTENT_NDOES_FEATURE
+
+        self.emb = emb
+        self.pframe = pframe
+        self.dhid = dhid
+        self.cell_goal = nn.LSTMCell(dhid+dframe+demb+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE, dhid)
+        self.cell_instr = nn.LSTMCell(dhid+dframe+demb+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE, dhid)
+        print("dhid: ", dhid)
+        print("dframe: ", dframe)
+        print("demb: ", demb)
+        print("self.cell_instr: ", dhid+dframe+demb+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE)
+        self.attn = DotAttn()
+        self.input_dropout = nn.Dropout(input_dropout)
+        self.attn_dropout = nn.Dropout(attn_dropout)
+        self.hstate_dropout = nn.Dropout(hstate_dropout)
+        self.actor_dropout = nn.Dropout(actor_dropout)
+        self.go = nn.Parameter(torch.Tensor(demb))
+        self.actor = nn.Linear(dhid+dhid+dframe+demb+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE, demb)
+        print("self.actor: ", dhid+dhid+dframe+demb+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE)
+        self.mask_dec = nn.Sequential(
+            nn.Linear(dhid, dhid//2), nn.ReLU(),
+            nn.Linear(dhid//2, 119)
+        )
+        self.teacher_forcing = teacher_forcing
+        self.h_tm1_fc_goal = nn.Linear(dhid, dhid)
+        self.h_tm1_fc_instr = nn.Linear(dhid, dhid)
+
+        self.subgoal = nn.Linear(dhid+dhid+dframe+demb+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE, 1)
+        self.progress = nn.Linear(dhid+dhid+dframe+demb+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE, 1)
+
+        nn.init.uniform_(self.go, -0.1, 0.1)
+
+        self.scale_dot_attn = ScaledDotAttn(dhid, 128, dhid, 128)
+        self.dynamic_conv = DynamicConvLayer(dhid)
+
+    def step(
+            self,
+            enc_goal,
+            enc_instr,
+            frame,
+            e_t,
+            state_tm1_goal,
+            state_tm1_instr,
+            feat_global_graph,
+            feat_current_state_graph,
+            feat_history_changed_nodes_graph,
+            feat_priori_graph):
+        # previous decoder hidden state (goal, instr decoder)
+        h_tm1_goal = state_tm1_goal[0]
+        h_tm1_instr = state_tm1_instr[0]
+
+        # encode vision and lang feat (goal, instr decoder)
+        lang_feat_t_goal = enc_goal # language is encoded once at the start
+        lang_feat_t_instr = enc_instr # language is encoded once at the start
+
+        # scaled dot product attention
+        weighted_lang_t_goal, lang_attn_t_goal = self.scale_dot_attn(lang_feat_t_goal, h_tm1_goal)
+        weighted_lang_t_instr, lang_attn_t_instr = self.scale_dot_attn(lang_feat_t_instr, h_tm1_instr)
+
+        # dynamic convolution
+        vis_feat_t_goal = self.dynamic_conv(frame, weighted_lang_t_instr)
+        vis_feat_t_instr = self.dynamic_conv(frame, weighted_lang_t_instr)
+
+        # concat visual feats, weight lang, and previous action embedding (goal decoder)
+        inp_t_goal = torch.cat([vis_feat_t_goal, weighted_lang_t_goal, e_t, feat_priori_graph, feat_global_graph], dim=1)
+        inp_t_goal = self.input_dropout(inp_t_goal)
+        
+        # concat visual feats, weight lang, and previous action embedding (instr decoder)
+        inp_t_instr = torch.cat([vis_feat_t_instr, weighted_lang_t_instr, e_t, feat_global_graph, feat_current_state_graph], dim=1)
+        inp_t_instr = self.input_dropout(inp_t_instr)
+
+        # update hidden state (goal decoder)
+        state_t_goal = self.cell_goal(inp_t_goal, state_tm1_goal)
+        state_t_goal = [self.hstate_dropout(x) for x in state_t_goal]
+        h_t_goal, _ = state_t_goal[0], state_t_goal[1]
+        
+        # decode mask (goal decoder)
+        cont_t_goal = h_t_goal #torch.cat([h_t_goal, inp_t_goal], dim=1)
+        mask_t = self.mask_dec(cont_t_goal)
+        
+        # update hidden state (instr decoder)
+        state_t_instr = self.cell_instr(inp_t_instr, state_tm1_instr)
+        state_t_instr = [self.hstate_dropout(x) for x in state_t_instr]
+        h_t_instr, _ = state_t_instr[0], state_t_instr[1]
+
+        # decode action (instr decoder)
+        cont_t_instr = torch.cat([h_t_instr, inp_t_instr], dim=1)
+        action_emb_t = self.actor(self.actor_dropout(cont_t_instr))
+        action_t = action_emb_t.mm(self.emb.weight.t())
+
+        cont_t_instr_with_subgoal = torch.cat(
+            [h_t_instr, vis_feat_t_instr, weighted_lang_t_instr, e_t,
+                feat_history_changed_nodes_graph, feat_global_graph], dim=1)
+        cont_t_instr_with_progress = torch.cat(
+            [h_t_instr, vis_feat_t_instr, weighted_lang_t_instr, e_t,
+                feat_history_changed_nodes_graph, feat_global_graph], dim=1)
+        # predict subgoals completed and task progress
+        subgoal_t = torch.sigmoid(self.subgoal(cont_t_instr_with_subgoal))
+        progress_t = torch.sigmoid(self.progress(cont_t_instr_with_progress))
+
+        return action_t, mask_t, state_t_goal, state_t_instr, lang_attn_t_goal, lang_attn_t_instr,\
+                subgoal_t, progress_t
+
+    def forward(self, enc_goal, enc_instr, frames, all_meta_datas, gold=None, max_decode=150, state_0_goal=None, state_0_instr=None):
+        max_t = gold.size(1) if self.training else min(max_decode, frames.shape[1])
+        batch = enc_instr.size(0)
+        e_t = self.go.repeat(batch, 1)
+        state_t_goal = state_0_goal
+        state_t_instr = state_0_instr
+
+        actions = []
+        masks = []
+        attn_scores_goal = []
+        attn_scores_instr = []
+        subgoals = []
+        progresses = []
+        for t in range(max_t):
+            feat_global_graph = []
+            feat_current_state_graph = []
+            feat_history_changed_nodes_graph = []
+            feat_priori_graph = []
+            for env_index in range(len(all_meta_datas)):
+                b_store_state = all_meta_datas[env_index]
+                if len(b_store_state["sgg_meta_data"]) > t:
+                    t_store_state = b_store_state["sgg_meta_data"][t]
+                    if t == 0 and self.semantic_graph_implement.use_exploration_frame_feats:
+                        # import pdb;pdb.set_trace()
+                        exploration_transition_cache = b_store_state["exploration_sgg_meta_data"]
+                        exploration_imgs = b_store_state["exploration_imgs"]
+                        self.semantic_graph_implement.update_exploration_data_to_global_graph(
+                            exploration_transition_cache,
+                            env_index,
+                            exploration_imgs=exploration_imgs,
+                        )
+                    t_store_state["rgb_image"] = frames[env_index, t]
+                    # import pdb; pdb.set_trace()
+                    global_graph_importent_features, current_state_graph_importent_features, history_changed_nodes_graph_importent_features, priori_importent_features, *_ =\
+                        self.store_and_get_graph_feature(t_store_state, env_index, state_t_goal, state_t_instr)
+                else:
+                    global_graph_importent_features = torch.zeros(
+                        1, self.IMPORTENT_NDOES_FEATURE).to(frames.device)
+                    current_state_graph_importent_features = torch.zeros(
+                        1, self.IMPORTENT_NDOES_FEATURE).to(frames.device)
+                    history_changed_nodes_graph_importent_features = torch.zeros(
+                        1, self.IMPORTENT_NDOES_FEATURE).to(frames.device)
+                    priori_importent_features = torch.zeros(
+                        1, self.IMPORTENT_NDOES_FEATURE).to(frames.device)
+                feat_global_graph.append(global_graph_importent_features)
+                feat_current_state_graph.append(current_state_graph_importent_features)
+                feat_history_changed_nodes_graph.append(history_changed_nodes_graph_importent_features)
+                feat_priori_graph.append(priori_importent_features)
+            feat_global_graph = torch.cat(feat_global_graph, dim=0)
+            feat_current_state_graph = torch.cat(feat_current_state_graph, dim=0)
+            feat_history_changed_nodes_graph = torch.cat(feat_history_changed_nodes_graph, dim=0)
+            feat_priori_graph = torch.cat(feat_priori_graph, dim=0)
+
+            action_t, mask_t, state_t_goal, state_t_instr, attn_score_t_goal, attn_score_t_instr, subgoal_t, progress_t = \
+                self.step(
+                    enc_goal,
+                    enc_instr,
+                    frames[:, t],
+                    e_t,
+                    state_t_goal,
+                    state_t_instr,
+                    feat_global_graph,
+                    feat_current_state_graph,
+                    feat_history_changed_nodes_graph,
+                    feat_priori_graph)
+            masks.append(mask_t)
+            actions.append(action_t)
+            attn_scores_goal.append(attn_score_t_goal)
+            attn_scores_instr.append(attn_score_t_instr)
+            subgoals.append(subgoal_t)
+            progresses.append(progress_t)
+
+            # find next emb
+            if self.teacher_forcing and self.training:
+                w_t = gold[:, t]
+            else:
+                w_t = action_t.max(1)[1]
+            e_t = self.emb(w_t)
+
+        results = {
+            'out_action_low': torch.stack(actions, dim=1),
+            'out_action_low_mask': torch.stack(masks, dim=1),
+            'out_attn_scores_goal': torch.stack(attn_scores_goal, dim=1),
+            'out_attn_scores_instr': torch.stack(attn_scores_instr, dim=1),
+            'out_subgoal': torch.stack(subgoals, dim=1),
+            'out_progress': torch.stack(progresses, dim=1),
+            'state_t_goal': state_t_goal,
+            'state_t_instr': state_t_instr,
+        }
+        return results
+
+
+    def store_and_get_graph_feature(self, t_store_state, env_index, state_t_goal, state_t_instr):
+        self.semantic_graph_implement.store_data_to_graph(
+            store_state=t_store_state,
+            env_index=env_index
+        )
+        global_graph_importent_features, global_graph_dict_objectIds_to_score = \
+            self.semantic_graph_implement.chose_importent_node_feature(
+                chose_type="GLOBAL_GRAPH",
+                env_index=env_index,
+                hidden_state=state_t_goal[0][env_index:env_index+1],
+                )
+        current_state_graph_importent_features, current_state_dict_objectIds_to_score = \
+            self.semantic_graph_implement.get_graph_feature(
+                chose_type="CURRENT_STATE_GRAPH",
+                env_index=env_index,
+                )
+        history_changed_nodes_graph_importent_features, history_changed_dict_objectIds_to_score = \
+            self.semantic_graph_implement.get_graph_feature(
+                chose_type="HISTORY_CHANGED_NODES_GRAPH",
+                env_index=env_index,
+                )
+        priori_importent_features, priori_dict_dict_objectIds_to_score = \
+            self.semantic_graph_implement.chose_importent_node_feature(
+                chose_type="PRIORI_GRAPH",
+                env_index=env_index,
+                hidden_state=state_t_goal[0][env_index:env_index+1],
+                # hidden_state=state_t_instr[0][env_index:env_index+1],
+                )
+        return global_graph_importent_features, current_state_graph_importent_features,\
+               history_changed_nodes_graph_importent_features, priori_importent_features,\
+               global_graph_dict_objectIds_to_score, current_state_dict_objectIds_to_score,\
+               history_changed_dict_objectIds_to_score, priori_dict_dict_objectIds_to_score

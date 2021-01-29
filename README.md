@@ -125,6 +125,12 @@ CUDA_VISIBLE_DEVICES=0 python models/eval_moca/eval_semantic.py models/config/wi
 CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/fast_epoch_base.yaml --semantic_config_file models/config/decompose_semantic_graph2.yaml --data data/full_2.1.0/ --model seq2seq_im_decomposed --dout exp/fast_decomposed2 --splits data/splits/oct21.json --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --not_save_config --gpu --action_navi_loss_wt 0.8 --action_oper_loss_wt 1 --action_navi_or_oper_loss_wt 1 --mask_loss_wt 1 --mask_label_loss_wt 1
 ```
 
+## eval sub goal
+```
+CUDA_VISIBLE_DEVICES=0 python models/eval_moca/eval_semantic.py models/config/fast_epoch_base.yaml --semantic_config_file models/config/decompose_semantic_graph.yaml --model_path exp/fast_decomposed2_26-01-2021_12-22-10/best_seen.pth --model seq2seq_im_decomposed --data data/full_2.1.0/ --eval_split train --gpu --subgoals GotoLocation,PickupObject
+```
+
+---
 ---
 ---
 
