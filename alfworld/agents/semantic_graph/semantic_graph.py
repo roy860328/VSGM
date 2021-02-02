@@ -272,6 +272,7 @@ class SceneGraph(object):
         self.isORACLE = cfg.SCENE_GRAPH.ORACLE
         self.GPU = cfg.SCENE_GRAPH.GPU
         self.GRAPH_RESULT_PATH = cfg.SCENE_GRAPH.GRAPH_RESULT_PATH
+        self.ANGLE_OF_VIEWS = cfg.SCENE_GRAPH.ANGLE_OF_VIEWS
         # vision
         self.VISION_FEATURE_SIZE = cfg.SCENE_GRAPH.VISION_FEATURE_SIZE
         self.SAME_VISION_FEATURE_THRESHOLD = cfg.SCENE_GRAPH.SAME_VISION_FEATURE_THRESHOLD
@@ -360,12 +361,7 @@ class SceneGraph(object):
         print("need to check word & rgb feature & relation is ok")
 
     def init_current_state_data(self):
-        graphdata = getattr(
-            importlib.import_module(
-                'agents.semantic_graph.semantic_graph'),
-            self.cfg.SCENE_GRAPH.GraphData
-            )
-        self.current_state_graph = graphdata(self.obj_cls_name_to_features, self.GPU)
+        self.current_state_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU)
 
     def _get_obj_cls_name_to_features(self, path, _background=False):
         def get_feature(csv_nodes_data):
@@ -453,16 +449,36 @@ class SceneGraph(object):
     def compare_features(self, feature1, feature2):
         return cosine_similarity(feature1.reshape(1, -1), feature2.reshape(1, -1))
 
-    def add_oracle_local_graph_to_global_graph(self, feature_img, target):
+    def add_adj_relation(self, graph, current_frame_obj_cls_to_node_index, add_relation_anyway=False):
+        '''
+        relation_have_been_add: isFindNode
+        '''
+        for node_ind, obj_cls, relation_have_been_add in current_frame_obj_cls_to_node_index:
+            if not relation_have_been_add or add_relation_anyway:
+                graph.update_adj_relation(node_ind, obj_cls, self.adj)
+
+    def add_other_relation(self, graph, current_frame_obj_cls_to_node_index, obj_relations):
+        '''
+        current_frame_obj_cls_to_node_index: [(ind, obj_cls, isFindNode), ...]
+        '''
+        for obj_relation_triplet in obj_relations:
+            src_obj_ind, dst_obj_ind, relation = obj_relation_triplet
+            src_node_ind = current_frame_obj_cls_to_node_index[src_obj_ind][0]
+            dst_node_ind = current_frame_obj_cls_to_node_index[dst_obj_ind][0]
+            graph.update_relation(src_node_ind, dst_node_ind, relation)
+
+    def add_oracle_local_graph_to_global_graph(self, feature_img, target, reset_current_graph=True):
         '''
         feature_img: torch.Size([512, 7, 7])
         '''
-        self.init_current_state_data()
+        if reset_current_graph:
+            self.init_current_state_data()
         # global average pooling, https://discuss.pytorch.org/t/how-can-i-perform-global-average-pooling-before-the-last-fully-connected-layer/74352
         feature_img = feature_img.mean([1, 2]).reshape(1, -1)
         tar_ids = target["objectIds"]
         obj_clses = target["labels"].numpy().astype(int)
         obj_attributes = target["attributes"]
+        obj_angle_of_views = target["angle_of_views"]
         # other way to process (index 4 is out of bounds for dimension 0 with size 4)
         obj_relations = target["relation_labels"].numpy().astype(int)
         global_graph_current_frame_obj_cls_to_node_index = []
@@ -473,8 +489,10 @@ class SceneGraph(object):
         obj_cls : tensor(24.), object class index
         '''
         for i, tar_id in enumerate(tar_ids):
-            obj_cls, obj_attribute = \
-                obj_clses[i], obj_attributes[i]
+            obj_cls, obj_attribute, obj_angle_of_view = \
+                obj_clses[i], obj_attributes[i], obj_angle_of_views[i]
+            if self.ANGLE_OF_VIEWS:
+                obj_attribute = torch.cat([obj_attribute, obj_angle_of_view])
             isFindNode = self.global_graph.search_node(obj_id=tar_id)
             # check node
             if isFindNode:
@@ -492,29 +510,19 @@ class SceneGraph(object):
         '''
         # relation
         '''
-        for node_ind, obj_cls, isFindNode in global_graph_current_frame_obj_cls_to_node_index:
-            if not isFindNode:
-                self.global_graph.update_adj_relation(node_ind, obj_cls, self.adj)
+        # no matter isFindNode is True or False,
+        # self.current_state_graph always need to add adj relation
+        # if not isFindNode:
+        self.add_adj_relation(self.current_state_graph,
+                              current_state_graph_current_frame_obj_cls_to_node_index,
+                              add_relation_anyway=True
+                              )
+        self.add_other_relation(self.global_graph,
+                                global_graph_current_frame_obj_cls_to_node_index,
+                                obj_relations
+                                )
 
-        for node_ind, obj_cls, isFindNode in current_state_graph_current_frame_obj_cls_to_node_index:
-            # no matter isFindNode is True or False,
-            # self.current_state_graph always need to add adj relation
-            # if not isFindNode:
-            self.current_state_graph.update_adj_relation(node_ind, obj_cls, self.adj)
-        # for obj_relation_triplet in obj_relations:
-        #     src_obj_ind, dst_obj_ind, relation = obj_relation_triplet
-        #     src_node_ind = global_graph_current_frame_obj_cls_to_node_index[src_obj_ind]
-        #     dst_node_ind = global_graph_current_frame_obj_cls_to_node_index[dst_obj_ind]
-        #     self.global_graph.update_relation(src_node_ind, dst_node_ind, relation)
-        # # relation
-        # # EMBED_CURRENT_STATE
-        # for obj_relation_triplet in obj_relations:
-        #     src_obj_ind, dst_obj_ind, relation = obj_relation_triplet
-        #     src_node_ind = current_state_graph_current_frame_obj_cls_to_node_index[src_obj_ind]
-        #     dst_node_ind = current_state_graph_current_frame_obj_cls_to_node_index[dst_obj_ind]
-        #     self.current_state_graph.update_relation(src_node_ind, dst_node_ind, relation)
-
-    def add_local_graph_to_global_graph(self, img, sgg_results):
+    def add_local_graph_to_global_graph(self, img, sgg_results, reset_current_graph=True):
         self.init_current_state_data()
         current_frame_obj_cls_to_node_index = []
         obj_clses = sgg_results["labels"].numpy().astype(int)

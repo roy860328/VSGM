@@ -101,7 +101,7 @@ class SemanticGraphImplement(torch.nn.Module):
         return store_state
 
     # for alfred model/nn
-    def store_data_to_graph(self, thor=None, store_state=None, env_index=None):
+    def store_data_to_graph(self, thor=None, store_state=None, env_index=None, reset_current_graph=True, agent_meta=None, horizontal_view_angle=0):
         if thor is not None:
             store_state = self.get_env_last_event_data(thor)
         if store_state is None:
@@ -115,13 +115,13 @@ class SemanticGraphImplement(torch.nn.Module):
         #     color_to_obj_id_type[str(color)] = object_id
         if self.isORACLE:
             sgg_meta_data = store_state["sgg_meta_data"]
-            target = self.trans_MetaData.trans_object_meta_data_to_relation_and_attribute(sgg_meta_data)
-            scene_graph.add_oracle_local_graph_to_global_graph(rgb_image, target)
+            target = self.trans_MetaData.trans_object_meta_data_to_relation_and_attribute(sgg_meta_data, agent_meta=agent_meta, horizontal_view_angle=horizontal_view_angle)
+            scene_graph.add_oracle_local_graph_to_global_graph(rgb_image, target, reset_current_graph=reset_current_graph)
         else:
             rgb_image = rgb_image.unsqueeze(0)
             results = self.detector(rgb_image)
             result = results[0]
-            scene_graph.add_local_graph_to_global_graph(rgb_image, result)
+            scene_graph.add_local_graph_to_global_graph(rgb_image, result, reset_current_graph=reset_current_graph)
 
     def get_priori_feature(self, env_index, hidden_state):
         raise NotImplementedError
@@ -192,7 +192,6 @@ class SemanticGraphImplement(torch.nn.Module):
             raise NotImplementedError
         return importent_node_feature, dict_objectIds_to_score
 
-
     # visual features for state representation
     def extract_visual_features(self, thor=None, store_state=None, hidden_state=None, env_index=None):
         if thor is not None:
@@ -238,7 +237,7 @@ class SemanticGraphImplement(torch.nn.Module):
             dict_objectIds_to_score = scene_graph.analyze_graph(dict_ANALYZE_GRAPH)
         return graph_embed_features, store_state, dict_objectIds_to_score
 
-    def update_exploration_data_to_global_graph(self, exploration_transition_cache, env_index, exploration_imgs=None):
+    def update_exploration_data_to_global_graph(self, exploration_transition_cache, env_index, exploration_imgs=None, agent_meta=None, horizontal_view_angle=0):
         if not self.use_exploration_frame_feats:
             return
         if self.PRINT_DEBUG:
@@ -252,7 +251,7 @@ class SemanticGraphImplement(torch.nn.Module):
                 rgb_image = exploration_transition_cache[i]["exploration_img"]
             if self.isORACLE:
                 sgg_meta_data = exploration_transition_cache[i]["exploration_sgg_meta_data"]
-                target = self.trans_MetaData.trans_object_meta_data_to_relation_and_attribute(sgg_meta_data)
+                target = self.trans_MetaData.trans_object_meta_data_to_relation_and_attribute(sgg_meta_data, agent_meta=agent_meta, horizontal_view_angle=horizontal_view_angle)
                 scene_graph.add_oracle_local_graph_to_global_graph(rgb_image, target)
                 # print(len(sgg_meta_data))
                 # print(self.scene_graphs[env_index].global_graph.x.shape)

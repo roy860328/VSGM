@@ -34,20 +34,43 @@ SET GRAPH_ANALYSIS=D:\alfred\graph_analysis
 SET GRAPH_RCNN_ROOT=D:\alfred\alfworld\agents\sgg\graph-rcnn.pytorch
 ```
 
+## gen 
+1. raw_images, sgg_meta, exploration_meta
+```
+cd alfred/gen
+python scripts/augment_trajectories.py --data_path ../data/full_2.1.0/ --num_threads 4 --smooth_nav --time_delays
+python scripts/augment_meta_data_trajectories.py --data_path ../data/full_2.1.0/ --num_threads 4 --smooth_nav --time_delays
+```
+2. third_party_camera_frames: README_thirdparty_view.md
+```
+python scripts/augment_trajectories_third_party_camera_frames210.py --data_path ../data/full_2.1.0/ --num_threads 10 --smooth_nav --time_delays
+python scripts/augment_meta_data_trajectories_third_party_camera_frames.py --data_path ../data/full_2.1.0/ --num_threads 10 --smooth_nav --time_delays
+```
+3. extract exploration img to resnet feature
+```
+python models/utils/extract_resnet.py --data data/full_2.1.0 --batch 32 --gpu --visual_model resnet18 --filename feat_exploration_conv.pt --img_folder exploration_meta
+```
+4. get event.metadata['agent']
+cameraHorizon, position, rotation
+https://ai2thor.allenai.org/ithor/documentation/metadata/#agent
+```
+python scripts/augment_agent_meta_data.py --data_path ../data/full_2.1.0/ --num_threads 10 --smooth_nav --time_delays
+```
+agent
+"position": {"x": -2.25, "y": 0.9009992, "z": 1.25}, "rotation": {"x": 0.0, "y": 180.0, "z": 0.0}
+object
+"name": "Mug_a12c171b(Clone)copy24", "position": {"x": -0.6516613, "y": 0.8507198, "z": -0.6635949}, "rotation": {"x": 0.00138341438, "y": 0.000116876137, "z": -0.0008958757}
+
+## Config
+ATTRIBUTE_FEATURE_SIZE: 26   # 23 + 2 (ANGLE_OF_VIEWS) + 1 (unique_obj_index)
+
 ## MOCA pre-download eval maskrcnn model
 ```
 cd $ALFRED_ROOT
 wget https://alfred-colorswap.s3.us-east-2.amazonaws.com/weight_maskrcnn.pt
 ```
 
-## generate Semantic graph data
 ```
-cd alfred/gen
-python scripts/augment_meta_data_trajectories.py --data_path ../data/full_2.1.0/ --num_threads 4 --smooth_nav --time_delays
-```
-### extract exploration img to resnet feature
-```
-python models/utils/extract_resnet.py --data data/full_2.1.0 --batch 32 --gpu --visual_model resnet18 --filename feat_exploration_conv.pt --img_folder exploration_meta
 ```
 
 ## MOCA
@@ -57,7 +80,8 @@ export ALFRED_ROOT=/home/moca/
 cd /home/moca
 CUDA_VISIBLE_DEVICES=1 python models/train/train_seq2seq.py --model seq2seq_im_mask --dout exp/moca_{model},name,pm_and_subgoals_01 --splits data/splits/oct21.json --batch 8 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --gpu
 # eval
-python models/eval/eval_seq2seq.py --model models.model.seq2seq_im_mask --model_path exp/moca_seq2seq_im_mask,name,pm_and_subgoals_01/best_seen.pth --eval_split valid_seen --gpu --num_threads 2
+python models/eval/eval_seq2seq.py --model models.model.seq2seq_im_mask --model_path exp/moca_seq2seq_im_mask,name,pm_and_subgoals_01/best_seen.pth --eval_split valid_seen --gpu
+--subgoals GotoLocation
 ```
 
 
@@ -84,6 +108,18 @@ CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/witho
 ## MOCA + Priori + Graph attention
 ```
 CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/gan_semantic_graph.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_importent_nodes --dout exp/graph_attention --splits data/splits/oct21.json --batch 8 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --not_save_config --gpu
+```
+
+---
+---
+# ThirdParty
+## ThirdParty
+```
+CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/fast_epoch_base.yaml --semantic_config_file models/config/importent_semantic_graph_softmax_gcn_dec.yaml --data data/full_2.1.0/ --model seq2seq_im_thirdpartyview --dout exp/thirdpartyview_softmax --splits data/splits/oct21.json --batch 5 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --not_save_config --gpu
+```
+## eval sub goal
+```
+CUDA_VISIBLE_DEVICES=0 python models/eval_thirdparty/eval_semantic.py models/config/fast_epoch_base.yaml --semantic_config_file models/config/importent_semantic_graph_softmax_gcn_dec.yaml --model_path exp/thirdpartyview_softmax/best_seen.pth --model seq2seq_im_thirdpartyview --data data/full_2.1.0/ --eval_split valid_seen --gpu --subgoals GotoLocation,PickupObject
 ```
 
 ---

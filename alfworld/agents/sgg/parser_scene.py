@@ -7,6 +7,7 @@ import json
 import argparse
 from PIL import Image
 import cv2
+import math
 from detector import transforms as T
 sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], '..'))
 from alfworld.gen import constants
@@ -139,10 +140,11 @@ def transfer_mask_semantic_to_bbox_label(mask, color_to_object, object_classes, 
     return np.array(masks), np.array(boxes), np.array(labels), boxes_id
 
 
-def transfer_object_meta_data_to_relation_and_attribute(boxes_id, data_obj_relation_attribute):
+def transfer_object_meta_data_to_relation_and_attribute(boxes_id, data_obj_relation_attribute, horizontal_view_angle, agent_meta=None):
     # relation & attribute
-    obj_relations, obj_relation_triplets, obj_attributes = [], [], []
+    obj_relations, obj_relation_triplets, obj_attributes, obj_angle_of_view = [], [], [], []
     obj_relations = np.zeros((len(boxes_id), len(boxes_id)))
+
 
     for i, object_id in enumerate(boxes_id):
         # {objectId, attribute, parentReceptacles}
@@ -172,8 +174,10 @@ def transfer_object_meta_data_to_relation_and_attribute(boxes_id, data_obj_relat
                             obj_relations[j, i] = relation
                             obj_relation_triplets.append(np.array([j, i, relation]))
                 obj_attributes.append(obj_attribute)
+                angle_view = angle_of_view(agent_meta, obj_relation_attribute["position"], horizontal_view_angle)
+                obj_angle_of_view.append(angle_view)
 
-    return np.array(obj_relations), np.array(obj_relation_triplets), np.array(obj_attributes)
+    return np.array(obj_relations), np.array(obj_relation_triplets), np.array(obj_attributes), np.array(obj_angle_of_view)
 
 
 def _set_obj_attribute(obj_relation_attribute):
@@ -188,3 +192,15 @@ def _search_boxes_index(boxes_id, parentReceptacles_id):
             return j, RELATION["parentReceptacles"], True
     return 0, 0, False
 
+
+def angle_of_view(agent_meta, object_position, horizontal_view_angle):
+    if agent_meta:
+        agent_position = agent_meta["position"]
+        x, y, z = object_position['x']-agent_position['x'], object_position['y']-agent_position['y'], object_position['z']-agent_position['z']
+        vertical_angle = math.atan2(y, math.hypot(x, z))
+        radians = math.radians(horizontal_view_angle)
+        horizontal_angle = math.atan2(z, x)
+        horizontal_angle = horizontal_angle+radians
+        return np.array([horizontal_angle, vertical_angle])
+    else:
+        return np.array([0, 0])

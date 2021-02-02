@@ -42,6 +42,59 @@ class ThorEnv(Controller):
 
         print("ThorEnv started.")
 
+    def _get_third_party_frame(self, event, render_settings=DEFAULT_RENDER_SETTINGS):
+        event = self.set_hand_object_hide(event, is_hide=True)
+        horizon = np.round(event.metadata['agent']['cameraHorizon'], 4)
+        position = event.metadata['agent']['position']
+        rotation = event.metadata['agent']['rotation']
+        start_rotation = rotation['y']
+        end_rotation = start_rotation - 90
+
+        teleport_action = {
+            'action': 'TeleportFull',
+            'rotation': np.round(end_rotation, 3),
+            'x': position['x'],
+            'z': position['z'],
+            'y': position['y'],
+            'horizon': horizon,
+            'tempRenderChange': True,
+            'renderNormalsImage': False,
+            'renderImage': render_settings['renderImage'],
+            'renderClassImage': render_settings['renderClassImage'],
+            'renderObjectImage': render_settings['renderObjectImage'],
+            'renderDepthImage': render_settings['renderDepthImage'],
+            'forceAction': True,
+        }
+        # UpdateThirdPartyCamera 1
+        event1 = super().step(teleport_action)
+        if not event1.metadata['lastActionSuccess']:
+            print(event1.metadata['errorMessage'])
+        # UpdateThirdPartyCamera 2
+        teleport_action['rotation'] = start_rotation + 90
+        event2 = super().step(teleport_action)
+        if not event2.metadata['lastActionSuccess']:
+            print(event2.metadata['errorMessage'])
+        # agent camera 0
+        teleport_action['rotation'] = start_rotation
+        event = super().step(teleport_action)
+        event = self.set_hand_object_hide(event, is_hide=False)
+
+        event.third_party_camera_frames.append(dict(frame=event1.frame, objects=event1.metadata['objects']))
+        event.third_party_camera_frames.append(dict(frame=event2.frame, objects=event2.metadata['objects']))
+        self.last_event = event
+        return event
+
+    def set_hand_object_hide(self, event, is_hide):
+        inventory = event.metadata['inventoryObjects']
+        if inventory:
+            picked_up_id = inventory[0]['objectId']
+            if is_hide:
+                event = super().step(dict(action='HideObject', objectId=picked_up_id))
+            else:
+                event = super().step(dict(action='UnhideObject', objectId=picked_up_id))
+        return event
+
+
     def reset(self, scene_name_or_num,
               grid_size=constants.AGENT_STEP_SIZE / constants.RECORD_SMOOTHING_FACTOR,
               camera_y=constants.CAMERA_HEIGHT_OFFSET,
@@ -80,6 +133,7 @@ class ThorEnv(Controller):
         # clear object state changes
         self.reset_states()
 
+        event = self._get_third_party_frame(event)
         return event
 
     def reset_states(self):
@@ -146,6 +200,7 @@ class ThorEnv(Controller):
                 super().step(action)
 
         event = self.update_states(action)
+        event = self._get_third_party_frame(event)
         self.check_post_conditions(action)
         return event
 
@@ -209,7 +264,8 @@ class ThorEnv(Controller):
         '''
         do nothing
         '''
-        super().step(dict(action='Pass'))
+        event = super().step(dict(action='Pass'))
+        event = self._get_third_party_frame(event)
 
     def smooth_move_ahead(self, action, render_settings=None):
         '''
@@ -230,10 +286,12 @@ class ThorEnv(Controller):
         for xx in range(smoothing_factor - 1):
             event = super().step(new_action)
             if event.metadata['lastActionSuccess']:
+                event = self._get_third_party_frame(event)
                 events.append(event)
 
         event = super().step(new_action)
         if event.metadata['lastActionSuccess']:
+            event = self._get_third_party_frame(event)
             events.append(event)
         return events
 
@@ -283,6 +341,7 @@ class ThorEnv(Controller):
                 event = super().step(teleport_action)
 
             if event.metadata['lastActionSuccess']:
+                event = self._get_third_party_frame(event)
                 events.append(event)
         return events
 
@@ -328,6 +387,7 @@ class ThorEnv(Controller):
                 event = super().step(teleport_action)
 
             if event.metadata['lastActionSuccess']:
+                event = self._get_third_party_frame(event)
                 events.append(event)
         return events
 
@@ -358,6 +418,7 @@ class ThorEnv(Controller):
             'renderDepthImage': render_settings['renderDepthImage'],
         }
         event = super().step(teleport_action)
+        event = self._get_third_party_frame(event)
         return event
 
     def rotate_angle(self, angle, render_settings=None):
@@ -388,6 +449,7 @@ class ThorEnv(Controller):
             'renderDepthImage': render_settings['renderDepthImage'],
         }
         event = super().step(teleport_action)
+        event = self._get_third_party_frame(event)
         return event
 
     def to_thor_api_exec(self, action, object_id="", smooth_nav=False):

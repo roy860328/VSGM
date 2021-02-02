@@ -34,8 +34,7 @@ class TransMetaData():
         self.ind_to_predicates = sorted(self.predicate_to_ind, key=lambda k:
                                         self.predicate_to_ind[k])
 
-
-    def trans_object_meta_data_to_relation_and_attribute(self, data_obj_relation_attribute, boxes_id=None, boxes_labels=None):
+    def trans_object_meta_data_to_relation_and_attribute(self, data_obj_relation_attribute, boxes_id=None, boxes_labels=None, agent_meta=None, horizontal_view_angle=0):
         if boxes_id is None:
             boxes_id, boxes_labels = [], []
             for obj_relation_attribute in data_obj_relation_attribute:
@@ -43,8 +42,8 @@ class TransMetaData():
                     boxes_id.append(obj_relation_attribute["objectId"])
                     class_idx = self.object_classes.index(obj_relation_attribute["objectType"])
                     boxes_labels.append(class_idx)
-        obj_relations, obj_relation_triplets, obj_attribute = parser_scene.transfer_object_meta_data_to_relation_and_attribute(
-            boxes_id, data_obj_relation_attribute)
+        obj_relations, obj_relation_triplets, obj_attribute, obj_angle_of_view = parser_scene.transfer_object_meta_data_to_relation_and_attribute(
+            boxes_id, data_obj_relation_attribute, horizontal_view_angle, agent_meta=agent_meta)
         '''
         {
          'pred_labels': array([[0., 0., 0., 0., 0., 0., 0., 0.],
@@ -77,12 +76,13 @@ class TransMetaData():
                                0]]), 
          'objectIds': ['Spatula|+03.07|+00.76|-00.03', 'ButterKnife|+02.97|+00.90|-00.70', 'CounterTop|+03.11|+00.94|+00.02', 'Sink|+03.08|+00.89|+00.09', 'HousePlant|+03.20|+00.89|-00.37', 'Window|+03.70|+01.68|+00.05', 'Sink|+03.08|+00.89|+00.09|SinkBasin', 'Faucet|+03.31|+00.89|+00.09'], 'labels': array(['Spatula', 'ButterKnife', 'CounterTop', 'Sink', 'HousePlant',
                        'Window', 'SinkBasin', 'Faucet'], dtype='<U11')}
-
         '''
+
         dict_obj_rel_attr = {
             "pred_labels": obj_relations,
             "relation_labels": torch.from_numpy(obj_relation_triplets).to(dtype=torch.float),
             "attributes": torch.from_numpy(obj_attribute).to(dtype=torch.float),
+            "angle_of_views": torch.from_numpy(obj_angle_of_view).to(dtype=torch.float),
             "objectIds": boxes_id,
             "labels": torch.tensor(boxes_labels).to(dtype=torch.float),
         }

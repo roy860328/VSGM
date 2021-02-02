@@ -26,14 +26,13 @@ class ThorEnv(Controller):
                  quality='MediumCloseFitShadows',
                  build_path=constants.BUILD_PATH):
 
-        super().__init__(quality=quality)
+        self.task = None
+        super().__init__(quality=quality,
+                         height=player_screen_height,
+                         width=player_screen_width)
         self.local_executable_path = build_path
         # self.docker_enabled = True
         # self.headless = True
-        self.start(x_display=x_display,
-                   player_screen_height=player_screen_height,
-                   player_screen_width=player_screen_width)
-        self.task = None
 
         # internal states
         self.cleaned_objects = set()
@@ -41,6 +40,46 @@ class ThorEnv(Controller):
         self.heated_objects = set()
 
         print("ThorEnv started.")
+
+    def _add_camera(self, render_settings=DEFAULT_RENDER_SETTINGS):
+        # create_camera_action 0
+        create_camera_action = {
+            'action': 'AddThirdPartyCamera',
+            'rotation': dict(x=0, y=180, z=0),
+            'position': dict(x=-1.5, y=0.9007236, z=-2.25),
+            'fieldOfView': 90,
+        }
+        super().step(**create_camera_action)
+        # create_camera_action 1
+        create_camera_action = {
+            'action': 'AddThirdPartyCamera',
+            'rotation': dict(x=0, y=360, z=0),
+            'position': dict(x=-1.5, y=0.9007236, z=-2.25),
+            'fieldOfView': 90,
+        }
+        super().step(**create_camera_action)
+
+    def _set_third_party_camera(self, event, render_settings=DEFAULT_RENDER_SETTINGS):
+        agent = event.metadata['agent']
+        position = agent['position']
+        rotation = agent['rotation']
+        cameraHorizon = agent['cameraHorizon']+1
+        cameraHorizon = 90
+        # UpdateThirdPartyCamera 0
+        create_camera_action = {
+            'action': 'UpdateThirdPartyCamera',
+            'rotation': rotation,
+            'position': position,
+            'thirdPartyCameraId': 0,
+            'fieldOfView': cameraHorizon,
+        }
+        create_camera_action['rotation']["y"] -= 90
+        event = super().step(**create_camera_action)
+        # UpdateThirdPartyCamera 1
+        create_camera_action['rotation']["y"] += 180
+        create_camera_action['thirdPartyCameraId'] = 1
+        event = super().step(**create_camera_action)
+        return event
 
     def reset(self, scene_name_or_num,
               grid_size=constants.AGENT_STEP_SIZE / constants.RECORD_SMOOTHING_FACTOR,
@@ -59,9 +98,8 @@ class ThorEnv(Controller):
             scene_name = scene_name_or_num
         else:
             scene_name = 'FloorPlan%d' % scene_name_or_num
-
         super().reset(scene_name)
-        event = super().step(dict(
+        event = super().step(
             action='Initialize',
             gridSize=grid_size,
             cameraY=camera_y,
@@ -71,7 +109,8 @@ class ThorEnv(Controller):
             renderObjectImage=render_object_image,
             visibility_distance=visibility_distance,
             makeAgentsVisible=False,
-        ))
+        )
+        # import pdb; pdb.set_trace()
 
         # reset task if specified
         if self.task is not None:
@@ -79,6 +118,9 @@ class ThorEnv(Controller):
 
         # clear object state changes
         self.reset_states()
+
+        self._add_camera()
+        event = self._set_third_party_camera(event)
 
         return event
 
@@ -93,8 +135,10 @@ class ThorEnv(Controller):
     def restore_scene(self, object_poses, object_toggles, dirty_and_empty):
         '''
         restore object locations and states
+        object_poses: [{'objectName': 'Mug_a12c171b', 'position': {'x': -1.33920825, 'y': 1.72145629, 'z': 0.4894059}, 'rotation': {'x': 0.0, 'y': 0.0, 'z': 0.0}}, {'objectName': 'Mug_a12c171b', 'position': {'x': -1.83404362, 'y': 0.8807978, 'z': 0.4075809}, 'rotation': {'x': 0.0, 'y': 0.0, 'z': 0.0}}, {'objectName': 'CD_05a2c75a', 'position': {'x': -0.473243952, 'y': 0.083159484, 'z': -0.8529663}, 'rotation': {'x': 0.0, 'y': 0.0, 'z': 0.0}}, {'objectName': 'CD_05a2c75a', 'position': {'x': -2.2402215, 'y': 0.0391722359, 'z': 2.68283415}, 'rotation': {'x': 0.0, 'y': 180.000168, 'z': 0.0}}, {'objectName': 'CellPhone_ca4b3ad9', 'position': {'x': 1.81535876, 'y': 0.784387946, 'z': 1.36632764}, 'rotation': {'x': 0.0, 'y': 0.0, 'z': 0.0}}, {'objectName': 'Pencil_f507937c', 'position': {'x': -0.567746758, 'y': 0.8613946, 'z': -1.18322909}, 'rotation': {'x': 0.0, 'y': 0.0, 'z': 0.0}}, {'objectName': 'CreditCard_3e601b13', 'position': {'x': -0.819493532, 'y': 0.8577152, 'z': -0.836806238}, 'rotation': {'x': 0.0, 'y': 0.0, 'z': 0.0}}, {'objectName': 'KeyChain_0522d00d', 'position': {'x': -2.075194, 'y': 0.668328047, 'z': 0.6456865}, 'rotation': {'x': 0.0, 'y': 90.0, 'z': 0.0}}, {'objectName': 'Pillow_492a1c0b', 'position': {'x': 1.40960121, 'y': 0.918681443, 'z': 1.94519484}, 'rotation': {'x': 0.0, 'y': 0.0, 'z': 0.0}}, {'objectName': 'Laptop_50f3d2ae', 'position': {'x': 0.800964832, 'y': 0.781461, 'z': 0.7874603}, 'rotation': {'x': 0.0, 'y': 0.0, 'z': 0.0}}, {'objectName': 'Laptop_50f3d2ae', 'position': {'x': 0.800964832, 'y': 0.781461, 'z': 1.94519484}, 'rotation': {'x': 0.0, 'y': 0.0, 'z': 0.0}}, {'objectName': 'Book_b5ec5330', 'position': {'x': 1.00384367, 'y': 0.783036, 'z': 1.65576124}, 'rotation': {'x': 0.0, 'y': 0.0, 'z': 0.0}}, {'objectName': 'AlarmClock_bd50a771', 'position': {'x': -2.09172368, 'y': 0.879870236, 'z': 0.665508866}, 'rotation': {'x': 0.0, 'y': 0.0, 'z': 0.0}}, {'objectName': 'BasketBall_4d3c931a', 'position': {'x': 1.9761951, 'y': 0.1200004, 'z': 0.2112078}, 'rotation': {'x': 0.0, 'y': 331.0765, 'z': 0.0}}, {'objectName': 'Pen_2fb4e25b', 'position': {'x': -1.72826767, 'y': 1.35510921, 'z': 0.5303184}, 'rotation': {'x': 0.0, 'y': 0.0, 'z': 0.0}}, {'objectName': 'Laptop_50f3d2ae', 'position': {'x': -1.783595, 'y': 0.8719339, 'z': 0.7320865}, 'rotation': {'x': 0.0, 'y': 0.0, 'z': 0.0}}, {'objectName': 'BaseballBat_c36151df', 'position': {'x': 1.953, 'y': 0.659, 'z': -1.81}, 'rotation': {'x': 346.388153, 'y': 0.0, 'z': 0.0}}, {'objectName': 'Bowl_e11a5ffa', 'position': {'x': -1.83404386, 'y': 1.72700715, 'z': 0.448493421}, 'rotation': {'x': 0.0, 'y': 0.0, 'z': 0.0}}, {'objectName': 'Pillow_492a1c0b', 'position': {'x': 1.118, 'y': 0.867, 'z': 2.464}, 'rotation': {'x': 0.0, 'y': 0.52026695, 'z': 0.0}}, {'objectName': 'KeyChain_0522d00d', 'position': {'x': -2.292484, 'y': 0.03971261, 'z': 2.52258325}, 'rotation': {'x': 0.0, 'y': 180.000168, 'z': 0.0}}, {'objectName': 'CreditCard_3e601b13', 'position': {'x': -1.83404362, 'y': 0.8827938, 'z': 0.530318558}, 'rotation': {'x': 0.0, 'y': 0.0, 'z': 0.0}}, {'objectName': 'CellPhone_ca4b3ad9', 'position': {'x': -0.735577941, 'y': 0.858646154, 'z': -1.01001763}, 'rotation': {'x': 0.0, 'y': 0.0, 'z': 0.0}}, {'objectName': 'CD_05a2c75a', 'position': {'x': -0.748, 'y': 0.202964082, 'z': -0.338}, 'rotation': {'x': 0.0, 'y': 0.0, 'z': 0.0}}, {'objectName': 'Pencil_f507937c', 'position': {'x': -1.1798991, 'y': 1.72713172, 'z': 0.4894059}, 'rotation': {'x': 0.0, 'y': 0.0, 'z': 0.0}}, {'objectName': 'Mug_a12c171b', 'position': {'x': -0.65166235, 'y': 0.8557192, 'z': -0.663594842}, 'rotation': {'x': 0.0, 'y': 0.0, 'z': 0.0}}]
+        object_toggles: [{'isOn': False, 'objectType': 'DeskLamp'}]
         '''
-        super().step(dict(
+        super().step(
             action='Initialize',
             gridSize=constants.AGENT_STEP_SIZE / constants.RECORD_SMOOTHING_FACTOR,
             cameraY=constants.CAMERA_HEIGHT_OFFSET,
@@ -104,18 +148,45 @@ class ThorEnv(Controller):
             renderObjectImage=constants.RENDER_OBJECT_IMAGE,
             visibility_distance=constants.VISIBILITY_DISTANCE,
             makeAgentsVisible=False,
-        ))
+        )
         if len(object_toggles) > 0:
-            super().step((dict(action='SetObjectToggles', objectToggles=object_toggles)))
+            # import pdb; pdb.set_trace()
+            # old
+            # super().step((dict(action='SetObjectToggles', objectToggles=object_toggles)))
+            # new
+            # event = super().step(action='SetObjectStates', SetObjectStates={'objectType': 'DeskLamp', 'stateChange': 'toggleable', 'isToggled': False})
+            for object_toggle in object_toggles:
+                object_toggle['isToggled'] = object_toggle['isOn']
+                object_toggle['isOpen'] = object_toggle['isOn']
+                object_toggle['stateChange'] = "toggleable"
+                event = super().step(action='SetObjectStates', SetObjectStates=object_toggle)
+                print("object_toggles: ")
+                print(event.metadata['lastActionSuccess'])
+                print(event.metadata['errorMessage'])
 
         if dirty_and_empty:
-            super().step(dict(action='SetStateOfAllObjects',
-                               StateChange="CanBeDirty",
-                               forceAction=True))
-            super().step(dict(action='SetStateOfAllObjects',
-                               StateChange="CanBeFilled",
-                               forceAction=False))
-        super().step((dict(action='SetObjectPoses', objectPoses=object_poses)))
+            # new
+            event = super().step(action='SetObjectStates', SetObjectStates={"stateChange": "dirtyable"})
+            print("SetObjectStates: ")
+            print(event.metadata['lastActionSuccess'])
+            print(event.metadata['errorMessage'])
+            event = super().step(action='SetObjectStates', SetObjectStates={"stateChange": "canFillWithLiquid"})
+            print("SetObjectStates: ")
+            print(event.metadata['lastActionSuccess'])
+            print(event.metadata['errorMessage'])
+            # old
+            # super().step(dict(action='SetStateOfAllObjects',
+            #                    StateChange="CanBeDirty",
+            #                    forceAction=True))
+            # super().step(dict(action='SetStateOfAllObjects',
+            #                    StateChange="CanBeFilled",
+            #                    forceAction=False))
+        event = super().step(action='SetObjectPoses', objectPoses=object_poses)
+        # print(event.metadata['objects'])
+        # import pdb; pdb.set_trace()
+        print("SetObjectPoses: ")
+        print(event.metadata['lastActionSuccess'])
+        print(event.metadata['errorMessage'])
 
     def set_task(self, traj, args, reward_type='sparse', max_episode_length=2000):
         '''
@@ -124,39 +195,44 @@ class ThorEnv(Controller):
         task_type = traj['task_type']
         self.task = get_task(task_type, traj, self, args, reward_type=reward_type, max_episode_length=max_episode_length)
 
-    def step(self, action, smooth_nav=False):
+    def step(self, smooth_nav=False, **action_args):
         '''
         overrides ai2thor.controller.Controller.step() for smooth navigation and goal_condition updates
         '''
+        action = action_args["action"]
         if smooth_nav:
-            if "MoveAhead" in action['action']:
-                self.smooth_move_ahead(action)
-            elif "Rotate" in action['action']:
-                self.smooth_rotate(action)
-            elif "Look" in action['action']:
-                self.smooth_look(action)
+            if "MoveAhead" in action:
+                self.smooth_move_ahead(**action_args)
+            elif "Rotate" in action:
+                self.smooth_rotate(**action_args)
+            elif "Look" in action:
+                self.smooth_look(**action_args)
             else:
-                super().step(action)
+                super().step(**action_args)
         else:
-            if "LookUp" in action['action']:
+            if "LookUp" in action:
                 self.look_angle(-constants.AGENT_HORIZON_ADJ)
-            elif "LookDown" in action['action']:
+            elif "LookDown" in action:
                 self.look_angle(constants.AGENT_HORIZON_ADJ)
             else:
-                super().step(action)
+                super().step(**action_args)
 
-        event = self.update_states(action)
-        self.check_post_conditions(action)
+        event = self.update_states(**action_args)
+        if not event.metadata['lastActionSuccess']:
+            print("step: ")
+            print(event.metadata['errorMessage'])
+        event = self._set_third_party_camera(event)
+        self.check_post_conditions(**action_args)
         return event
 
-    def check_post_conditions(self, action):
+    def check_post_conditions(self, **action):
         '''
         handle special action post-conditions
         '''
-        if action['action'] == 'ToggleObjectOn':
+        if action["action"] == 'ToggleObjectOn':
             self.check_clean(action['objectId'])
 
-    def update_states(self, action):
+    def update_states(self, **action):
         '''
         extra updates to metadata after step
         '''
@@ -209,9 +285,9 @@ class ThorEnv(Controller):
         '''
         do nothing
         '''
-        super().step(dict(action='Pass'))
+        super().step(action='Pass')
 
-    def smooth_move_ahead(self, action, render_settings=None):
+    def smooth_move_ahead(self, render_settings=None, **action):
         '''
         smoother MoveAhead
         '''
@@ -228,16 +304,22 @@ class ThorEnv(Controller):
 
         events = []
         for xx in range(smoothing_factor - 1):
-            event = super().step(new_action)
+            action.update(new_action)
+            event = super().step(**action)
             if event.metadata['lastActionSuccess']:
+                event = self._set_third_party_camera(event)
                 events.append(event)
-
-        event = super().step(new_action)
+        action.update(new_action)
+        event = super().step(**action)
         if event.metadata['lastActionSuccess']:
+            event = self._set_third_party_camera(event)
             events.append(event)
+        else:
+            print(event.metadata['errorMessage'])
+            return [event]
         return events
 
-    def smooth_rotate(self, action, render_settings=None):
+    def smooth_rotate(self, render_settings=None, **action):
         '''
         smoother RotateLeft and RotateRight
         '''
@@ -270,7 +352,7 @@ class ThorEnv(Controller):
                     'renderObjectImage': render_settings['renderObjectImage'],
                     'renderDepthImage': render_settings['renderDepthImage'],
                 }
-                event = super().step(teleport_action)
+                event = super().step(**teleport_action)
             else:
                 teleport_action = {
                     'action': 'TeleportFull',
@@ -280,13 +362,14 @@ class ThorEnv(Controller):
                     'y': position['y'],
                     'horizon': horizon,
                 }
-                event = super().step(teleport_action)
+                event = super().step(**teleport_action)
 
             if event.metadata['lastActionSuccess']:
+                event = self._set_third_party_camera(event)
                 events.append(event)
         return events
 
-    def smooth_look(self, action, render_settings=None):
+    def smooth_look(self, render_settings=None, **action):
         '''
         smoother LookUp and LookDown
         '''
@@ -315,7 +398,7 @@ class ThorEnv(Controller):
                     'renderObjectImage': render_settings['renderObjectImage'],
                     'renderDepthImage': render_settings['renderDepthImage'],
                 }
-                event = super().step(teleport_action)
+                event = super().step(**teleport_action)
             else:
                 teleport_action = {
                     'action': 'TeleportFull',
@@ -325,9 +408,10 @@ class ThorEnv(Controller):
                     'y': position['y'],
                     'horizon': np.round(start_horizon * (1 - xx) + end_horizon * xx, 3),
                 }
-                event = super().step(teleport_action)
+                event = super().step(**teleport_action)
 
             if event.metadata['lastActionSuccess']:
+                event = self._set_third_party_camera(event)
                 events.append(event)
         return events
 
@@ -357,7 +441,8 @@ class ThorEnv(Controller):
             'renderObjectImage': render_settings['renderObjectImage'],
             'renderDepthImage': render_settings['renderDepthImage'],
         }
-        event = super().step(teleport_action)
+        event = super().step(**teleport_action)
+        event = self._set_third_party_camera(event)
         return event
 
     def rotate_angle(self, angle, render_settings=None):
@@ -387,7 +472,8 @@ class ThorEnv(Controller):
             'renderObjectImage': render_settings['renderObjectImage'],
             'renderDepthImage': render_settings['renderDepthImage'],
         }
-        event = super().step(teleport_action)
+        event = super().step(**teleport_action)
+        event = self._set_third_party_camera(event)
         return event
 
     def to_thor_api_exec(self, action, object_id="", smooth_nav=False):
@@ -396,37 +482,37 @@ class ThorEnv(Controller):
         if "RotateLeft" in action:
             action = dict(action="RotateLeft",
                           forceAction=True)
-            event = self.step(action, smooth_nav=smooth_nav)
+            event = self.step(smooth_nav=smooth_nav, **action)
         elif "RotateRight" in action:
             action = dict(action="RotateRight",
                           forceAction=True)
-            event = self.step(action, smooth_nav=smooth_nav)
+            event = self.step(smooth_nav=smooth_nav, **action)
         elif "MoveAhead" in action:
             action = dict(action="MoveAhead",
                           forceAction=True)
-            event = self.step(action, smooth_nav=smooth_nav)
+            event = self.step(smooth_nav=smooth_nav, **action)
         elif "LookUp" in action:
             action = dict(action="LookUp",
                           forceAction=True)
-            event = self.step(action, smooth_nav=smooth_nav)
+            event = self.step(smooth_nav=smooth_nav, **action)
         elif "LookDown" in action:
             action = dict(action="LookDown",
                           forceAction=True)
-            event = self.step(action, smooth_nav=smooth_nav)
+            event = self.step(smooth_nav=smooth_nav, **action)
         elif "OpenObject" in action:
             action = dict(action="OpenObject",
                           objectId=object_id,
                           moveMagnitude=1.0)
-            event = self.step(action)
+            event = self.step(**action)
         elif "CloseObject" in action:
             action = dict(action="CloseObject",
                           objectId=object_id,
                           forceAction=True)
-            event = self.step(action)
+            event = self.step(**action)
         elif "PickupObject" in action:
             action = dict(action="PickupObject",
                           objectId=object_id)
-            event = self.step(action)
+            event = self.step(**action)
         elif "PutObject" in action:
             inventory_object_id = self.last_event.metadata['inventoryObjects'][0]['objectId']
             action = dict(action="PutObject",
@@ -434,16 +520,16 @@ class ThorEnv(Controller):
                           receptacleObjectId=object_id,
                           forceAction=True,
                           placeStationary=True)
-            event = self.step(action)
+            event = self.step(**action)
         elif "ToggleObjectOn" in action:
             action = dict(action="ToggleObjectOn",
                           objectId=object_id)
-            event = self.step(action)
+            event = self.step(**action)
 
         elif "ToggleObjectOff" in action:
             action = dict(action="ToggleObjectOff",
                           objectId=object_id)
-            event = self.step(action)
+            event = self.step(**action)
         elif "SliceObject" in action:
             # check if agent is holding knife in hand
             inventory_objects = self.last_event.metadata['inventoryObjects']
@@ -452,7 +538,7 @@ class ThorEnv(Controller):
 
             action = dict(action="SliceObject",
                           objectId=object_id)
-            event = self.step(action)
+            event = self.step(**action)
         else:
             raise Exception("Invalid action. Conversion to THOR API failed! (action='" + str(action) + "')")
 
@@ -467,12 +553,12 @@ class ThorEnv(Controller):
         event = self.last_event
         if event.metadata['lastActionSuccess'] and 'Faucet' in object_id:
             # Need to delay one frame to let `isDirty` update on stream-affected.
-            event = self.step({'action': 'Pass'})
+            event = self.step(**{'action': 'Pass'})
             sink_basin_obj = game_util.get_obj_of_type_closest_to_obj("SinkBasin", object_id, event.metadata)
             for in_sink_obj_id in sink_basin_obj['receptacleObjectIds']:
                 if (game_util.get_object(in_sink_obj_id, event.metadata)['dirtyable']
                         and game_util.get_object(in_sink_obj_id, event.metadata)['isDirty']):
-                    event = self.step({'action': 'CleanObject', 'objectId': in_sink_obj_id})
+                    event = self.step(**{'action': 'CleanObject', 'objectId': in_sink_obj_id})
         return event
 
     def prune_by_any_interaction(self, instances_ids):

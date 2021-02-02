@@ -18,15 +18,14 @@ import random
 from gen.utils.video_util import VideoSaver
 from gen.utils.py_util import walklevel
 from env.thor_env import ThorEnv
-
+# event.metadata['agent']
 
 TRAJ_DATA_JSON_FILENAME = "traj_data.json"
-AUGMENTED_TRAJ_DATA_JSON_FILENAME = "augmented_traj_data.json"
 
 ORIGINAL_IMAGES_FORLDER = "raw_images"
-HIGH_RES_IMAGES_FOLDER = "high_res_images"
-DEPTH_IMAGES_FOLDER = "depth_images"
-INSTANCE_MASKS_FOLDER = "instance_masks"
+AGENT_META_FOLDER = "agent_meta"
+AGENT_EXPLORATION_META_FOLDER = "exploration_agent_meta"
+
 
 IMAGE_WIDTH = 300
 IMAGE_HEIGHT = 300
@@ -42,6 +41,55 @@ video_saver = VideoSaver()
 fail_log = open("fail_log.txt", "w")
 
 
+def get_openable_points(traj_data):
+    scene_num = traj_data['scene']['scene_num']
+    openable_json_file = os.path.join(os.environ['ALFRED_ROOT'], 'gen/layouts/FloorPlan%d-openable.json' % scene_num)
+    with open(openable_json_file, 'r') as f:
+        openable_points = json.load(f)
+    return openable_points
+
+
+def explore_scene(env, traj_data, root_dir):
+    '''
+    Use pre-computed openable points from ALFRED to store receptacle locations
+    '''
+    openable_points = get_openable_points(traj_data)
+    agent_height = env.last_event.metadata['agent']['position']['y']
+    for recep_id, point in openable_points.items():
+        recep_class = recep_id.split("|")[0]
+        action = {'action': 'TeleportFull',
+                  'x': point[0],
+                  'y': agent_height,
+                  'z': point[1],
+                  'rotateOnTeleport': False,
+                  'rotation': point[2],
+                  'horizon': point[3]}
+        event = env.step(action)
+        save_frame(env, event, root_dir, folder_name="EXPLORATION")
+
+
+# class_detections2D
+def save_frame(env, event, root_dir, task_desc='None', folder_name="OBJECT_META_FOLDER"):
+    # META DATA
+    agent_meta_path = os.path.join(root_dir, AGENT_META_FOLDER)
+    # EXPLORATION_IMG
+    if folder_name == "EXPLORATION":
+        agent_meta_path = os.path.join(root_dir, AGENT_EXPLORATION_META_FOLDER)
+    # META DATA
+    im_idx = get_json_index(agent_meta_path)
+    # store color to object type dictionary
+    meta_agent = env.last_event.metadata['agent']
+    # save sgg meta
+    sgg_meta_file = os.path.join(agent_meta_path, "%09d.json" % (im_idx))
+    with open(sgg_meta_file, 'w') as f:
+        json.dump(meta_agent, f)
+
+
+def get_json_index(save_path):
+    file = glob.glob(save_path + '/*.json')
+    return len(file)
+
+
 def get_image_index(save_path):
     max_img = max(len(glob.glob(save_path + '/*.png')), len(glob.glob(save_path + '/*.jpg')))
     return max_img
@@ -49,41 +97,17 @@ def get_image_index(save_path):
 
 def save_image_with_delays(env, action,
                            save_path, direction=constants.BEFORE):
-    im_ind = get_image_index(save_path)
+    im_ind = get_json_index(save_path)
     counts = constants.SAVE_FRAME_BEFORE_AND_AFTER_COUNTS[action['action']][direction]
     for i in range(counts):
-        save_image(env.last_event, save_path)
+        save_frame(env, env.last_event, save_path)
         env.noop()
     return im_ind
 
 
-def save_image(event, save_path):
-    # rgb
-    rgb_save_path = os.path.join(save_path, HIGH_RES_IMAGES_FOLDER)
-    rgb_image = event.frame[:, :, ::-1]
-
-    # depth
-    depth_save_path = os.path.join(save_path, DEPTH_IMAGES_FOLDER)
-    depth_image = event.depth_frame
-    depth_image = depth_image * (255 / 10000)
-    depth_image = depth_image.astype(np.uint8)
-
-    # masks
-    mask_save_path = os.path.join(save_path, INSTANCE_MASKS_FOLDER)
-    mask_image = event.instance_segmentation_frame
-
-    # dump images
-    im_ind = get_image_index(rgb_save_path)
-    cv2.imwrite(rgb_save_path + '/%09d.png' % im_ind, rgb_image)
-    cv2.imwrite(depth_save_path + '/%09d.png' % im_ind, depth_image)
-    cv2.imwrite(mask_save_path + '/%09d.png' % im_ind, mask_image)
-
-    return im_ind
-
-
-def save_images_in_events(events, root_dir):
+def save_images_in_events(env, events, root_dir):
     for event in events:
-        save_image(event, root_dir)
+        save_frame(env, event, root_dir)
 
 
 def check_dir(path):
@@ -108,23 +132,15 @@ def augment_traj(env, json_file):
     root_dir = json_file.replace(TRAJ_DATA_JSON_FILENAME, "")
 
     orig_images_dir = os.path.join(root_dir, ORIGINAL_IMAGES_FORLDER)
-    high_res_images_dir = os.path.join(root_dir, HIGH_RES_IMAGES_FOLDER)
-    depth_images_dir = os.path.join(root_dir, DEPTH_IMAGES_FOLDER)
-    instance_masks_dir = os.path.join(root_dir, INSTANCE_MASKS_FOLDER)
-    augmented_json_file = os.path.join(root_dir, AUGMENTED_TRAJ_DATA_JSON_FILENAME)
+    agent_meta_path = os.path.join(root_dir, AGENT_META_FOLDER)
+    exploration_agent_meta_path = os.path.join(root_dir, AGENT_EXPLORATION_META_FOLDER)
 
     # fresh images list
     traj_data['images'] = list()
 
-    if get_image_index(orig_images_dir) == get_image_index(high_res_images_dir) \
-       and get_image_index(high_res_images_dir) == get_image_index(depth_images_dir) \
-       and get_image_index(depth_images_dir) == get_image_index(instance_masks_dir):
-        print("already create: " + orig_images_dir + "\n")
-        fail_log.write("already create: " + orig_images_dir + "\n")
-        return
-    clear_and_create_dir(high_res_images_dir)
-    clear_and_create_dir(depth_images_dir)
-    clear_and_create_dir(instance_masks_dir)
+    clear_and_create_dir(agent_meta_path)
+    clear_and_create_dir(exploration_agent_meta_path)
+    # print("no clear_and_create_dir")
 
     # scene setup
     scene_num = traj_data['scene']['scene_num']
@@ -137,7 +153,8 @@ def augment_traj(env, json_file):
     env.reset(scene_name)
     env.restore_scene(object_poses, object_toggles, dirty_and_empty)
 
-    print(high_res_images_dir)
+    print(agent_meta_path)
+    explore_scene(env, traj_data, root_dir)
     env.step(dict(traj_data['scene']['init_action']))
     # print("Task: %s" % (traj_data['template']['task_desc']))
 
@@ -155,32 +172,32 @@ def augment_traj(env, json_file):
 
         if "MoveAhead" in cmd['action']:
             if args.smooth_nav:
-                save_image(env.last_event, root_dir)
+                save_frame(env, env.last_event, root_dir)
                 events = env.smooth_move_ahead(cmd, render_settings)
-                save_images_in_events(events, root_dir)
+                save_images_in_events(env, events, root_dir)
                 event = events[-1]
             else:
-                save_image(env.last_event, root_dir)
+                save_frame(env, env.last_event, root_dir)
                 event = env.step(cmd)
 
         elif "Rotate" in cmd['action']:
             if args.smooth_nav:
-                save_image(env.last_event, root_dir)
+                save_frame(env, env.last_event, root_dir)
                 events = env.smooth_rotate(cmd, render_settings)
-                save_images_in_events(events, root_dir)
+                save_images_in_events(env, events, root_dir)
                 event = events[-1]
             else:
-                save_image(env.last_event, root_dir)
+                save_frame(env, env.last_event, root_dir)
                 event = env.step(cmd)
 
         elif "Look" in cmd['action']:
             if args.smooth_nav:
-                save_image(env.last_event, root_dir)
+                save_frame(env, env.last_event, root_dir)
                 events = env.smooth_look(cmd, render_settings)
-                save_images_in_events(events, root_dir)
+                save_images_in_events(env, events, root_dir)
                 event = events[-1]
             else:
-                save_image(env.last_event, root_dir)
+                save_frame(env, env.last_event, root_dir)
                 event = env.step(cmd)
 
         # handle the exception for CoolObject tasks where the actual 'CoolObject' action is actually 'CloseObject'
@@ -195,7 +212,7 @@ def augment_traj(env, json_file):
                 save_image_with_delays(env, cool_action, save_path=root_dir, direction=constants.MIDDLE)
                 save_image_with_delays(env, cool_action, save_path=root_dir, direction=constants.AFTER)
             else:
-                save_image(env.last_event, root_dir)
+                save_frame(env, env.last_event, root_dir)
                 event = env.step(cmd)
 
         else:
@@ -205,19 +222,8 @@ def augment_traj(env, json_file):
                 save_image_with_delays(env, cmd, save_path=root_dir, direction=constants.MIDDLE)
                 save_image_with_delays(env, cmd, save_path=root_dir, direction=constants.AFTER)
             else:
-                save_image(env.last_event, root_dir)
+                save_frame(env, env.last_event, root_dir)
                 event = env.step(cmd)
-
-        # update image list
-        new_img_idx = get_image_index(high_res_images_dir)
-        last_img_idx = len(traj_data['images'])
-        num_new_images = new_img_idx - last_img_idx
-        for j in range(num_new_images):
-            traj_data['images'].append({
-                'low_idx': ll_idx,
-                'high_idx': ll_action['high_idx'],
-                'image_name': '%09d.png' % int(last_img_idx + j)
-            })
 
         if not event.metadata['lastActionSuccess']:
             print("Replay Failed: %s" % (env.last_event.metadata['errorMessage']))
@@ -229,40 +235,17 @@ def augment_traj(env, json_file):
 
     # save 10 frames in the end as per the training data
     for _ in range(10):
-        save_image(env.last_event, root_dir)
-
-    # store color to object type dictionary
-    color_to_obj_id_type = {}
-    all_objects = env.last_event.metadata['objects']
-    for color, object_id in env.last_event.color_to_object_id.items():
-        for obj in all_objects:
-            if object_id == obj['objectId']:
-                color_to_obj_id_type[str(color)] = {
-                    'objectID': obj['objectId'],
-                    'objectType': obj['objectType']
-                }
-
-    augmented_traj_data = copy.deepcopy(traj_data)
-    augmented_traj_data['scene']['color_to_object_type'] = color_to_obj_id_type
-    augmented_traj_data['task'] = {'rewards': rewards, 'reward_upper_bound': sum(rewards)}
-
-    with open(augmented_json_file, 'w') as aj:
-        json.dump(augmented_traj_data, aj, sort_keys=True, indent=4)
-
-    # save video
-    images_path = os.path.join(high_res_images_dir, '*.png')
-    video_save_path = os.path.join(high_res_images_dir, 'high_res_video.mp4')
-    video_saver.save(images_path, video_save_path)
+        save_frame(env, env.last_event, root_dir)
 
     # check if number of new images is the same as the number of original images
     if args.smooth_nav and args.time_delays:
         orig_img_count = get_image_index(orig_images_dir)
-        new_img_count = get_image_index(high_res_images_dir)
-        print ("Original Image Count %d, New Image Count %d" % (orig_img_count, new_img_count))
-        if orig_img_count != new_img_count:
-            print("sequence length doesn't match\n" + high_res_images_dir + "\n")
-            fail_log.write("sequence length doesn't match\n" + high_res_images_dir + "\n")
-            fail_log.write("Original Image Count %d, New Image Count %d" % (orig_img_count, new_img_count))
+        object_meta_count = get_json_index(agent_meta_path)
+        print ("Original Image Count %d, New Image Count %d" % (orig_img_count, object_meta_count))
+        if orig_img_count != object_meta_count:
+            print("sequence length doesn't match\n" + agent_meta_path + "\n")
+            fail_log.write("sequence length doesn't match\n" + agent_meta_path + "\n")
+            fail_log.write("Original Image Count %d, New Image Count %d" % (orig_img_count, object_meta_count))
             raise Exception("WARNING: the augmented sequence length doesn't match the original")
 
 
@@ -325,10 +308,10 @@ for split in ['train/', 'valid_seen/', 'valid_unseen/']:
             if not os.path.isfile(json_file):
                 continue
             traj_list.append(json_file)
+# traj_list = ['../data/full_2.1.0/train/pick_heat_then_place_in_recep-Egg-None-Fridge-13/trial_T20190907_151643_465634/traj_data.json', '../data/full_2.1.0/train/pick_cool_then_place_in_recep-PotatoSliced-None-DiningTable-24/trial_T20190908_194409_961394/traj_data.json', '../data/full_2.1.0/train/pick_and_place_with_movable_recep-Spatula-Pan-DiningTable-28/trial_T20190907_222606_903630/traj_data.json', '../data/full_2.1.0/train/pick_cool_then_place_in_recep-AppleSliced-None-DiningTable-27/trial_T20190907_171803_405680/traj_data.json', '../data/full_2.1.0/train/pick_heat_then_place_in_recep-PotatoSliced-None-SinkBasin-14/trial_T20190910_120350_730711/traj_data.json', '../data/full_2.1.0/train/pick_cool_then_place_in_recep-LettuceSliced-None-SinkBasin-4/trial_T20190909_101847_813539/traj_data.json', '../data/full_2.1.0/train/pick_cool_then_place_in_recep-Lettuce-None-SinkBasin-23/trial_T20190908_173530_026785/traj_data.json', '../data/full_2.1.0/train/pick_and_place_with_movable_recep-LettuceSliced-Pan-DiningTable-28/trial_T20190906_232604_097173/traj_data.json', '../data/full_2.1.0/train/pick_and_place_with_movable_recep-Spoon-Bowl-SinkBasin-27/trial_T20190907_213616_713879/traj_data.json', '../data/full_2.1.0/train/pick_heat_then_place_in_recep-AppleSliced-None-SideTable-3/trial_T20190908_110347_206140/traj_data.json', '../data/full_2.1.0/train/pick_clean_then_place_in_recep-LettuceSliced-None-Fridge-11/trial_T20190918_174139_904388/traj_data.json', '../data/full_2.1.0/train/pick_cool_then_place_in_recep-PotatoSliced-None-GarbageCan-11/trial_T20190909_013637_168506/traj_data.json', '../data/full_2.1.0/train/pick_cool_then_place_in_recep-Pan-None-StoveBurner-23/trial_T20190906_215826_707811/traj_data.json', '../data/full_2.1.0/train/pick_cool_then_place_in_recep-Plate-None-Shelf-20/trial_T20190907_034714_802572/traj_data.json', '../data/full_2.1.0/train/look_at_obj_in_light-Pen-None-DeskLamp-316/trial_T20190908_061814_700195/traj_data.json', '../data/full_2.1.0/train/pick_cool_then_place_in_recep-PotatoSliced-None-CounterTop-19/trial_T20190909_053101_102010/traj_data.json', '../data/full_2.1.0/train/look_at_obj_in_light-Laptop-None-DeskLamp-319/trial_T20190908_182531_510491/traj_data.json', '../data/full_2.1.0/train/look_at_obj_in_light-Laptop-None-DeskLamp-319/trial_T20190908_182720_056041/traj_data.json', '../data/full_2.1.0/train/pick_and_place_with_movable_recep-LettuceSliced-Pot-DiningTable-21/trial_T20190907_160923_689765/traj_data.json', '../data/full_2.1.0/train/look_at_obj_in_light-Pillow-None-DeskLamp-319/trial_T20190907_224211_927258/traj_data.json', '../data/full_2.1.0/train/pick_cool_then_place_in_recep-LettuceSliced-None-GarbageCan-6/trial_T20190907_210244_406018/traj_data.json', '../data/full_2.1.0/train/pick_and_place_with_movable_recep-AppleSliced-Bowl-Fridge-26/trial_T20190908_162237_908840/traj_data.json', '../data/full_2.1.0/train/pick_and_place_simple-ToiletPaper-None-ToiletPaperHanger-407/trial_T20190909_081822_309167/traj_data.json', '../data/full_2.1.0/train/pick_and_place_with_movable_recep-Pen-Bowl-Dresser-311/trial_T20190908_170820_174380/traj_data.json', '../data/full_2.1.0/train/pick_clean_then_place_in_recep-Ladle-None-Drawer-4/trial_T20190909_161523_929674/traj_data.json', '../data/full_2.1.0/train/pick_cool_then_place_in_recep-Apple-None-Microwave-19/trial_T20190906_210805_698141/traj_data.json', '../data/full_2.1.0/train/pick_and_place_with_movable_recep-AppleSliced-Bowl-Fridge-21/trial_T20190908_054316_003433/traj_data.json', '../data/full_2.1.0/train/pick_and_place_with_movable_recep-Ladle-Bowl-SinkBasin-30/trial_T20190907_143416_683614/traj_data.json', '../data/full_2.1.0/train/pick_heat_then_place_in_recep-PotatoSliced-None-SinkBasin-23/trial_T20190907_123248_978930/traj_data.json', ]
 # random shuffle
 if args.shuffle:
     random.shuffle(traj_list)
-
 # start threads
 # run()
 threads = []
