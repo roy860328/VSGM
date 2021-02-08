@@ -1857,33 +1857,42 @@ class ThirdParty_feat(nn.Module):
         b_store_state["all_meta_data_1"]
         b_store_state["all_meta_data_2"]
         '''
-        def update(all_meta_data="all_meta_data"):
+        def update(all_meta_data="all_meta_data", horizontal_view_angle=0):
             exploration_transition_cache = b_store_state[all_meta_data]["exploration_sgg_meta_data"]
             exploration_imgs = b_store_state[all_meta_data]["exploration_imgs"]
+            agent_meta = b_store_state["agent_sgg_meta_data"]["exploration_agent_sgg_meta_data"]
             self.semantic_graph_implement.update_exploration_data_to_global_graph(
                 exploration_transition_cache,
                 env_index,
                 exploration_imgs=exploration_imgs,
+                agent_meta=agent_meta,
+                horizontal_view_angle=horizontal_view_angle,
             )
         update(all_meta_data="all_meta_data")
-        update(all_meta_data="all_meta_data_1")
-        update(all_meta_data="all_meta_data_2")
+        update(all_meta_data="all_meta_data_1", horizontal_view_angle=-90)
+        update(all_meta_data="all_meta_data_2", horizontal_view_angle=90)
 
     def store_and_get_graph_feature(self, b_store_state, frames, t, env_index, state_t_goal, state_t_instr):
         '''
         b_store_state["agent_sgg_meta_data"]["agent_sgg_meta_data"]
+        b_store_state["all_meta_data"]
+        b_store_state["all_meta_data_1"]
+        b_store_state["all_meta_data_2"]
         '''
-        def update(all_meta_data="all_meta_data", frame_index_s=0, frame_index_e=512, reset_current_graph=False):
+        def update(all_meta_data="all_meta_data", frame_index_s=0, frame_index_e=512, reset_current_graph=False, horizontal_view_angle=0):
             t_store_state = b_store_state[all_meta_data]["sgg_meta_data"][t]
             t_store_state["rgb_image"] = frames[env_index, t][frame_index_s:frame_index_e]
+            t_agent_meta = b_store_state["agent_sgg_meta_data"]["agent_sgg_meta_data"][t]
             self.semantic_graph_implement.store_data_to_graph(
                 store_state=t_store_state,
                 env_index=env_index,
                 reset_current_graph=reset_current_graph,
+                agent_meta=t_agent_meta,
+                horizontal_view_angle=horizontal_view_angle,
             )
         update(all_meta_data="all_meta_data", frame_index_s=0, frame_index_e=512, reset_current_graph=True)
-        update(all_meta_data="all_meta_data_1", frame_index_s=512, frame_index_e=1024)
-        update(all_meta_data="all_meta_data_2", frame_index_s=1024, frame_index_e=1536)
+        update(all_meta_data="all_meta_data_1", frame_index_s=512, frame_index_e=1024, horizontal_view_angle=-90)
+        update(all_meta_data="all_meta_data_2", frame_index_s=1024, frame_index_e=1536, horizontal_view_angle=90)
 
         global_graph_importent_features, global_graph_dict_objectIds_to_score = \
             self.semantic_graph_implement.chose_importent_node_feature(

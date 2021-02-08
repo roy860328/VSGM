@@ -8,6 +8,7 @@ import numpy as np
 from torch import nn
 from tensorboardX import SummaryWriter
 from tqdm import trange
+from models.utils.metric import AccuracyMetric
 
 
 not_perfect_list = [
@@ -55,18 +56,6 @@ class Module(nn.Module):
         '''
         training loop
         '''
-
-        TASK_TYPES = {1: "pick_and_place_simple",
-                      2: "look_at_obj_in_light",
-                      3: "pick_clean_then_place_in_recep",
-                      4: "pick_heat_then_place_in_recep",
-                      5: "pick_cool_then_place_in_recep",
-                      6: "pick_two_obj_and_place"}
-        task_types = []
-        for tt_id in self.config['env']['task_types']:
-            if tt_id in TASK_TYPES:
-                task_types.append(TASK_TYPES[tt_id])
-
         # args
         args = args or self.args
 
@@ -75,14 +64,9 @@ class Module(nn.Module):
         valid_seen = splits['valid_seen']
         valid_unseen = splits['valid_unseen']
 
-        train = [t for t in train for task_type in task_types if task_type in t['task']]
-        valid_seen = [t for t in valid_seen for task_type in task_types if task_type in t['task']]
-        valid_unseen = [t for t in valid_unseen for task_type in task_types if task_type in t['task']]
-
-        train = [t for t in train if not t['task'] in not_perfect_list] + [t for t in train if not t['task'] in not_perfect_list] + [t for t in train if not t['task'] in not_perfect_list]
+        train = [t for t in train if not t['task'] in not_perfect_list]
         valid_seen = [t for t in valid_seen if not t['task'] in not_perfect_list]
         valid_unseen = [t for t in valid_unseen if not t['task'] in not_perfect_list]
-
 
         # debugging: chose a small fraction of the dataset
         if self.args.dataset_fraction > 0:
@@ -100,6 +84,7 @@ class Module(nn.Module):
 
         # initialize summary writer for tensorboardX
         self.summary_writer = SummaryWriter(log_dir=args.dout)
+        self.accuracy_metric = AccuracyMetric()
 
         # dump config
         fconfig = os.path.join(args.dout, 'config.json')
@@ -111,8 +96,8 @@ class Module(nn.Module):
 
         # display dout
         print("Saving to: %s" % self.args.dout)
-        best_loss = {'train': 1e10, 'valid_seen': 1e10, 'valid_unseen': 1e10}
-        train_iter, valid_seen_iter, valid_unseen_iter = 0, 0, 0
+        import time
+        start_time = time.time()
         for epoch in trange(0, args.epoch, desc='epoch'):
             m_train = collections.defaultdict(list)
             self.train()
@@ -122,119 +107,17 @@ class Module(nn.Module):
             random.shuffle(train) # shuffle every epoch
             print("train")
             for batch, feat in self.iterate(train, args.batch):
-                out = self.forward(feat)
-                preds = self.extract_preds(out, batch, feat)
-                # p_train.update(preds)
-                loss = self.compute_loss(out, batch, feat)
-                for k, v in loss.items():
-                    ln = 'loss_' + k
-                    m_train[ln].append(v.item())
-                    self.summary_writer.add_scalar('train/' + ln, v.item(), train_iter)
-
-                # optimizer backward pass
-                optimizer.zero_grad()
-                sum_loss = sum(loss.values())
-                sum_loss.backward()
-                optimizer.step()
-
-                self.summary_writer.add_scalar('train/loss', sum_loss, train_iter)
-                sum_loss = sum_loss.detach().cpu()
-                total_train_loss.append(float(sum_loss))
-                train_iter += self.args.batch
-                '''
-                semantic
-                '''
-                self.finish_of_episode()
-
-            ## compute metrics for train (too memory heavy!)
-            # m_train = {k: sum(v) / len(v) for k, v in m_train.items()}
-            # m_train.update(self.compute_metric(p_train, train))
-            # m_train['total_loss'] = sum(total_train_loss) / len(total_train_loss)
-            # self.summary_writer.add_scalar('train/total_loss', m_train['total_loss'], train_iter)
+                pass
 
             # compute metrics for valid_seen
             print("m_valid_seen")
-            p_valid_seen, valid_seen_iter, total_valid_seen_loss, m_valid_seen = self.run_pred(valid_seen, args=args, name='valid_seen', iter=valid_seen_iter)
-            m_valid_seen.update(self.compute_metric(p_valid_seen, valid_seen))
-            m_valid_seen['total_loss'] = float(total_valid_seen_loss)
-            self.summary_writer.add_scalar('valid_seen/total_loss', m_valid_seen['total_loss'], valid_seen_iter)
+            self.run_pred(valid_seen, args=args, name='valid_seen', iter=0)
 
             # compute metrics for valid_unseen
             print("m_valid_unseen")
-            p_valid_unseen, valid_unseen_iter, total_valid_unseen_loss, m_valid_unseen = self.run_pred(valid_unseen, args=args, name='valid_unseen', iter=valid_unseen_iter)
-            m_valid_unseen.update(self.compute_metric(p_valid_unseen, valid_unseen))
-            m_valid_unseen['total_loss'] = float(total_valid_unseen_loss)
-            self.summary_writer.add_scalar('valid_unseen/total_loss', m_valid_unseen['total_loss'], valid_unseen_iter)
-
-            stats = {'epoch': epoch,
-                     'valid_seen': m_valid_seen,
-                     'valid_unseen': m_valid_unseen}
-
-            # new best valid_seen loss
-            if total_valid_seen_loss < best_loss['valid_seen']:
-                print('\nFound new best valid_seen!! Saving...')
-                fsave = os.path.join(args.dout, 'best_seen.pth')
-                torch.save({
-                    'metric': stats,
-                    'model': self.state_dict(),
-                    'optim': optimizer.state_dict(),
-                    'args': self.args,
-                    'vocab': self.vocab,
-                }, fsave)
-                fbest = os.path.join(args.dout, 'best_seen.json')
-                with open(fbest, 'wt') as f:
-                    json.dump(stats, f, indent=2)
-
-                fpred = os.path.join(args.dout, 'valid_seen.debug.preds.json')
-                #with open(fpred, 'wt') as f:
-                #    json.dump(self.make_debug(p_valid_seen, valid_seen), f, indent=2)
-                best_loss['valid_seen'] = total_valid_seen_loss
-
-            # new best valid_unseen loss
-            if total_valid_unseen_loss < best_loss['valid_unseen']:
-                print('Found new best valid_unseen!! Saving...')
-                fsave = os.path.join(args.dout, 'best_unseen.pth')
-                torch.save({
-                    'metric': stats,
-                    'model': self.state_dict(),
-                    'optim': optimizer.state_dict(),
-                    'args': self.args,
-                    'vocab': self.vocab,
-                }, fsave)
-                fbest = os.path.join(args.dout, 'best_unseen.json')
-                with open(fbest, 'wt') as f:
-                    json.dump(stats, f, indent=2)
-
-                fpred = os.path.join(args.dout, 'valid_unseen.debug.preds.json')
-                #with open(fpred, 'wt') as f:
-                #    json.dump(self.make_debug(p_valid_unseen, valid_unseen), f, indent=2)
-
-                best_loss['valid_unseen'] = total_valid_unseen_loss
-
-            # save the latest checkpoint
-            if args.save_every_epoch:
-                fsave = os.path.join(args.dout, 'net_epoch_%d.pth' % epoch)
-            else:
-                fsave = os.path.join(args.dout, 'latest.pth')
-            torch.save({
-                'metric': stats,
-                'model': self.state_dict(),
-                'optim': optimizer.state_dict(),
-                'args': self.args,
-                'vocab': self.vocab,
-            }, fsave)
-
-            ## debug action output json for train
-            # fpred = os.path.join(args.dout, 'train.debug.preds.json')
-            # with open(fpred, 'wt') as f:
-            #     json.dump(self.make_debug(p_train, train), f, indent=2)
-
-            # write stats
-            for split in stats.keys():
-                if isinstance(stats[split], dict):
-                    for k, v in stats[split].items():
-                        self.summary_writer.add_scalar(split + '/' + k, v, train_iter)
-            pprint.pprint(stats)
+            self.run_pred(valid_unseen, args=args, name='valid_unseen', iter=0)
+            print("--- %s seconds ---" % (time.time() - start_time))
+            return
 
     def run_pred(self, dev, args=None, name='dev', iter=0):
         '''
@@ -246,27 +129,9 @@ class Module(nn.Module):
         self.eval()
         total_loss = list()
         dev_iter = iter
-        for batch, feat in self.iterate(dev, args.batch):
-            out = self.forward(feat)
-            preds = self.extract_preds(out, batch, feat)
-            p_dev.update(preds)
-            loss = self.compute_loss(out, batch, feat)
-            for k, v in loss.items():
-                ln = 'loss_' + k
-                m_dev[ln].append(v.item())
-                self.summary_writer.add_scalar("%s/%s" % (name, ln), v.item(), dev_iter)
-            sum_loss = sum(loss.values())
-            self.summary_writer.add_scalar("%s/loss" % (name), sum_loss, dev_iter)
-            total_loss.append(float(sum_loss.detach().cpu()))
-            dev_iter += len(batch)
-            '''
-            semantic
-            '''
-            self.finish_of_episode()
-
-        m_dev = {k: sum(v) / len(v) for k, v in m_dev.items()}
-        total_loss = sum(total_loss) / len(total_loss)
-        return p_dev, dev_iter, total_loss, m_dev
+        with torch.no_grad():
+            for batch, feat in self.iterate(dev, args.batch):
+                pass
 
     def finish_of_episode(self):
         raise NotImplementedError()

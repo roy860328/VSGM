@@ -56,15 +56,14 @@ class Module(nn.Module):
         '''
         training loop
         '''
-
-        TASK_TYPES = {1: "pick_and_place_simple",
-                      2: "look_at_obj_in_light",
-                      3: "pick_clean_then_place_in_recep",
-                      4: "pick_heat_then_place_in_recep",
-                      5: "pick_cool_then_place_in_recep",
-                      6: "pick_two_obj_and_place"}
+        TASK_TYPES = {"1": "pick_and_place_simple",
+                      "2": "look_at_obj_in_light",
+                      "3": "pick_clean_then_place_in_recep",
+                      "4": "pick_heat_then_place_in_recep",
+                      "5": "pick_cool_then_place_in_recep",
+                      "6": "pick_two_obj_and_place"}
         task_types = []
-        for tt_id in self.config['env']['task_types']:
+        for tt_id in self.args.task_types.split(','):
             if tt_id in TASK_TYPES:
                 task_types.append(TASK_TYPES[tt_id])
 

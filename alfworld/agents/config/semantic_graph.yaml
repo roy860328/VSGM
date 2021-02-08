@@ -39,6 +39,7 @@ SCENE_GRAPH:
   NODE_OUT_FEATURE_SIZE: 2371
   
   MODEL: "gcn"
+  GraphData: "HeteGraphData"
   NORMALIZATION: False
   EMBED_TYPE: "WeightedSum"  # "WeightedSum", "SelfAttn"
   EMBED_FEATURE_SIZE: 512

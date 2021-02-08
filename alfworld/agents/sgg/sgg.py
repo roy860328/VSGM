@@ -8,6 +8,7 @@ sys.path.insert(0, os.environ['GRAPH_RCNN_ROOT'])
 from lib.scene_parser.parser import SceneParser
 from lib.scene_parser.parser import SceneParser
 from lib.scene_parser.rcnn.utils.visualize import select_top_predictions, overlay_boxes, overlay_class_names
+from torchvision.transforms import functional as F
 
 
 class SGG(SceneParser):
@@ -21,6 +22,7 @@ class SGG(SceneParser):
         self.SAVE_SGG_RESULT_PATH = cfg.MODEL.SAVE_SGG_RESULT_PATH
         if self.SAVE_SGG_RESULT and not os.path.exists(self.SAVE_SGG_RESULT_PATH):
             os.mkdir(self.SAVE_SGG_RESULT_PATH)
+        raise "check sgg labels match SceneGraph.obj_cls_name_to_features index"
 
     def predict(self, imgs, img_ids=0):
         '''
@@ -58,7 +60,7 @@ class SGG(SceneParser):
             extra_fields : 'labels', 'scores', 'logits', 'features', 'attribute_logits'
         '''
         with torch.no_grad():
-            import pdb; pdb.set_trace()
+            # import pdb; pdb.set_trace()
             if type(imgs) != torch.Tensor:
                 imgs = [Image.fromarray(imgs) for img in imgs]
                 imgs = self.transforms(imgs)
@@ -84,6 +86,7 @@ class SGG(SceneParser):
         '''
         results = []
         for i in range(len(detections)):
+            print(detections[i].get_field("labels"))
             result = {
                 "labels": detections[i].get_field("labels"),
                 "features": detections[i].get_field("features"),
@@ -105,7 +108,8 @@ class SGG(SceneParser):
         # graph-rcnn visualize_detection
         for i, prediction in enumerate(detections):
             top_prediction = select_top_predictions(prediction)
-            img = imgs[i].permute(1, 2, 0).contiguous().cpu().numpy() + np.array(self.cfg.INPUT.PIXEL_MEAN).reshape(1, 1, 3)
+            img = F.to_pil_image(imgs[i].contiguous().cpu())
+            img = np.array(img)
             result = img.copy()
             ### RuntimeError: expected device cuda:0 but got device cpu
             result = overlay_boxes(result, top_prediction)
@@ -135,7 +139,7 @@ if __name__ == '__main__':
     '''
     cfg_semantic = cfg['semantic_cfg']
     trans_MetaData = alfred_data_format.TransMetaData(cfg_semantic)
-    scenegraph = SceneGraph(cfg_semantic)
+    scenegraph = SceneGraph(cfg_semantic, trans_MetaData.object_classes)
     alfred_dataset = alfred_data_format.AlfredDataset(cfg_semantic)
     '''
     sgg_cfg
@@ -145,8 +149,8 @@ if __name__ == '__main__':
     detector.eval()
     detector.to(device='cuda')
 
-    for i in range(10):
+    for i in range(100):
         img, target, idx = alfred_dataset[i]
         img = img.unsqueeze(0)
         sgg_results = detector.predict(img, idx)
-        scenegraph.add_local_graph_to_global_graph(img, sgg_results[0])
+        # scenegraph.add_local_graph_to_global_graph(img, sgg_results[0])

@@ -16,7 +16,7 @@ ic(1)
 ```
 
 
-# Run Model
+# Pre setting
 
 ## ALFRED_ROOT
 ```
@@ -34,7 +34,7 @@ SET GRAPH_ANALYSIS=D:\alfred\graph_analysis
 SET GRAPH_RCNN_ROOT=D:\alfred\alfworld\agents\sgg\graph-rcnn.pytorch
 ```
 
-## gen 
+## gen data
 1. raw_images, sgg_meta, exploration_meta
 ```
 cd alfred/gen
@@ -46,9 +46,9 @@ python scripts/augment_meta_data_trajectories.py --data_path ../data/full_2.1.0/
 python scripts/augment_trajectories_third_party_camera_frames210.py --data_path ../data/full_2.1.0/ --num_threads 10 --smooth_nav --time_delays
 python scripts/augment_meta_data_trajectories_third_party_camera_frames.py --data_path ../data/full_2.1.0/ --num_threads 10 --smooth_nav --time_delays
 ```
-3. extract exploration img to resnet feature
+3. extract exploration img to resnet feature to 'feat_third_party_img_and_exploration.pt'
 ```
-python models/utils/extract_resnet.py --data data/full_2.1.0 --batch 32 --gpu --visual_model resnet18 --filename feat_exploration_conv.pt --img_folder exploration_meta
+python models/utils/extract_resnet.py --data data/full_2.1.0 --batch 32 --gpu --visual_model resnet18 --img_folder high_res_images,raw_images_1,raw_images_2,exploration_meta,exploration_meta_1,exploration_meta_2 --keyname feat_conv,feat_conv_1,feat_conv_2,feat_exploration_conv,feat_exploration_conv_1,feat_exploration_conv_2
 ```
 4. get event.metadata['agent']
 cameraHorizon, position, rotation
@@ -61,7 +61,20 @@ agent
 object
 "name": "Mug_a12c171b(Clone)copy24", "position": {"x": -0.6516613, "y": 0.8507198, "z": -0.6635949}, "rotation": {"x": 0.00138341438, "y": 0.000116876137, "z": -0.0008958757}
 
-## Config
+5. merge thirdparty meta to 'third_party_all_meta_data.json'
+```
+CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/memory_semantic_graph.yaml --data data/full_2.1.0/ --model merge_meta_im --dout exp/just_merge_meta --splits data/splits/oct21.json --batch 20 --gpu
+```
+data/full_2.1.0/train/pick_cool_then_place_in_recep-Apple-None-Microwave-19/trial_T20190906_210805_698141/sgg_meta/000000310.json
+data/full_2.1.0/train/pick_heat_then_place_in_recep-Potato-None-Fridge-27/trial_T20190908_143748_027076/agent_meta/000000277.json
+data/full_2.1.0/train/pick_and_place_with_movable_recep-AppleSliced-Bowl-Fridge-26/trial_T20190908_162237_908840/agent_meta/000000667.json
+data/full_2.1.0/train/pick_and_place_with_movable_recep-Spoon-Cup-SinkBasin-23/trial_T20190908_190304_977742/agent_meta/000000149.json
+data/full_2.1.0/train/pick_heat_then_place_in_recep-Potato-None-Fridge-27/trial_T20190908_143748_027076/agent_meta/000000150.json
+data/full_2.1.0/train/pick_cool_then_place_in_recep-PotatoSliced-None-GarbageCan-11/trial_T20190909_013637_168506/sgg_meta/000000366.json
+data/full_2.1.0/train/pick_cool_then_place_in_recep-AppleSliced-None-DiningTable-27/trial_T20190907_171803_405680/sgg_meta/000000216.json
+data/full_2.1.0/train/pick_and_place_with_movable_recep-AppleSliced-Bowl-Fridge-21/trial_T20190908_054316_003433/agent_meta/000000290.json
+
+## Config SETTING
 ATTRIBUTE_FEATURE_SIZE: 26   # 23 + 2 (ANGLE_OF_VIEWS) + 1 (unique_obj_index)
 
 ## MOCA pre-download eval maskrcnn model
@@ -70,8 +83,12 @@ cd $ALFRED_ROOT
 wget https://alfred-colorswap.s3.us-east-2.amazonaws.com/weight_maskrcnn.pt
 ```
 
-```
-```
+## Scene graph generation
+Read $ALFWORLD_ROOT/agents/sgg/TRAIN_SGG.md
+Read $GRAPH_RCNN_ROOT/README.md
+
+
+# Run Model
 
 ## MOCA
 
@@ -119,7 +136,7 @@ CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/fast_
 ```
 ## eval sub goal
 ```
-CUDA_VISIBLE_DEVICES=0 python models/eval_thirdparty/eval_semantic.py models/config/fast_epoch_base.yaml --semantic_config_file models/config/importent_semantic_graph_softmax_gcn_dec.yaml --model_path exp/thirdpartyview_softmax/best_seen.pth --model seq2seq_im_thirdpartyview --data data/full_2.1.0/ --eval_split valid_seen --gpu --subgoals GotoLocation,PickupObject
+CUDA_VISIBLE_DEVICES=0 python models/eval_thirdparty/eval_semantic.py models/config/fast_epoch_base.yaml --semantic_config_file models/config/importent_semantic_graph_softmax_gcn_dec.yaml --model_path exp/thirdpartyview_softmax/best_seen.pth --model seq2seq_im_thirdpartyview --data data/full_2.1.0/ --eval_split valid_seen --gpu --subgoals GotoLocation,PickupObject --task_types 1,2
 ```
 
 ---
@@ -243,24 +260,6 @@ python models/train/train_graph.py --data data/full_2.1.0/ --model fast_embeddin
 ### Pretain HetG + graph attention + fasttext + contrastive
 ```
 python models/train/train_parallel.py --data data/full_2.1.0/ --model contrastive_pretrain_im --dout exp/model,SimCLR_{model},heterograph__attention_,name,pm_and_subgoals_01 --splits data/splits/oct21.json --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --HETAttention --dgcnout 128 --demb 300 --dframe 1000 --dhid 64 --HetLowSg --gpu --gpu_id 0 --DataParallelDevice 0 --DataParallelDevice 1
-```
-
-# Semantic graph
-## generate Semantic graph data
-```
-cd alfred/gen
-python scripts/augment_meta_data_trajectories.py --data_path ../data/full_2.1.0/ --num_threads 4 --smooth_nav --time_delays
-```
-
-## train Semantic graph
-```
-python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/memory_semantic_graph.yaml --data data/full_2.1.0/ --model seq2seq_im_semantic --dout exp/memory{model},name,pm_and_subgoals_01 --splits data/splits/oct21.json --batch 2 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --HETAttention --dgcnout 128 --demb 300 --dframe 1000 --dhid 64 --HetLowSg --gpu --gpu_id 0 --DataParallelDevice 0 --DataParallelDevice 1
-```
-
-## MOCA + Semantic graph
-https://github.com/gistvision/moca
-```
-CUDA_VISIBLE_DEVICES=1 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/memory_semantic_graph.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_semantic --dout exp/moca_memory{model},name,pm_and_subgoals_01 --splits data/splits/oct21.json --batch 5 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --model_hete_graph --demb 100 --dhid 256 --gpu
 ```
 
 # Eval

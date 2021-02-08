@@ -7,44 +7,39 @@ import collections
 from torch import nn
 from torch.nn import functional as F
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
-from model.seq2seq_im_moca_semantic import Module as seq2seq_im_moca_semantic
+from model.merge_meta import Module as merge_meta
 import json
 import glob
 import gen.constants as constants
 classes = [0] + constants.OBJECTS + ['AppleSliced', 'ShowerCurtain', 'TomatoSliced', 'LettuceSliced', 'Lamp', 'ShowerHead', 'EggCracked', 'BreadSliced', 'PotatoSliced', 'Faucet']
 
 
-class Module(seq2seq_im_moca_semantic):
+class Module(merge_meta):
 
     def __init__(self, args, vocab):
         '''
         Seq2Seq agent
         '''
-        super().__init__(args, vocab, importent_nodes=True)
-        IMPORTENT_NDOES_FEATURE = self.config['semantic_cfg'].SCENE_GRAPH.EMBED_FEATURE_SIZE
-        decoder = vnn.ThirdParty_feat
-        # else:
-        #     decoder = vnn.ImportentNodes
-        self.dec = decoder(self.emb_action_low, args.dframe, 2*args.dhid,
-                           self.semantic_graph_implement, IMPORTENT_NDOES_FEATURE,
-                           pframe=args.pframe,
-                           attn_dropout=args.attn_dropout,
-                           hstate_dropout=args.hstate_dropout,
-                           actor_dropout=args.actor_dropout,
-                           input_dropout=args.input_dropout,
-                           teacher_forcing=args.dec_teacher_forcing)
+        super().__init__(args, vocab)
+        self.config = args.config_file
+        self.config['general']['training']['batch_size'] = self.args.batch
+        # for choose node attention input size
+        self.config['general']['model']['block_hidden_dim'] = 2*args.dhid
+        self.root_path = os.getcwd()
+        self.feat_pt = 'feat_third_party_img_and_exploration.pt'
 
-        self.merge_feat_list = ['feat_conv', 'feat_conv_1', 'feat_conv_2',
-                                'feat_exploration_conv', 'feat_exploration_conv_1',
-                                'feat_exploration_conv_2']
-        self.feat_pt = 'feat_merge.pt'
+        # internal states
+        self.state_t = None
+        self.e_t = None
+        self.test_mode = False
+        self.max_subgoals = 25
 
     def _load_meta_data(self, root, list_img_traj, im, device):
         def sequences_to_one(META_DATA_FILE="all_meta_data.json",
                              SGG_META="sgg_meta",
                              EXPLORATION_META="exploration_meta"):
             # load
-            print("_load with path", root)
+            # print("_load with path", root)
             meta_datas = {
                 "sgg_meta_data": [],
                 "exploration_sgg_meta_data": [],
@@ -84,7 +79,7 @@ class Module(seq2seq_im_moca_semantic):
                                    EXPLORATION_META="exploration_agent_meta",
                                    len_meta_data=-1):
             # load
-            print("_load with path", root)
+            # print("_load with path", root)
             all_meta_data = {
                 "agent_sgg_meta_data": [],
                 "exploration_agent_sgg_meta_data": [],
@@ -108,7 +103,6 @@ class Module(seq2seq_im_moca_semantic):
             n_meta_gap = len(all_meta_data["agent_sgg_meta_data"])-len_meta_data
             for _ in range(n_meta_gap):
                 print("{}.gap num {}".format(root, n_meta_gap))
-                raise
                 all_meta_data["agent_sgg_meta_data"].append(meta_data)
             exploration_path = os.path.join(root, EXPLORATION_META, "*.json")
             exploration_file_paths = glob.glob(exploration_path)
@@ -153,12 +147,12 @@ class Module(seq2seq_im_moca_semantic):
             third_party_all_meta["all_meta_data_2"] = all_meta_data_2
             with open(third_party_all_meta_data_path, 'w') as f:
                 json.dump(third_party_all_meta, f)
-        frame = im["feat_exploration_conv"].to(device)
-        third_party_all_meta["all_meta_data"]["exploration_imgs"] = frame
-        frame = im["feat_exploration_conv_1"].to(device)
-        third_party_all_meta["all_meta_data_1"]["exploration_imgs"] = frame
-        frame = im["feat_exploration_conv_2"].to(device)
-        third_party_all_meta["all_meta_data_2"]["exploration_imgs"] = frame
+        # frame = im["feat_exploration_conv"].to(device)
+        # third_party_all_meta["all_meta_data"]["exploration_imgs"] = frame
+        # frame = im["feat_exploration_conv_1"].to(device)
+        # third_party_all_meta["all_meta_data_1"]["exploration_imgs"] = frame
+        # frame = im["feat_exploration_conv_2"].to(device)
+        # third_party_all_meta["all_meta_data_2"]["exploration_imgs"] = frame
         return third_party_all_meta
 
     def featurize(self, batch, load_mask=True, load_frames=True):
@@ -229,26 +223,26 @@ class Module(seq2seq_im_moca_semantic):
             # load Resnet features from disk
             if load_frames and not self.test_mode:
                 root = self.get_task_root(ex)
-                im = torch.load(os.path.join(root, self.feat_pt))
+                im = None
                 all_meta_data = self._load_meta_data(root, ex["images"], im, device)
                 feat['all_meta_datas'].append(all_meta_data)  # add stop frame
 
+                # im = torch.load(os.path.join(root, self.feat_pt))
+                # num_low_actions = len(ex['plan']['low_actions'])
+                # num_feat_frames = im['feat_conv'].shape[0]
 
-                num_low_actions = len(ex['plan']['low_actions'])
-                num_feat_frames = im['feat_conv'].shape[0]
-
-                if num_low_actions != num_feat_frames:
-                    keep = [None] * len(ex['plan']['low_actions'])
-                    for i, d in enumerate(ex['images']):
-                        # only add frames linked with low-level actions (i.e. skip filler frames like smooth rotations and dish washing)
-                        if keep[d['low_idx']] is None:
-                            keep[d['low_idx']] = \
-                                torch.cat([im['feat_conv'][i], im['feat_conv_1'][i], im['feat_conv_2'][i]], dim=0)
-                    keep.append(keep[-1])  # stop frame
-                    feat['frames'].append(torch.stack(keep, dim=0))
-                else:
-                    frame = torch.cat([im['feat_conv'], im['feat_conv_1'], im['feat_conv_2']], dim=1)
-                    feat['frames'].append(torch.cat([frame, frame[-1].unsqueeze(0)], dim=0))  # add stop frame
+                # if num_low_actions != num_feat_frames:
+                #     keep = [None] * len(ex['plan']['low_actions'])
+                #     for i, d in enumerate(ex['images']):
+                #         # only add frames linked with low-level actions (i.e. skip filler frames like smooth rotations and dish washing)
+                #         if keep[d['low_idx']] is None:
+                #             keep[d['low_idx']] = \
+                #                 torch.cat([im['feat_conv'][i], im['feat_conv_1'][i], im['feat_conv_2'][i]], dim=0)
+                #     keep.append(keep[-1])  # stop frame
+                #     feat['frames'].append(torch.stack(keep, dim=0))
+                # else:
+                #     frame = torch.cat([im['feat_conv'], im['feat_conv_1'], im['feat_conv_2']], dim=1)
+                #     feat['frames'].append(torch.cat([frame, frame[-1].unsqueeze(0)], dim=0))  # add stop frame
 
         # tensorization and padding
         for k, v in feat.items():
@@ -282,6 +276,16 @@ class Module(seq2seq_im_moca_semantic):
                 feat[k] = pad_seq
 
         return feat
+
+    def serialize_lang_action(self, feat):
+        '''
+        append segmented instr language and low-level actions into single sequences
+        '''
+        is_serialized = not isinstance(feat['num']['lang_instr'][0], list)
+        if not is_serialized:
+            feat['num']['lang_instr'] = [word for desc in feat['num']['lang_instr'] for word in desc]
+            if not self.test_mode:
+                feat['num']['action_low'] = [a for a_group in feat['num']['action_low'] for a in a_group]
 
     def forward(self, feat, max_decode=300):
         cont_lang_goal, enc_lang_goal = self.encode_lang(feat)

@@ -41,67 +41,6 @@ vision_dagger:
 object_classes = "__background__" + objects
 predicate_to_ind = "__background__" + relations
 
-
-## SGG train object relation attribute
-### 1. Get SGG Train Data
-$ALFWORLD_ROOT/DATASET_SGG.md
-
-### 2. Train SGG
-```
-cd graph-rcnn.pytorch/
-python -m torch.distributed.launch --nproc_per_node=2 main.py --config-file configs/attribute.yaml
-```
-
-### SGG result
-```
-python main.py --config-file configs/attribute.yaml --inference --resume 99999 --visualize
-```
-
-## Semantic Global Graph
-### Oracle - Test semantic graph
-```
-cd $ALFWORLD_ROOT/agents/
-python semantic_graph/semantic_graph.py config/semantic_graph_base.yaml --semantic_config_file config/oracle_semantic_graph.yaml
-``` 
-### Oracle - Train with semantic graph dagger
-```
-cd $ALFWORLD_ROOT/agents/
-python dagger/train_sgg_vision_dagger.py config/semantic_graph_base.yaml --semantic_config_file config/oracle_semantic_graph.yaml
-```
-
-### SGG - Test model OK
-Change $GRAPH_RCNN_ROOT/configs/attribute.yaml parameter
-1. Pretrain model PATH: MODEL.WEIGHT_IMG 
-
-```
-python sgg/sgg.py config/semantic_graph_base.yaml --semantic_config_file config/semantic_graph.yaml --sgg_config_file $GRAPH_RCNN_ROOT/configs/attribute.yaml
-```
-- SGG result attribute
-"labels"
-"features"
-"obj_relations_idx_pairs"
-"obj_relations_scores"
-"attribute_logits"
-
-#### ERROR
-attribute.yaml setting different with training 
-```
-load_state_dict
-    self.__class__.__name__, "\n\t".join(error_msgs)))
-RuntimeError: Error(s) in loading state_dict for SGG:
-        Unexpected key(s) in state_dict: "rel_heads.rel_predictor.pred_feature_extractor.head.layer4.0.downsample.0.weight", "rel_heads.rel_predictor.pred_feature_extractor.head.layer4.0.downsample.1.weight", "rel_heads.rel_predictor.pred_feature_extractor.head.layer4.0.downsample.1.bias"
-```
-
-### Train with semantic graph dagger
-- ANALYZE_GRAPH
-```
-_C.GENERAL.ANALYZE_GRAPH = True
-dict_ANALYZE_GRAPH = {
-    "score": score.clone().detach().to('cpu'),
-    "sort_nodes_index": sort_nodes_index.clone().detach().to('cpu'),
-}
-```
-
 ## Visual Semantic Train Data
 ### Get train_sgg_vision_dagger_without_env training data
 1. Get training data. use_exploration_frame_feats=False

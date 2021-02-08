@@ -23,10 +23,10 @@ class Module(seq2seq_im_moca_semantic):
             decoder = vnn.GANDec
         elif "DECODER" in self.config['semantic_cfg'].GENERAL and self.config['semantic_cfg'].GENERAL.DECODER == "softmax_gcn_Dec":
             decoder = vnn.softmax_gcn_Dec
-        elif "PRIORI" in self.config['semantic_cfg'].SCENE_GRAPH and self.config['semantic_cfg'].SCENE_GRAPH.PRIORI:
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "PRIORI":
             decoder = vnn.PrioriDec
         else:
-            decoder = vnn.ImportentNodesDynamicNode
+            raise NotImplementedError()
         # else:
         #     decoder = vnn.ImportentNodes
         self.dec = decoder(self.emb_action_low, args.dframe, 2*args.dhid,

@@ -272,6 +272,7 @@ class SceneGraph(object):
         self.isORACLE = cfg.SCENE_GRAPH.ORACLE
         self.GPU = cfg.SCENE_GRAPH.GPU
         self.GRAPH_RESULT_PATH = cfg.SCENE_GRAPH.GRAPH_RESULT_PATH
+        self.USE_OTHER_RELATION = cfg.SCENE_GRAPH.USE_OTHER_RELATION
         self.ANGLE_OF_VIEWS = cfg.SCENE_GRAPH.ANGLE_OF_VIEWS
         # vision
         self.VISION_FEATURE_SIZE = cfg.SCENE_GRAPH.VISION_FEATURE_SIZE
@@ -517,12 +518,19 @@ class SceneGraph(object):
                               current_state_graph_current_frame_obj_cls_to_node_index,
                               add_relation_anyway=True
                               )
-        self.add_other_relation(self.global_graph,
-                                global_graph_current_frame_obj_cls_to_node_index,
-                                obj_relations
-                                )
+        if self.USE_OTHER_RELATION:
+            self.add_other_relation(self.global_graph,
+                                    global_graph_current_frame_obj_cls_to_node_index,
+                                    obj_relations
+                                    )
+        else:
+            self.add_adj_relation(self.global_graph,
+                                  global_graph_current_frame_obj_cls_to_node_index,
+                                  add_relation_anyway=False
+                                  )
 
     def add_local_graph_to_global_graph(self, img, sgg_results, reset_current_graph=True):
+        raise "check sgg labels match SceneGraph.obj_cls_name_to_features index"
         self.init_current_state_data()
         current_frame_obj_cls_to_node_index = []
         obj_clses = sgg_results["labels"].numpy().astype(int)

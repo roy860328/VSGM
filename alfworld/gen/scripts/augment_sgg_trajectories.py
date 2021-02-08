@@ -138,9 +138,7 @@ def save_images_in_events(events, root_dir):
         save_image(event, root_dir)
 
 
-def clear_and_create_dir(path):
-    # if os.path.exists(path):
-    #     shutil.rmtree(path)
+def create_dir(path):
     if not os.path.exists(path):
         os.makedirs(path)
 
@@ -211,10 +209,10 @@ def augment_traj(env, json_file):
     meta_dir = os.path.join(root_dir, META_FOLDER)
     sgg_meta_dir = os.path.join(root_dir, SGG_META_FOLDER)
 
-    clear_and_create_dir(imgs_dir)
-    clear_and_create_dir(mask_dir)
-    clear_and_create_dir(meta_dir)
-    clear_and_create_dir(sgg_meta_dir)
+    create_dir(imgs_dir)
+    create_dir(mask_dir)
+    create_dir(meta_dir)
+    create_dir(sgg_meta_dir)
 
     explore_scene(env, traj_data, root_dir)
 

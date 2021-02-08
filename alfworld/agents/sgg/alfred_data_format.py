@@ -21,18 +21,26 @@ class TransMetaData():
         super(TransMetaData, self).__init__()
         self.cfg = cfg
         self.transforms = parser_scene.get_transform(cfg, train=True)
-        # para
+        # ['__background__', 'AlarmClock', 'Apple', 'AppleSliced', 'ArmChair', 'BaseballBat', 'BasketBall', 'Bathtub', 'BathtubBasin', 'Bed', 'Book', 'Bowl', 'Box', 'Bread', 'BreadSliced', 'ButterKnife', 'CD', 'Cabinet', 'Candle', 'Cart', 'CellPhone', 'Cloth', 'CoffeeMachine', 'CoffeeTable', 'CounterTop', 'CreditCard', 'Cup', 'Desk', 'DeskLamp', 'DiningTable', 'DishSponge', 'Drawer', 'Dresser', 'Egg', 'Faucet', 'FloorLamp', 'Fork', 'Fridge', 'GarbageCan', 'Glassbottle', 'HandTowel', 'HandTowelHolder', 'HousePlant', 'Kettle', 'KeyChain', 'Knife', 'Ladle', 'Laptop', 'LaundryHamper', 'LaundryHamperLid', 'Lettuce', 'LettuceSliced', 'LightSwitch', 'Microwave', 'Mug', 'Newspaper', 'Ottoman', 'PaintingHanger', 'Pan', 'PaperTowel', 'PaperTowelRoll', 'Pen', 'Pencil', 'PepperShaker', 'Pillow', 'Plate', 'Plunger', 'Pot', 'Potato', 'PotatoSliced', 'RemoteControl', 'Safe', 'SaltShaker', 'ScrubBrush', 'Shelf', 'ShowerDoor', 'SideTable', 'Sink', 'SinkBasin', 'SoapBar', 'SoapBottle', 'Sofa', 'Spatula', 'Spoon', 'SprayBottle', 'Statue', 'StoveBurner', 'StoveKnob', 'TVStand', 'TeddyBear', 'Television', 'TennisRacket', 'TissueBox', 'Toaster', 'Toilet', 'ToiletPaper', 'ToiletPaperHanger', 'ToiletPaperRoll', 'Tomato', 'TomatoSliced', 'Towel', 'TowelHolder', 'Vase', 'Watch', 'WateringCan', 'WineBottle']
         self.object_classes = parser_scene.get_object_classes(cfg.ALFREDTEST.object_types)
         self.object_classes.insert(0, '__background__')
-        ''' graph-rcnn need '''
+        '''
+        graph-rcnn need
+        '''
+        # {'__background__': 0, 'AlarmClock': 1, 'Apple': 2, 'AppleSliced': 3, 'ArmChair': 4, 'BaseballBat': 5, 'BasketBall': 6, 'Bathtub': 7, 'BathtubBasin': 8, 'Bed': 9, 'Book': 10, 'Bowl': 11, 'Box': 12, 'Bread': 13, 'BreadSliced': 14, 'ButterKnife': 15, 'CD': 16, 'Cabinet': 17, 'Candle': 18, 'Cart': 19, 'CellPhone': 20, 'Cloth': 21, 'CoffeeMachine': 22, 'CoffeeTable': 23, 'CounterTop': 24, 'CreditCard': 25, 'Cup': 26, 'Desk': 27, 'DeskLamp': 28, 'DiningTable': 29, 'DishSponge': 30, 'Drawer': 31, 'Dresser': 32, 'Egg': 33, 'Faucet': 34, 'FloorLamp': 35, 'Fork': 36, 'Fridge': 37, 'GarbageCan': 38, 'Glassbottle': 39, 'HandTowel': 40, 'HandTowelHolder': 41, 'HousePlant': 42, 'Kettle': 43, 'KeyChain': 44, 'Knife': 45, 'Ladle': 46, 'Laptop': 47, 'LaundryHamper': 48, 'LaundryHamperLid': 49, 'Lettuce': 50, 'LettuceSliced': 51, 'LightSwitch': 52, 'Microwave': 53, 'Mug': 54, 'Newspaper': 55, 'Ottoman': 56, 'PaintingHanger': 57, 'Pan': 58, 'PaperTowel': 59, 'PaperTowelRoll': 60, 'Pen': 61, 'Pencil': 62, 'PepperShaker': 63, 'Pillow': 64, 'Plate': 65, 'Plunger': 66, 'Pot': 67, 'Potato': 68, 'PotatoSliced': 69, 'RemoteControl': 70, 'Safe': 71, 'SaltShaker': 72, 'ScrubBrush': 73, 'Shelf': 74, 'ShowerDoor': 75, 'SideTable': 76, 'Sink': 77, 'SinkBasin': 78, 'SoapBar': 79, 'SoapBottle': 80, 'Sofa': 81, 'Spatula': 82, 'Spoon': 83, 'SprayBottle': 84, 'Statue': 85, 'StoveBurner': 86, 'StoveKnob': 87, 'TVStand': 88, 'TeddyBear': 89, 'Television': 90, 'TennisRacket': 91, 'TissueBox': 92, 'Toaster': 93, 'Toilet': 94, 'ToiletPaper': 95, 'ToiletPaperHanger': 96, 'ToiletPaperRoll': 97, 'Tomato': 98, 'TomatoSliced': 99, 'Towel': 100, 'TowelHolder': 101, 'Vase': 102, 'Watch': 103, 'WateringCan': 104, 'WineBottle': 105}
         self.class_to_ind = parser_scene.get_dict_class_to_ind(self.object_classes)
+        # ['__background__', 'AlarmClock', 'Apple', 'AppleSliced', 'ArmChair', 'BaseballBat', 'BasketBall', 'Bathtub', 'BathtubBasin', 'Bed', 'Book', 'Bowl', 'Box', 'Bread', 'BreadSliced', 'ButterKnife', 'CD', 'Cabinet', 'Candle', 'Cart', 'CellPhone', 'Cloth', 'CoffeeMachine', 'CoffeeTable', 'CounterTop', 'CreditCard', 'Cup', 'Desk', 'DeskLamp', 'DiningTable', 'DishSponge', 'Drawer', 'Dresser', 'Egg', 'Faucet', 'FloorLamp', 'Fork', 'Fridge', 'GarbageCan', 'Glassbottle', 'HandTowel', 'HandTowelHolder', 'HousePlant', 'Kettle', 'KeyChain', 'Knife', 'Ladle', 'Laptop', 'LaundryHamper', 'LaundryHamperLid', 'Lettuce', 'LettuceSliced', 'LightSwitch', 'Microwave', 'Mug', 'Newspaper', 'Ottoman', 'PaintingHanger', 'Pan', 'PaperTowel', 'PaperTowelRoll', 'Pen', 'Pencil', 'PepperShaker', 'Pillow', 'Plate', 'Plunger', 'Pot', 'Potato', 'PotatoSliced', 'RemoteControl', 'Safe', 'SaltShaker', 'ScrubBrush', 'Shelf', 'ShowerDoor', 'SideTable', 'Sink', 'SinkBasin', 'SoapBar', 'SoapBottle', 'Sofa', 'Spatula', 'Spoon', 'SprayBottle', 'Statue', 'StoveBurner', 'StoveKnob', 'TVStand', 'TeddyBear', 'Television', 'TennisRacket', 'TissueBox', 'Toaster', 'Toilet', 'ToiletPaper', 'ToiletPaperHanger', 'ToiletPaperRoll', 'Tomato', 'TomatoSliced', 'Towel', 'TowelHolder', 'Vase', 'Watch', 'WateringCan', 'WineBottle']
         self.ind_to_classes = sorted(self.class_to_ind, key=lambda k:
                                      self.class_to_ind[k])
+        # ['__background__', '__background__', 'AlarmClock', 'Apple', 'AppleSliced', 'ArmChair', 
+        self.ind_to_classes.insert(0, '__background__')
+        ic(self.ind_to_classes)
         # cfg.ind_to_class = self.ind_to_classes
         self.predicate_to_ind = parser_scene.get_dict_predicate_to_ind()
         self.predicate_to_ind['__background__'] = 0
         self.ind_to_predicates = sorted(self.predicate_to_ind, key=lambda k:
                                         self.predicate_to_ind[k])
+        ic(self.ind_to_predicates)
 
     def trans_object_meta_data_to_relation_and_attribute(self, data_obj_relation_attribute, boxes_id=None, boxes_labels=None, agent_meta=None, horizontal_view_angle=0):
         if boxes_id is None:
@@ -43,9 +51,8 @@ class TransMetaData():
                     class_idx = self.object_classes.index(obj_relation_attribute["objectType"])
                     boxes_labels.append(class_idx)
         obj_relations, obj_relation_triplets, obj_attribute, obj_angle_of_view = parser_scene.transfer_object_meta_data_to_relation_and_attribute(
-            boxes_id, data_obj_relation_attribute, horizontal_view_angle, agent_meta=agent_meta)
+            boxes_id, data_obj_relation_attribute, horizontal_view_angle, agent_meta)
         '''
-        {
          'pred_labels': array([[0., 0., 0., 0., 0., 0., 0., 0.],
                                [0., 0., 0., 0., 0., 0., 0., 0.],
                                [0., 1., 0., 0., 1., 0., 0., 1.],
@@ -128,7 +135,6 @@ class AlfredDataset(Dataset):
         self.ind_to_classes = self.trans_meta_data.ind_to_classes
         self.object_classes = self.trans_meta_data.object_classes
         self.class_to_ind = self.trans_meta_data.class_to_ind
-        self.ind_to_classes = self.trans_meta_data.ind_to_classes
         # cfg.ind_to_class = self.ind_to_classes
         self.predicate_to_ind = self.trans_meta_data.predicate_to_ind
         self.ind_to_predicates = self.trans_meta_data.ind_to_predicates

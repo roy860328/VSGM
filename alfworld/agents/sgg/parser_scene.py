@@ -39,24 +39,29 @@ ATTRIBUTE = \
      'isMoving']
 NUM_ATTRIBUTE = len(ATTRIBUTE)
 print('NUM_ATTRIBUTE: ', NUM_ATTRIBUTE)
-print('ALL_DETECTOR: ', len(ALL_DETECTOR) + 1)
+print('ALL_DETECTOR: ', len(ALL_DETECTOR))
+print('ALL_DETECTOR + background: ', len(ALL_DETECTOR) + 1)
 
 
 def get_object_classes(object_type):
     if object_type == "objects":
+        # 73
         return OBJECTS_DETECTOR
     elif object_type == "ori_objects":
+        # 108
         return OBJECTS
     elif object_type == "receptacles":
+        # 32
         return STATIC_RECEPTACLES
     else:
+        # 105
         return ALL_DETECTOR
 
 
 def get_dict_class_to_ind(classes, ):
     class_to_ind = {}
     for ind, label in enumerate(classes):
-        class_to_ind[label] = ind+1
+        class_to_ind[label] = ind
     return class_to_ind
 
 
@@ -140,7 +145,7 @@ def transfer_mask_semantic_to_bbox_label(mask, color_to_object, object_classes, 
     return np.array(masks), np.array(boxes), np.array(labels), boxes_id
 
 
-def transfer_object_meta_data_to_relation_and_attribute(boxes_id, data_obj_relation_attribute, horizontal_view_angle, agent_meta=None):
+def transfer_object_meta_data_to_relation_and_attribute(boxes_id, data_obj_relation_attribute, horizontal_view_angle, agent_meta):
     # relation & attribute
     obj_relations, obj_relation_triplets, obj_attributes, obj_angle_of_view = [], [], [], []
     obj_relations = np.zeros((len(boxes_id), len(boxes_id)))
