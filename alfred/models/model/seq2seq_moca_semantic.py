@@ -108,6 +108,10 @@ class Module(nn.Module):
 
         # optimizer
         optimizer = optimizer or torch.optim.Adam(self.parameters(), lr=args.lr)
+        # for name, param in self.named_parameters():
+        #     print(name)
+        #     print(param.requires_grad)
+        # raise
 
         # display dout
         print("Saving to: %s" % self.args.dout)
@@ -157,16 +161,20 @@ class Module(nn.Module):
             # compute metrics for valid_seen
             print("m_valid_seen")
             p_valid_seen, valid_seen_iter, total_valid_seen_loss, m_valid_seen = self.run_pred(valid_seen, args=args, name='valid_seen', iter=valid_seen_iter)
-            m_valid_seen.update(self.compute_metric(p_valid_seen, valid_seen))
+            dict_metric = self.compute_metric(p_valid_seen, valid_seen)
+            m_valid_seen.update(dict_metric)
             m_valid_seen['total_loss'] = float(total_valid_seen_loss)
             self.summary_writer.add_scalar('valid_seen/total_loss', m_valid_seen['total_loss'], valid_seen_iter)
+            self.summary_writer.add_scalar('valid_seen/action_low_f1', dict_metric['action_low_f1'], valid_seen_iter)
 
             # compute metrics for valid_unseen
             print("m_valid_unseen")
             p_valid_unseen, valid_unseen_iter, total_valid_unseen_loss, m_valid_unseen = self.run_pred(valid_unseen, args=args, name='valid_unseen', iter=valid_unseen_iter)
-            m_valid_unseen.update(self.compute_metric(p_valid_unseen, valid_unseen))
+            dict_metric = self.compute_metric(p_valid_unseen, valid_unseen)
+            m_valid_unseen.update(dict_metric)
             m_valid_unseen['total_loss'] = float(total_valid_unseen_loss)
             self.summary_writer.add_scalar('valid_unseen/total_loss', m_valid_unseen['total_loss'], valid_unseen_iter)
+            self.summary_writer.add_scalar('valid_unseen/action_low_f1', dict_metric['action_low_f1'], valid_seen_iter)
 
             stats = {'epoch': epoch,
                      'valid_seen': m_valid_seen,

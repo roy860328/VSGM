@@ -64,6 +64,7 @@ class Module(Base):
         # paths
         self.root_path = os.getcwd()
         self.feat_pt = 'feat_conv.pt'
+        self.feat_pt = 'feat_third_party_img_and_exploration.pt'
 
         # params
         self.max_subgoals = 25
@@ -145,6 +146,9 @@ class Module(Base):
                 root = self.get_task_root(ex)
 
                 im = torch.load(os.path.join(root, self.feat_pt))
+                print(os.path.join(root, self.feat_pt))
+                print(im.keys())
+                im = im["feat_conv"]
 
                 num_low_actions = len(ex['plan']['low_actions'])
                 num_feat_frames = im.shape[0]

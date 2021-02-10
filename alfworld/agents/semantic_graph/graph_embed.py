@@ -39,16 +39,20 @@ class WeightedSum(nn.Module):
 
 class SelfAttn(nn.Module):
 
-    def __init__(self, cfg):
+    def __init__(self, INPUT_FEATURE_SIZE, EMBED_FEATURE_SIZE, NUM_CHOSE_NODE):
         super().__init__()
-        self.node_feature_size = cfg.SCENE_GRAPH.NODE_OUT_FEATURE_SIZE
-        self.embed_feature_SIZE = cfg.SCENE_GRAPH.EMBED_FEATURE_SIZE
-
-        self.scorer = nn.Linear(cfg.SCENE_GRAPH.NODE_OUT_FEATURE_SIZE, 1)
+        self.NUM_CHOSE_NODE = NUM_CHOSE_NODE
+        self.node_to_graph = nn.Linear(INPUT_FEATURE_SIZE,
+                                       EMBED_FEATURE_SIZE)
+        self.scorer = nn.Linear(INPUT_FEATURE_SIZE, 1)
 
     def forward(self, features):
         scores = F.softmax(self.scorer(features), dim=1)
-        merge_features = scores.bmm(features).sum(0, keepdim=True)
+        merge_features = scores.bmm(self.node_to_graph(features)).sum(0, keepdim=True)
+        indices = torch.argsort(scores, dim=0, descending=True)[:self.NUM_CHOSE_NODE]
+        dict_ANALYZE_GRAPH = {}
+        dict_ANALYZE_GRAPH["score"] = scores[indices].view(-1).clone().detach().to('cpu').tolist()
+        dict_ANALYZE_GRAPH["sort_nodes_index"] = indices[:self.NUM_CHOSE_NODE+5].view(-1).clone().detach().tolist()
         return merge_features
 
 

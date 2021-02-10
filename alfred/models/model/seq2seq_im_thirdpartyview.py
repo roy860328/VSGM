@@ -2,7 +2,7 @@ import os
 import cv2
 import torch
 import numpy as np
-import nn.vnn2 as vnn
+import nn.vnn4 as vnn
 import collections
 from torch import nn
 from torch.nn import functional as F
@@ -22,9 +22,12 @@ class Module(seq2seq_im_moca_semantic):
         '''
         super().__init__(args, vocab, importent_nodes=True)
         IMPORTENT_NDOES_FEATURE = self.config['semantic_cfg'].SCENE_GRAPH.EMBED_FEATURE_SIZE
-        decoder = vnn.ThirdParty_feat
-        # else:
-        #     decoder = vnn.ImportentNodes
+        if self.config['semantic_cfg'].GENERAL.DECODER == "MOCA":
+            decoder = vnn.MOCA
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "ThirdParty_feat":
+            decoder = vnn.ThirdParty_feat
+        else:
+            raise NotImplementedError()
         self.dec = decoder(self.emb_action_low, args.dframe, 2*args.dhid,
                            self.semantic_graph_implement, IMPORTENT_NDOES_FEATURE,
                            pframe=args.pframe,
@@ -37,7 +40,7 @@ class Module(seq2seq_im_moca_semantic):
         self.merge_feat_list = ['feat_conv', 'feat_conv_1', 'feat_conv_2',
                                 'feat_exploration_conv', 'feat_exploration_conv_1',
                                 'feat_exploration_conv_2']
-        self.feat_pt = 'feat_merge.pt'
+        self.feat_pt = 'feat_third_party_img_and_exploration.pt'
 
     def _load_meta_data(self, root, list_img_traj, im, device):
         def sequences_to_one(META_DATA_FILE="all_meta_data.json",

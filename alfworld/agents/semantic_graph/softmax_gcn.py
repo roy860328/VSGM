@@ -97,16 +97,9 @@ class Net(torch.nn.Module):
                 nodes_tensor = x
                 x, dict_ANALYZE_GRAPH = self.final_mapping(x)
                 x = F.relu(self.dropout(x))
-                if CHOSE_IMPORTENT_NODE:
-                    chose_nodes, dict_ANALYZE_GRAPH = self.chose_node_module(nodes_tensor, hidden_state)
-                    x = torch.cat([x, chose_nodes], dim=1)
             # don't have node
             else:
                 x = torch.zeros((1, self.EMBED_FEATURE_SIZE))
-                if CHOSE_IMPORTENT_NODE:
-                    # torch.Size([1, 400])
-                    chose_nodes = torch.zeros((1, self.CHOSE_IMPORTENT_NODE_OUTPUT_SHAPE))
-                    x = torch.cat([x, chose_nodes], dim=1)
                 if self.cfg.SCENE_GRAPH.GPU:
                     x = x.to('cuda')
         else:
@@ -131,11 +124,6 @@ class Net(torch.nn.Module):
             # torch.Size([1, 128])
             x, dict_ANALYZE_GRAPH = self.final_mapping(x)
             x = F.relu(self.dropout(x))
-            if CHOSE_IMPORTENT_NODE:
-                # torch.Size([1, 400])
-                chose_nodes, dict_ANALYZE_GRAPH = self.chose_node_module(nodes_tensor, hidden_state)
-                # torch.Size([1, 528]) = self.cfg.SCENE_GRAPH.RESULT_FEATURE
-                x = torch.cat([x, chose_nodes], dim=1)
         return x, dict_ANALYZE_GRAPH
 
     def chose_importent_node(self, data, hidden_state):

@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents', 'semantic
 import pdb
 from semantic_graph import SceneGraph
 from sgg import alfred_data_format, sgg
+from icecream import ic
 
 
 class SemanticGraphImplement(torch.nn.Module):
@@ -40,6 +41,11 @@ class SemanticGraphImplement(torch.nn.Module):
         self.EMBED_CURRENT_STATE = self.cfg_semantic.SCENE_GRAPH.EMBED_CURRENT_STATE
         self.EMBED_HISTORY_CHANGED_NODES = self.cfg_semantic.SCENE_GRAPH.EMBED_HISTORY_CHANGED_NODES
         self.RESULT_FEATURE = self.cfg_semantic.SCENE_GRAPH.RESULT_FEATURE
+        if not self.isORACLE:
+            self.cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE =\
+                self.cfg_semantic.SCENE_GRAPH.VISION_FEATURE_SIZE
+        ic(self.cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE)
+
         # model
         self.graph_embed_model = importlib.import_module(self.cfg_semantic.SCENE_GRAPH.MODEL)
         self.graph_embed_model = self.graph_embed_model.Net(
@@ -53,7 +59,11 @@ class SemanticGraphImplement(torch.nn.Module):
             self.cfg_semantic)
         self.scene_graphs = []
         for i in range(config['general']['training']['batch_size']):
-            scene_graph = SceneGraph(self.cfg_semantic, self.trans_MetaData.object_classes)
+            scene_graph = SceneGraph(
+                self.cfg_semantic,
+                self.trans_MetaData.object_classes,
+                self.cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE,
+                )
             self.scene_graphs.append(scene_graph)
         # initialize model
         if not self.isORACLE:

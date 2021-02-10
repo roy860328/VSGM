@@ -9,6 +9,7 @@ from PIL import Image
 from nn.resnet import Resnet
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 import glob
+import random
 
 if __name__ == '__main__':
     parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
@@ -30,7 +31,11 @@ if __name__ == '__main__':
     skipped = []
 
     main_search_img_folder = args.img_folder.split(',')[0]
-    for root, dirs, files in os.walk(args.data):
+    walk = os.walk(args.data)
+    roots = [root for root, dirs, files in walk if os.path.basename(root) == main_search_img_folder]
+    random.shuffle(roots)
+    print(roots[0])
+    for root in roots:
         if os.path.basename(root) == main_search_img_folder:
             feat_img_dict = {}
             root = root.replace(main_search_img_folder, '')
@@ -41,7 +46,10 @@ if __name__ == '__main__':
                 fimages = sorted([f for f in files
                                   if (f.endswith('.png') or (f.endswith('.jpg')))])
                 if len(fimages) > 0:
-                    if args.skip_existing and os.path.isfile(os.path.join(root, "feat_third_party_img_and_exploration.pt")):
+                    if args.skip_existing\
+                    and os.path.isfile(os.path.join(root, "feat_third_party_img_and_exploration.pt"))\
+                    and os.stat(os.path.join(root, "feat_third_party_img_and_exploration.pt")).st_size>1000:
+                        print("skip_existing")
                         break
                     try:
                         print('{}'.format(root_img))
@@ -56,7 +64,8 @@ if __name__ == '__main__':
 
                 else:
                     print('empty; skipping {}'.format(root_img))
-            torch.save(feat_img_dict, os.path.join(root, "feat_third_party_img_and_exploration.pt"))
+            if len(feat_img_dict):
+                torch.save(feat_img_dict, os.path.join(root, "feat_third_party_img_and_exploration.pt"))
 
     print("Skipped:")
     print(skipped)

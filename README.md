@@ -48,7 +48,7 @@ python scripts/augment_meta_data_trajectories_third_party_camera_frames.py --dat
 ```
 3. extract exploration img to resnet feature to 'feat_third_party_img_and_exploration.pt'
 ```
-python models/utils/extract_resnet.py --data data/full_2.1.0 --batch 32 --gpu --visual_model resnet18 --img_folder high_res_images,raw_images_1,raw_images_2,exploration_meta,exploration_meta_1,exploration_meta_2 --keyname feat_conv,feat_conv_1,feat_conv_2,feat_exploration_conv,feat_exploration_conv_1,feat_exploration_conv_2
+python models/utils/extract_resnet.py --data data/full_2.1.0 --batch 32 --gpu --visual_model resnet18 --img_folder high_res_images,raw_images_1,raw_images_2,exploration_meta,exploration_meta_1,exploration_meta_2 --keyname feat_conv,feat_conv_1,feat_conv_2,feat_exploration_conv,feat_exploration_conv_1,feat_exploration_conv_2 --skip_existing
 ```
 4. get event.metadata['agent']
 cameraHorizon, position, rotation
@@ -73,6 +73,25 @@ data/full_2.1.0/train/pick_heat_then_place_in_recep-Potato-None-Fridge-27/trial_
 data/full_2.1.0/train/pick_cool_then_place_in_recep-PotatoSliced-None-GarbageCan-11/trial_T20190909_013637_168506/sgg_meta/000000366.json
 data/full_2.1.0/train/pick_cool_then_place_in_recep-AppleSliced-None-DiningTable-27/trial_T20190907_171803_405680/sgg_meta/000000216.json
 data/full_2.1.0/train/pick_and_place_with_movable_recep-AppleSliced-Bowl-Fridge-21/trial_T20190908_054316_003433/agent_meta/000000290.json
+data/full_2.1.0/train/pick_cool_then_place_in_recep-AppleSliced-None-DiningTable-27/trial_T20190907_171803_405680/sgg_meta/000000339.json
+data/full_2.1.0/train/pick_cool_then_place_in_recep-Pan-None-StoveBurner-23/trial_T20190906_215826_707811/sgg_meta/000000128.json
+data/full_2.1.0/train/pick_cool_then_place_in_recep-LettuceSliced-None-SinkBasin-4/trial_T20190909_101847_813539/sgg_meta/000000125.json
+data/full_2.1.0/train/pick_clean_then_place_in_recep-LettuceSliced-None-Fridge-11/trial_T20190918_174139_904388/sgg_meta/000000230.json
+data/full_2.1.0/train/pick_and_place_with_movable_recep-Pen-Bowl-Dresser-311/trial_T20190908_170820_174380/sgg_meta/000000146.json
+data/full_2.1.0/train/pick_heat_then_place_in_recep-Egg-None-Fridge-13/trial_T20190907_151643_465634/sgg_meta/000000174.json
+data/full_2.1.0/train/pick_cool_then_place_in_recep-PotatoSliced-None-CounterTop-19/trial_T20190909_053101_102010/sgg_meta/000000196.json
+data/full_2.1.0/train/pick_and_place_with_movable_recep-Ladle-Bowl-SinkBasin-30/trial_T20190907_143416_683614/sgg_meta_2/000000241.json
+data/full_2.1.0/train/pick_cool_then_place_in_recep-Lettuce-None-SinkBasin-23/trial_T20190908_173530_026785/sgg_meta/000000199.json
+data/full_2.1.0/train/pick_and_place_with_movable_recep-Spatula-Pan-DiningTable-28/trial_T20190907_222606_903630/sgg_meta_1/000000088.json
+data/full_2.1.0/train/pick_and_place_simple-ToiletPaper-None-ToiletPaperHanger-407/trial_T20190909_081822_309167/sgg_meta/000000078.json
+data/full_2.1.0/train/pick_clean_then_place_in_recep-Potato-None-DiningTable-4/trial_T20190909_113933_070196/sgg_meta_1/000000118.json
+data/full_2.1.0/train/pick_and_place_simple-Tomato-None-DiningTable-26/trial_T20190908_010933_200567/sgg_meta_1/000000135.json
+data/full_2.1.0/train/pick_and_place_with_movable_recep-Spoon-Bowl-SinkBasin-27/trial_T20190907_213616_713879/agent_meta/000000101.json
+data/full_2.1.0/train/look_at_obj_in_light-Pen-None-DeskLamp-316/trial_T20190908_061814_700195/sgg_meta/000000117.json
+data/full_2.1.0/train/pick_and_place_with_movable_recep-LettuceSliced-Pan-DiningTable-28/trial_T20190906_232604_097173/sgg_meta/000000146.json
+data/full_2.1.0/train/pick_and_place_with_movable_recep-LettuceSliced-Pot-DiningTable-21/trial_T20190907_160923_689765/sgg_meta/000000359.json
+data/full_2.1.0/train/pick_cool_then_place_in_recep-Plate-None-Shelf-20/trial_T20190907_034714_802572/sgg_meta_2/000000323.json
+data/full_2.1.0/train/pick_clean_then_place_in_recep-Ladle-None-Drawer-4/trial_T20190909_161523_929674/sgg_meta/000000213.json
 
 ## Config SETTING
 ATTRIBUTE_FEATURE_SIZE: 26   # 23 + 2 (ANGLE_OF_VIEWS) + 1 (unique_obj_index)

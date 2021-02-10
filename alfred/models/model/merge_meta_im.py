@@ -115,6 +115,7 @@ class Module(merge_meta):
         third_party_all_meta_data_path = \
             os.path.join(root, "third_party_all_meta_data.json")
         if os.path.isfile(third_party_all_meta_data_path):
+            print("load third_party_all_meta_data.json {}".format(third_party_all_meta_data_path))
             with open(third_party_all_meta_data_path, 'r') as f:
                 third_party_all_meta = json.load(f)
         else:

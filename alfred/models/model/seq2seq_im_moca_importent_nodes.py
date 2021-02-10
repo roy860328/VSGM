@@ -25,6 +25,12 @@ class Module(seq2seq_im_moca_semantic):
             decoder = vnn.softmax_gcn_Dec
         elif self.config['semantic_cfg'].GENERAL.DECODER == "PRIORI":
             decoder = vnn.PrioriDec
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "Mini_MOCA_GRAPH":
+            decoder = vnn.Mini_MOCA_GRAPH
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "FeatWithoutFrame":
+            decoder = vnn.FeatWithoutFrame
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "FeatWithoutFrameV2":
+            decoder = vnn.FeatWithoutFrameV2
         else:
             raise NotImplementedError()
         # else:

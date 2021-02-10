@@ -141,12 +141,13 @@ class GraphData(Data):
 
 
 class HeteGraphData(GraphData):
-    def __init__(self, obj_cls_name_to_features, GPU, x=None, edge_index=None, edge_attr=None, y=None,
+    def __init__(self, obj_cls_name_to_features, GPU, dim_rgb_feature, x=None, edge_index=None, edge_attr=None, y=None,
                  pos=None, normal=None, face=None, **kwargs):
         super(HeteGraphData, self).__init__(obj_cls_name_to_features, GPU,
                                             x=None, edge_index=None, edge_attr=None, y=None,
                                             pos=None, normal=None, face=None, **kwargs)
         self.attributes = None
+        self.dim_rgb_feature = dim_rgb_feature
 
     def __inc__(self, key, value):
         increasing_funcs = ["edge_obj_to_obj"]
@@ -190,25 +191,23 @@ class HeteGraphData(GraphData):
         self.list_node_obj_cls.append(obj_cls)
         return ind
 
-    def update_node(self, obj_cls, feature, obj_id, feature_img=None):
+    def update_node(self, obj_cls, attr_feature, obj_id, feature_img=None):
         '''
         isFeatureChange: if True, add to history graph
         '''
         isFeatureChange = False
         ind = self.obj_id_to_ind[obj_id]
         if self.GPU:
-            feature = feature.cuda()
+            attr_feature = attr_feature.cuda()
             if feature_img is not None:
                 feature_img = feature_img.cuda()
-        if not torch.equal(self.attributes[ind][:-1], feature):
+        if not torch.equal(self.attributes[ind][:-1], attr_feature):
             isFeatureChange = True
         # set feature
-        self.attributes[ind][:-1] = feature
+        self.attributes[ind][:-1] = attr_feature
         if feature_img is not None:
-            # 512
-            ind_feature_img = feature_img.shape[-1]
             # from -512
-            self.x[ind][-ind_feature_img:] = feature_img
+            self.x[ind][-self.dim_rgb_feature:] = feature_img
         return ind, isFeatureChange
 
     def update_adj_relation(self, node_src_ind, obj_cls, adj, relation_type=1):
@@ -261,18 +260,24 @@ class HeteGraphData(GraphData):
         else:
             raise NotImplementedError
 
+    def _cat_feature_and_wore_embed(self, obj_cls, feature):
+        raise NotImplementedError
+
 
 class SceneGraph(object):
     """docstring for SceneGraph"""
 
-    def __init__(self, cfg, object_classes_index_to_name):
+    def __init__(self, cfg, object_classes_index_to_name, dim_rgb_feature):
         super(SceneGraph, self).__init__()
         #
         self.cfg = cfg
         self.isORACLE = cfg.SCENE_GRAPH.ORACLE
         self.GPU = cfg.SCENE_GRAPH.GPU
         self.GRAPH_RESULT_PATH = cfg.SCENE_GRAPH.GRAPH_RESULT_PATH
-        self.USE_OTHER_RELATION = cfg.SCENE_GRAPH.USE_OTHER_RELATION
+        self.USE_OTHER_RELATION = cfg.SCENE_GRAPH.USE_OTHER_RELATION if "USE_OTHER_RELATION" in cfg.SCENE_GRAPH else False
+        if "RELATION_MODE" in cfg.SCENE_GRAPH and cfg.SCENE_GRAPH.RELATION_MODE != 0:
+            self.USE_OTHER_RELATION = cfg.SCENE_GRAPH.RELATION_MODE
+        ic(self.USE_OTHER_RELATION)
         self.ANGLE_OF_VIEWS = cfg.SCENE_GRAPH.ANGLE_OF_VIEWS
         # vision
         self.VISION_FEATURE_SIZE = cfg.SCENE_GRAPH.VISION_FEATURE_SIZE
@@ -296,6 +301,7 @@ class SceneGraph(object):
         '''
         # create graph
         '''
+        self.dim_rgb_feature = dim_rgb_feature
         self.graphdata_type = getattr(
             importlib.import_module(
                 'agents.semantic_graph.semantic_graph'),
@@ -313,9 +319,9 @@ class SceneGraph(object):
                 Please read alfworld/agents/semantic_graph/word_embed/README.md"
 
     def init_graph_data(self):
-        self.global_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU)
-        self.current_state_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU)
-        self.history_changed_nodes_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU)
+        self.global_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU, self.dim_rgb_feature)
+        self.current_state_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU, self.dim_rgb_feature)
+        self.history_changed_nodes_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU, self.dim_rgb_feature)
 
     # adjacency_matrix_and_all_feature
     def _set_priori_graph(self):
@@ -333,11 +339,13 @@ class SceneGraph(object):
         with open(path_object_attribute, 'r') as f:
             attributes = json.load(f)
         obj_cls_name_to_features = self._get_obj_cls_name_to_features(path_object_embedding, _background=True)
-        self.priori_graph = self.graphdata_type(obj_cls_name_to_features, self.GPU)
+        self.priori_graph = self.graphdata_type(obj_cls_name_to_features, self.GPU, self.dim_rgb_feature)
 
         # node word feature
         for i, (k, word_feature) in enumerate(obj_cls_name_to_features.items()):
             '''
+            rgb_features: "0"~"105"
+            attributes: "0"~"105"
             i: "0"~"104"
             k: "1"~"105"
             word_feature: shape = [300]
@@ -514,24 +522,34 @@ class SceneGraph(object):
         # no matter isFindNode is True or False,
         # self.current_state_graph always need to add adj relation
         # if not isFindNode:
-        self.add_adj_relation(self.current_state_graph,
-                              current_state_graph_current_frame_obj_cls_to_node_index,
-                              add_relation_anyway=True
-                              )
-        if self.USE_OTHER_RELATION:
+        if self.USE_OTHER_RELATION == 2:
+            self.add_other_relation(self.current_state_graph,
+                                    current_state_graph_current_frame_obj_cls_to_node_index,
+                                    obj_relations
+                                    )
             self.add_other_relation(self.global_graph,
                                     global_graph_current_frame_obj_cls_to_node_index,
                                     obj_relations
                                     )
         else:
-            self.add_adj_relation(self.global_graph,
-                                  global_graph_current_frame_obj_cls_to_node_index,
-                                  add_relation_anyway=False
+            self.add_adj_relation(self.current_state_graph,
+                                  current_state_graph_current_frame_obj_cls_to_node_index,
+                                  add_relation_anyway=True
                                   )
+            if self.USE_OTHER_RELATION:
+                self.add_other_relation(self.global_graph,
+                                        global_graph_current_frame_obj_cls_to_node_index,
+                                        obj_relations
+                                        )
+            else:
+                self.add_adj_relation(self.global_graph,
+                                      global_graph_current_frame_obj_cls_to_node_index,
+                                      add_relation_anyway=False
+                                      )
 
     def add_local_graph_to_global_graph(self, img, sgg_results, reset_current_graph=True):
-        raise "check sgg labels match SceneGraph.obj_cls_name_to_features index"
-        self.init_current_state_data()
+        if reset_current_graph:
+            self.init_current_state_data()
         current_frame_obj_cls_to_node_index = []
         obj_clses = sgg_results["labels"].numpy().astype(int)
         obj_features = sgg_results["features"]

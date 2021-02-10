@@ -22,7 +22,7 @@ class SGG(SceneParser):
         self.SAVE_SGG_RESULT_PATH = cfg.MODEL.SAVE_SGG_RESULT_PATH
         if self.SAVE_SGG_RESULT and not os.path.exists(self.SAVE_SGG_RESULT_PATH):
             os.mkdir(self.SAVE_SGG_RESULT_PATH)
-        raise "check sgg labels match SceneGraph.obj_cls_name_to_features index"
+        self.label_minus = 1
 
     def predict(self, imgs, img_ids=0):
         '''
@@ -73,8 +73,8 @@ class SGG(SceneParser):
             # detections.bbox
             if self.SAVE_SGG_RESULT:
                 self.save_detect_result(imgs, detections, img_ids)
-            result = self.parser_sgg_result(detections, detection_pairs, detection_attrs)
-        return result
+            b_results = self.parser_sgg_result(detections, detection_pairs, detection_attrs)
+        return b_results
 
     def parser_sgg_result(self, detections, detection_pairs, detection_attrs):
         '''
@@ -84,18 +84,19 @@ class SGG(SceneParser):
                         [  0.0000, 775.8300, 481.3463, 797.7077]])
         features: torch.Size([3, 2048, 1, 1])
         '''
-        results = []
+        b_results = []
         for i in range(len(detections)):
-            print(detections[i].get_field("labels"))
+            print(detections[i].get_field("labels").shape)
+            print(detections[i].get_field("features").shape)
             result = {
-                "labels": detections[i].get_field("labels"),
+                "labels": detections[i].get_field("labels")-self.label_minus,
                 "features": detections[i].get_field("features"),
+                "attribute_logits": detection_attrs[i].get_field("attribute_logits"),
                 "obj_relations_idx_pairs": detection_pairs[i].get_field("idx_pairs"),
                 "obj_relations_scores": detection_pairs[i].get_field("scores"),
-                "attribute_logits": detection_attrs[i].get_field("attribute_logits"),
             }
-            results.append(result)
-        return results
+            b_results.append(result)
+        return b_results
 
     def load(self):
         checkpoint = torch.load(self.cfg.MODEL.WEIGHT_IMG)
@@ -112,8 +113,8 @@ class SGG(SceneParser):
             img = np.array(img)
             result = img.copy()
             ### RuntimeError: expected device cuda:0 but got device cpu
-            result = overlay_boxes(result, top_prediction)
-            result = overlay_class_names(result, top_prediction, self.ind_to_classes)
+            result = overlay_boxes(result, top_prediction, label_minus=self.label_minus)
+            result = overlay_class_names(result, top_prediction, self.ind_to_classes, label_minus=self.label_minus)
             cv2.imwrite(os.path.join(self.SAVE_SGG_RESULT_PATH, "detection_{}.jpg".format(img_ids)), result)
 
 
@@ -123,6 +124,7 @@ def load_pretrained_model(cfg, transforms, ind_to_classes, device):
     '''
     scene_parser = SGG(cfg, transforms, ind_to_classes, device)
     scene_parser.load()
+    detector.eval()
     return scene_parser
 
 
@@ -147,7 +149,7 @@ if __name__ == '__main__':
     cfg_sgg = cfg['sgg_cfg']
     detector = load_pretrained_model(cfg_sgg, trans_MetaData.transforms, alfred_dataset.ind_to_classes, 'cuda')
     detector.eval()
-    detector.to(device='cuda')
+    # detector.to(device='cuda')
 
     for i in range(100):
         img, target, idx = alfred_dataset[i]

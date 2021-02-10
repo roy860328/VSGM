@@ -33,7 +33,7 @@ class TransMetaData():
         self.ind_to_classes = sorted(self.class_to_ind, key=lambda k:
                                      self.class_to_ind[k])
         # ['__background__', '__background__', 'AlarmClock', 'Apple', 'AppleSliced', 'ArmChair', 
-        self.ind_to_classes.insert(0, '__background__')
+        # self.ind_to_classes.insert(0, '__background__')
         ic(self.ind_to_classes)
         # cfg.ind_to_class = self.ind_to_classes
         self.predicate_to_ind = parser_scene.get_dict_predicate_to_ind()
