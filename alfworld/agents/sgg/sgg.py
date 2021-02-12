@@ -12,17 +12,16 @@ from torchvision.transforms import functional as F
 
 
 class SGG(SceneParser):
-    def __init__(self, cfg, transforms, ind_to_classes, device):
+    def __init__(self, cfg, transforms, SGG_result_ind_to_classes, device):
         super(SGG, self).__init__(cfg)
         self.cfg = cfg
         self.transforms = transforms
-        self.ind_to_classes = ind_to_classes
+        self.SGG_result_ind_to_classes = SGG_result_ind_to_classes
         self.device = device
         self.SAVE_SGG_RESULT = cfg.MODEL.SAVE_SGG_RESULT
         self.SAVE_SGG_RESULT_PATH = cfg.MODEL.SAVE_SGG_RESULT_PATH
         if self.SAVE_SGG_RESULT and not os.path.exists(self.SAVE_SGG_RESULT_PATH):
             os.mkdir(self.SAVE_SGG_RESULT_PATH)
-        self.label_minus = 1
 
     def predict(self, imgs, img_ids=0):
         '''
@@ -88,6 +87,8 @@ class SGG(SceneParser):
         for i in range(len(detections)):
             print(detections[i].get_field("labels").shape)
             print(detections[i].get_field("features").shape)
+            print(detections[i].get_field("scores").shape)
+            print("scores shape is 105 or 106?")
             result = {
                 "labels": detections[i].get_field("labels")-self.label_minus,
                 "features": detections[i].get_field("features"),
@@ -113,16 +114,16 @@ class SGG(SceneParser):
             img = np.array(img)
             result = img.copy()
             ### RuntimeError: expected device cuda:0 but got device cpu
-            result = overlay_boxes(result, top_prediction, label_minus=self.label_minus)
-            result = overlay_class_names(result, top_prediction, self.ind_to_classes, label_minus=self.label_minus)
+            result = overlay_boxes(result, top_prediction)
+            result = overlay_class_names(result, top_prediction, self.SGG_result_ind_to_classes)
             cv2.imwrite(os.path.join(self.SAVE_SGG_RESULT_PATH, "detection_{}.jpg".format(img_ids)), result)
 
 
-def load_pretrained_model(cfg, transforms, ind_to_classes, device):
+def load_pretrained_model(cfg, transforms, SGG_result_ind_to_classes, device):
     '''
     cfg = config['sgg_cfg']
     '''
-    scene_parser = SGG(cfg, transforms, ind_to_classes, device)
+    scene_parser = SGG(cfg, transforms, SGG_result_ind_to_classes, device)
     scene_parser.load()
     detector.eval()
     return scene_parser

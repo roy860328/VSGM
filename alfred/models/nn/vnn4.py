@@ -640,8 +640,14 @@ class ThirdParty_feat(nn.Module):
         weighted_lang_t_instr, lang_attn_t_instr = self.scale_dot_attn(lang_feat_t_instr, h_tm1_instr)
 
         # dynamic convolution
-        vis_feat_t_goal = self.weight_thirdparty_frame(frame, weighted_lang_t_goal)
-        vis_feat_t_instr = self.weight_thirdparty_frame(frame, weighted_lang_t_instr)
+        vis_feat_t_goal_frames_conv = self.weight_thirdparty_frame(frame["frames_conv"], weighted_lang_t_goal)
+        vis_feat_t_instr_frames_conv = self.weight_thirdparty_frame(frame["frames_conv"], weighted_lang_t_instr)
+        vis_feat_t_goal_frames_conv_1 = self.weight_thirdparty_frame(frame["frames_conv_1"], weighted_lang_t_goal)
+        vis_feat_t_instr_frames_conv_1 = self.weight_thirdparty_frame(frame["frames_conv_1"], weighted_lang_t_instr)
+        vis_feat_t_goal_frames_conv_2 = self.weight_thirdparty_frame(frame["frames_conv_2"], weighted_lang_t_goal)
+        vis_feat_t_instr_frames_conv_2 = self.weight_thirdparty_frame(frame["frames_conv_2"], weighted_lang_t_instr)
+        vis_feat_t_goal = torch.cat([vis_feat_t_goal_frames_conv, vis_feat_t_goal_frames_conv_1, vis_feat_t_goal_frames_conv_2], dim=1)
+        vis_feat_t_instr = torch.cat([vis_feat_t_instr_frames_conv, vis_feat_t_instr_frames_conv_1, vis_feat_t_instr_frames_conv_2], dim=1)
 
         # concat visual feats, weight lang, and previous action embedding (goal decoder)
         inp_t_goal = torch.cat([vis_feat_t_goal, weighted_lang_t_goal, e_t, feat_priori_graph, feat_global_graph], dim=1)
@@ -684,7 +690,7 @@ class ThirdParty_feat(nn.Module):
                 subgoal_t, progress_t
 
     def forward(self, enc_goal, enc_instr, frames, all_meta_datas, gold=None, max_decode=150, state_0_goal=None, state_0_instr=None):
-        max_t = gold.size(1) if self.training else min(max_decode, frames.shape[1])
+        max_t = gold.size(1) if self.training else min(max_decode, frames['frames_conv'].shape[1])
         batch = enc_instr.size(0)
         e_t = self.go.repeat(batch, 1)
         state_t_goal = state_0_goal
@@ -712,13 +718,13 @@ class ThirdParty_feat(nn.Module):
                             b_store_state, frames, t, env_index, state_t_goal, state_t_instr)
                 else:
                     global_graph_importent_features = torch.zeros(
-                        1, self.IMPORTENT_NDOES_FEATURE).to(frames.device)
+                        1, self.IMPORTENT_NDOES_FEATURE).to(frames['frames_conv'].device)
                     current_state_graph_importent_features = torch.zeros(
-                        1, self.IMPORTENT_NDOES_FEATURE).to(frames.device)
+                        1, self.IMPORTENT_NDOES_FEATURE).to(frames['frames_conv'].device)
                     history_changed_nodes_graph_importent_features = torch.zeros(
-                        1, self.IMPORTENT_NDOES_FEATURE).to(frames.device)
+                        1, self.IMPORTENT_NDOES_FEATURE).to(frames['frames_conv'].device)
                     priori_importent_features = torch.zeros(
-                        1, self.IMPORTENT_NDOES_FEATURE).to(frames.device)
+                        1, self.IMPORTENT_NDOES_FEATURE).to(frames['frames_conv'].device)
                 feat_global_graph.append(global_graph_importent_features)
                 feat_current_state_graph.append(current_state_graph_importent_features)
                 feat_history_changed_nodes_graph.append(history_changed_nodes_graph_importent_features)
@@ -732,7 +738,7 @@ class ThirdParty_feat(nn.Module):
                 self.step(
                     enc_goal,
                     enc_instr,
-                    frames[:, t],
+                    {k:v[:, t] for k, v in frames}, # frames[:, t],
                     e_t,
                     state_t_goal,
                     state_t_instr,
@@ -795,9 +801,9 @@ class ThirdParty_feat(nn.Module):
         b_store_state["all_meta_data_1"]
         b_store_state["all_meta_data_2"]
         '''
-        def update(all_meta_data="all_meta_data", frame_index_s=0, frame_index_e=512, reset_current_graph=False, horizontal_view_angle=0):
+        def update(all_meta_data="all_meta_data", frame_name="frames_conv", reset_current_graph=False, horizontal_view_angle=0):
             t_store_state = b_store_state[all_meta_data]["sgg_meta_data"][t]
-            t_store_state["rgb_image"] = frames[env_index, t][frame_index_s:frame_index_e]
+            t_store_state["rgb_image"] = frames[frame_name][env_index, t]
             t_agent_meta = b_store_state["agent_sgg_meta_data"]["agent_sgg_meta_data"][t]
             self.semantic_graph_implement.store_data_to_graph(
                 store_state=t_store_state,
@@ -806,9 +812,9 @@ class ThirdParty_feat(nn.Module):
                 agent_meta=t_agent_meta,
                 horizontal_view_angle=horizontal_view_angle,
             )
-        update(all_meta_data="all_meta_data", frame_index_s=0, frame_index_e=512, reset_current_graph=True)
-        update(all_meta_data="all_meta_data_1", frame_index_s=512, frame_index_e=1024, horizontal_view_angle=-90)
-        update(all_meta_data="all_meta_data_2", frame_index_s=1024, frame_index_e=1536, horizontal_view_angle=90)
+        update(all_meta_data="all_meta_data", frame_name="frames_conv", reset_current_graph=True)
+        update(all_meta_data="all_meta_data_1", frame_name="frames_conv_1", horizontal_view_angle=-90)
+        update(all_meta_data="all_meta_data_2", frame_name="frames_conv_2", horizontal_view_angle=90)
 
         global_graph_importent_features, global_graph_dict_objectIds_to_score = \
             self.semantic_graph_implement.chose_importent_node_feature(

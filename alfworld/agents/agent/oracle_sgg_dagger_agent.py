@@ -61,7 +61,7 @@ class SemanticGraphImplement(torch.nn.Module):
         for i in range(config['general']['training']['batch_size']):
             scene_graph = SceneGraph(
                 self.cfg_semantic,
-                self.trans_MetaData.object_classes,
+                self.trans_MetaData.SGG_result_ind_to_classes,
                 self.cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE,
                 )
             self.scene_graphs.append(scene_graph)
@@ -69,7 +69,10 @@ class SemanticGraphImplement(torch.nn.Module):
         if not self.isORACLE:
             self.cfg_sgg = config['sgg_cfg']
             self.detector = sgg.load_pretrained_model(
-                self.cfg_sgg, self.trans_MetaData.transforms, self.trans_MetaData.ind_to_classes, 'cuda'
+                self.cfg_sgg,
+                self.trans_MetaData.transforms,
+                self.trans_MetaData.SGG_result_ind_to_classes,
+                'cuda'
                 )
             self.detector.eval()
             self.detector.cuda()

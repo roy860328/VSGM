@@ -104,11 +104,7 @@ class EvalTask(Eval):
                 break
 
             # extract visual features
-            curr_image = Image.fromarray(np.uint8(env.last_event.frame))
-            feat['frames'] = resnet.featurize([curr_image], batch=1).unsqueeze(0)
-            curr_depth_image = env.last_event.depth_frame * (255 / 10000)
-            curr_depth_image = curr_depth_image.astype(np.uint8)
-            feat['frames_depth'] = curr_depth_image
+            feat = cls.get_frame_feat(cls, env, resnet, feat)
             feat['all_meta_datas'] = cls.get_meta_datas(cls, env, resnet)
             # forward model
             m_out = model.step(feat)

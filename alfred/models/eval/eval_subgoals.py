@@ -106,6 +106,8 @@ class EvalSubgoals(Eval):
             # extract visual feats
             curr_image = Image.fromarray(np.uint8(env.last_event.frame))
             feat['frames'] = resnet.featurize([curr_image], batch=1).unsqueeze(0)
+            curr_instance = Image.fromarray(np.uint8(env.last_event.instance_segmentation_frame))
+            feat['frames_instance'] = resnet.featurize([curr_instance], batch=1).unsqueeze(0)
             curr_depth_image = np.uint8(env.last_event.depth_frame)
             feat['frames_depth'] = curr_depth_image
             feat['all_meta_datas'] = cls.get_meta_datas(env)

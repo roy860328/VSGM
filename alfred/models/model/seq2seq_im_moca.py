@@ -145,10 +145,12 @@ class Module(Base):
             if load_frames and not self.test_mode:
                 root = self.get_task_root(ex)
 
-                im = torch.load(os.path.join(root, self.feat_pt))
-                print(os.path.join(root, self.feat_pt))
-                print(im.keys())
-                im = im["feat_conv"]
+                try:
+                    im = torch.load(os.path.join(root, self.feat_pt))
+                    im = im["feat_conv"]
+                except Exception as e:
+                    print(os.path.join(root, self.feat_pt))
+                    raise e
 
                 num_low_actions = len(ex['plan']['low_actions'])
                 num_feat_frames = im.shape[0]

@@ -25,12 +25,28 @@ class Module(seq2seq_im_moca_semantic):
             decoder = vnn.softmax_gcn_Dec
         elif self.config['semantic_cfg'].GENERAL.DECODER == "PRIORI":
             decoder = vnn.PrioriDec
-        elif self.config['semantic_cfg'].GENERAL.DECODER == "Mini_MOCA_GRAPH":
-            decoder = vnn.Mini_MOCA_GRAPH
         elif self.config['semantic_cfg'].GENERAL.DECODER == "FeatWithoutFrame":
             decoder = vnn.FeatWithoutFrame
         elif self.config['semantic_cfg'].GENERAL.DECODER == "FeatWithoutFrameV2":
             decoder = vnn.FeatWithoutFrameV2
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "Mini_MOCA_GRAPH":
+            import nn.vnn5 as vnn
+            decoder = vnn.Mini_MOCA_GRAPH
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "Mini_MOCA_GRAPH_V2":
+            import nn.vnn5 as vnn
+            decoder = vnn.Mini_MOCA_GRAPH_V2
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "Mini_MOCA_GRAPH_V3":
+            import nn.vnn5 as vnn
+            decoder = vnn.Mini_MOCA_GRAPH_V3
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "Mini_MOCA_GRAPH_V4":
+            import nn.vnn5 as vnn
+            decoder = vnn.Mini_MOCA_GRAPH_V4
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "Mini_MOCA_GRAPH_V5":
+            import nn.vnn5 as vnn
+            decoder = vnn.Mini_MOCA_GRAPH_V5
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "Mini_MOCA_GRAPH_V6":
+            import nn.vnn5 as vnn
+            decoder = vnn.Mini_MOCA_GRAPH_V6
         else:
             raise NotImplementedError()
         # else:
@@ -84,9 +100,17 @@ class Module(seq2seq_im_moca_semantic):
             t_store_state = b_store_state["sgg_meta_data"]
             # cls.resnet.featurize([curr_image], batch=1).unsqueeze(0)
             t_store_state["rgb_image"] = feat['frames'][env_index, 0]
+            if self.config['semantic_cfg'].GENERAL.DECODER == "Mini_MOCA_GRAPH_V6":
+                # state_t_goal, state_t_instr = self.r_state['state_t_goal'], self.r_state['state_t_instr']
+                self.r_state['weighted_lang_t_goal'] = [lang_attn_t_goal]
+                self.r_state['weighted_lang_t_instr'] = [lang_attn_t_instr]
+                state_t_goal, state_t_instr
+                raise
+            else:
+                state_t_goal, state_t_instr = self.r_state['state_t_goal'], self.r_state['state_t_instr']
             global_graph_importent_features, current_state_graph_importent_features, history_changed_nodes_graph_importent_features, priori_importent_features,\
                 global_graph_dict_objectIds_to_score, current_state_dict_objectIds_to_score, history_changed_dict_objectIds_to_score, priori_dict_dict_objectIds_to_score =\
-                self.dec.store_and_get_graph_feature(t_store_state, env_index, self.r_state['state_t_goal'], self.r_state['state_t_instr'])
+                self.dec.store_and_get_graph_feature(t_store_state, env_index, state_t_goal, state_t_instr)
             feat_global_graph.append(global_graph_importent_features)
             feat_current_state_graph.append(current_state_graph_importent_features)
             feat_history_changed_nodes_graph.append(history_changed_nodes_graph_importent_features)

@@ -245,13 +245,15 @@ class Module(seq2seq_im_moca_semantic):
                     for i, d in enumerate(ex['images']):
                         # only add frames linked with low-level actions (i.e. skip filler frames like smooth rotations and dish washing)
                         if keep[d['low_idx']] is None:
-                            keep[d['low_idx']] = \
-                                torch.cat([im['feat_conv'][i], im['feat_conv_1'][i], im['feat_conv_2'][i]], dim=0)
+                            keep[d['low_idx']] = i
                     keep.append(keep[-1])  # stop frame
-                    feat['frames'].append(torch.stack(keep, dim=0))
+                    feat['frames_conv'].append(torch.stack(im["feat_conv"][keep], dim=0))
+                    feat['frames_conv_1'].append(torch.stack(im["feat_conv_1"][keep], dim=0))
+                    feat['frames_conv_2'].append(torch.stack(im["feat_conv_2"][keep], dim=0))
                 else:
-                    frame = torch.cat([im['feat_conv'], im['feat_conv_1'], im['feat_conv_2']], dim=1)
-                    feat['frames'].append(torch.cat([frame, frame[-1].unsqueeze(0)], dim=0))  # add stop frame
+                    feat['frames_conv'].append(torch.cat([im["feat_conv"], im["feat_conv"][-1].unsqueeze(0)], dim=0))  # add stop frame
+                    feat['frames_conv_1'].append(torch.cat([im["feat_conv_1"], im["feat_conv_1"][-1].unsqueeze(0)], dim=0))  # add stop frame
+                    feat['frames_conv_2'].append(torch.cat([im["feat_conv_2"], im["feat_conv_2"][-1].unsqueeze(0)], dim=0))  # add stop frame
 
         # tensorization and padding
         for k, v in feat.items():
@@ -291,7 +293,10 @@ class Module(seq2seq_im_moca_semantic):
         cont_lang_instr, enc_lang_instr = self.encode_lang_instr(feat)
         state_0_goal = cont_lang_goal, torch.zeros_like(cont_lang_goal)
         state_0_instr = cont_lang_instr, torch.zeros_like(cont_lang_instr)
-        frames = self.vis_dropout(feat['frames'])
+        frames = {}
+        for k, v in feat.items():
+            if 'frames' in k:
+                frames[k] = self.vis_dropout(feat[k])
         res = self.dec(enc_lang_goal, enc_lang_instr, frames, feat['all_meta_datas'], max_decode=max_decode, gold=feat['action_low'], state_0_goal=state_0_goal, state_0_instr=state_0_instr)
         feat.update(res)
         return feat
@@ -334,7 +339,7 @@ class Module(seq2seq_im_moca_semantic):
             b_store_state = all_meta_datas[env_index]
             global_graph_importent_features, current_state_graph_importent_features, history_changed_nodes_graph_importent_features, priori_importent_features,\
                 global_graph_dict_objectIds_to_score, current_state_dict_objectIds_to_score, history_changed_dict_objectIds_to_score, priori_dict_dict_objectIds_to_score =\
-                self.dec.store_and_get_graph_feature(b_store_state, feat['frames'], 0, env_index, self.r_state['state_t_goal'], self.r_state['state_t_instr'])
+                self.dec.store_and_get_graph_feature(b_store_state, feat, 0, env_index, self.r_state['state_t_goal'], self.r_state['state_t_instr'])
             feat_global_graph.append(global_graph_importent_features)
             feat_current_state_graph.append(current_state_graph_importent_features)
             feat_history_changed_nodes_graph.append(history_changed_nodes_graph_importent_features)
@@ -350,7 +355,7 @@ class Module(seq2seq_im_moca_semantic):
             self.dec.step(
                 self.r_state['enc_lang_goal'],
                 self.r_state['enc_lang_instr'],
-                feat['frames'][:, 0],
+                {k:v[:, 0] for k, v in feat if 'frames' in k}, # feat['frames'][:, 0],
                 e_t,
                 self.r_state['state_t_goal'],
                 self.r_state['state_t_instr'],

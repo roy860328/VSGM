@@ -21,34 +21,33 @@ class TransMetaData():
         super(TransMetaData, self).__init__()
         self.cfg = cfg
         self.transforms = parser_scene.get_transform(cfg, train=True)
-        # ['__background__', 'AlarmClock', 'Apple', 'AppleSliced', 'ArmChair', 'BaseballBat', 'BasketBall', 'Bathtub', 'BathtubBasin', 'Bed', 'Book', 'Bowl', 'Box', 'Bread', 'BreadSliced', 'ButterKnife', 'CD', 'Cabinet', 'Candle', 'Cart', 'CellPhone', 'Cloth', 'CoffeeMachine', 'CoffeeTable', 'CounterTop', 'CreditCard', 'Cup', 'Desk', 'DeskLamp', 'DiningTable', 'DishSponge', 'Drawer', 'Dresser', 'Egg', 'Faucet', 'FloorLamp', 'Fork', 'Fridge', 'GarbageCan', 'Glassbottle', 'HandTowel', 'HandTowelHolder', 'HousePlant', 'Kettle', 'KeyChain', 'Knife', 'Ladle', 'Laptop', 'LaundryHamper', 'LaundryHamperLid', 'Lettuce', 'LettuceSliced', 'LightSwitch', 'Microwave', 'Mug', 'Newspaper', 'Ottoman', 'PaintingHanger', 'Pan', 'PaperTowel', 'PaperTowelRoll', 'Pen', 'Pencil', 'PepperShaker', 'Pillow', 'Plate', 'Plunger', 'Pot', 'Potato', 'PotatoSliced', 'RemoteControl', 'Safe', 'SaltShaker', 'ScrubBrush', 'Shelf', 'ShowerDoor', 'SideTable', 'Sink', 'SinkBasin', 'SoapBar', 'SoapBottle', 'Sofa', 'Spatula', 'Spoon', 'SprayBottle', 'Statue', 'StoveBurner', 'StoveKnob', 'TVStand', 'TeddyBear', 'Television', 'TennisRacket', 'TissueBox', 'Toaster', 'Toilet', 'ToiletPaper', 'ToiletPaperHanger', 'ToiletPaperRoll', 'Tomato', 'TomatoSliced', 'Towel', 'TowelHolder', 'Vase', 'Watch', 'WateringCan', 'WineBottle']
-        self.object_classes = parser_scene.get_object_classes(cfg.ALFREDTEST.object_types)
-        self.object_classes.insert(0, '__background__')
         '''
         graph-rcnn need
         '''
+        # ['AlarmClock', 'Apple', 'AppleSliced', 'ArmChair', 'BaseballBat', 'BasketBall', 'Bathtub', 'BathtubBasin', 'Bed', 'Book', 'Bowl', 'Box', 'Bread', 'BreadSliced', 'ButterKnife', 'CD', 'Cabinet', 'Candle', 'Cart', 'CellPhone', 'Cloth', 'CoffeeMachine', 'CoffeeTable', 'CounterTop', 'CreditCard', 'Cup', 'Desk', 'DeskLamp', 'DiningTable', 'DishSponge', 'Drawer', 'Dresser', 'Egg', 'Faucet', 'FloorLamp', 'Fork', 'Fridge', 'GarbageCan', 'Glassbottle', 'HandTowel', 'HandTowelHolder', 'HousePlant', 'Kettle', 'KeyChain', 'Knife', 'Ladle', 'Laptop', 'LaundryHamper', 'LaundryHamperLid', 'Lettuce', 'LettuceSliced', 'LightSwitch', 'Microwave', 'Mug', 'Newspaper', 'Ottoman', 'PaintingHanger', 'Pan', 'PaperTowel', 'PaperTowelRoll', 'Pen', 'Pencil', 'PepperShaker', 'Pillow', 'Plate', 'Plunger', 'Pot', 'Potato', 'PotatoSliced', 'RemoteControl', 'Safe', 'SaltShaker', 'ScrubBrush', 'Shelf', 'ShowerDoor', 'SideTable', 'Sink', 'SinkBasin', 'SoapBar', 'SoapBottle', 'Sofa', 'Spatula', 'Spoon', 'SprayBottle', 'Statue', 'StoveBurner', 'StoveKnob', 'TVStand', 'TeddyBear', 'Television', 'TennisRacket', 'TissueBox', 'Toaster', 'Toilet', 'ToiletPaper', 'ToiletPaperHanger', 'ToiletPaperRoll', 'Tomato', 'TomatoSliced', 'Towel', 'TowelHolder', 'Vase', 'Watch', 'WateringCan', 'WineBottle']
+        self.SGG_train_object_classes = parser_scene.get_object_classes(cfg.ALFREDTEST.object_types)
         # {'__background__': 0, 'AlarmClock': 1, 'Apple': 2, 'AppleSliced': 3, 'ArmChair': 4, 'BaseballBat': 5, 'BasketBall': 6, 'Bathtub': 7, 'BathtubBasin': 8, 'Bed': 9, 'Book': 10, 'Bowl': 11, 'Box': 12, 'Bread': 13, 'BreadSliced': 14, 'ButterKnife': 15, 'CD': 16, 'Cabinet': 17, 'Candle': 18, 'Cart': 19, 'CellPhone': 20, 'Cloth': 21, 'CoffeeMachine': 22, 'CoffeeTable': 23, 'CounterTop': 24, 'CreditCard': 25, 'Cup': 26, 'Desk': 27, 'DeskLamp': 28, 'DiningTable': 29, 'DishSponge': 30, 'Drawer': 31, 'Dresser': 32, 'Egg': 33, 'Faucet': 34, 'FloorLamp': 35, 'Fork': 36, 'Fridge': 37, 'GarbageCan': 38, 'Glassbottle': 39, 'HandTowel': 40, 'HandTowelHolder': 41, 'HousePlant': 42, 'Kettle': 43, 'KeyChain': 44, 'Knife': 45, 'Ladle': 46, 'Laptop': 47, 'LaundryHamper': 48, 'LaundryHamperLid': 49, 'Lettuce': 50, 'LettuceSliced': 51, 'LightSwitch': 52, 'Microwave': 53, 'Mug': 54, 'Newspaper': 55, 'Ottoman': 56, 'PaintingHanger': 57, 'Pan': 58, 'PaperTowel': 59, 'PaperTowelRoll': 60, 'Pen': 61, 'Pencil': 62, 'PepperShaker': 63, 'Pillow': 64, 'Plate': 65, 'Plunger': 66, 'Pot': 67, 'Potato': 68, 'PotatoSliced': 69, 'RemoteControl': 70, 'Safe': 71, 'SaltShaker': 72, 'ScrubBrush': 73, 'Shelf': 74, 'ShowerDoor': 75, 'SideTable': 76, 'Sink': 77, 'SinkBasin': 78, 'SoapBar': 79, 'SoapBottle': 80, 'Sofa': 81, 'Spatula': 82, 'Spoon': 83, 'SprayBottle': 84, 'Statue': 85, 'StoveBurner': 86, 'StoveKnob': 87, 'TVStand': 88, 'TeddyBear': 89, 'Television': 90, 'TennisRacket': 91, 'TissueBox': 92, 'Toaster': 93, 'Toilet': 94, 'ToiletPaper': 95, 'ToiletPaperHanger': 96, 'ToiletPaperRoll': 97, 'Tomato': 98, 'TomatoSliced': 99, 'Towel': 100, 'TowelHolder': 101, 'Vase': 102, 'Watch': 103, 'WateringCan': 104, 'WineBottle': 105}
-        self.class_to_ind = parser_scene.get_dict_class_to_ind(self.object_classes)
+        object_classes = ['__background__'] + self.SGG_train_object_classes
+        self.class_to_ind = parser_scene.get_dict_class_to_ind(object_classes)
         # ['__background__', 'AlarmClock', 'Apple', 'AppleSliced', 'ArmChair', 'BaseballBat', 'BasketBall', 'Bathtub', 'BathtubBasin', 'Bed', 'Book', 'Bowl', 'Box', 'Bread', 'BreadSliced', 'ButterKnife', 'CD', 'Cabinet', 'Candle', 'Cart', 'CellPhone', 'Cloth', 'CoffeeMachine', 'CoffeeTable', 'CounterTop', 'CreditCard', 'Cup', 'Desk', 'DeskLamp', 'DiningTable', 'DishSponge', 'Drawer', 'Dresser', 'Egg', 'Faucet', 'FloorLamp', 'Fork', 'Fridge', 'GarbageCan', 'Glassbottle', 'HandTowel', 'HandTowelHolder', 'HousePlant', 'Kettle', 'KeyChain', 'Knife', 'Ladle', 'Laptop', 'LaundryHamper', 'LaundryHamperLid', 'Lettuce', 'LettuceSliced', 'LightSwitch', 'Microwave', 'Mug', 'Newspaper', 'Ottoman', 'PaintingHanger', 'Pan', 'PaperTowel', 'PaperTowelRoll', 'Pen', 'Pencil', 'PepperShaker', 'Pillow', 'Plate', 'Plunger', 'Pot', 'Potato', 'PotatoSliced', 'RemoteControl', 'Safe', 'SaltShaker', 'ScrubBrush', 'Shelf', 'ShowerDoor', 'SideTable', 'Sink', 'SinkBasin', 'SoapBar', 'SoapBottle', 'Sofa', 'Spatula', 'Spoon', 'SprayBottle', 'Statue', 'StoveBurner', 'StoveKnob', 'TVStand', 'TeddyBear', 'Television', 'TennisRacket', 'TissueBox', 'Toaster', 'Toilet', 'ToiletPaper', 'ToiletPaperHanger', 'ToiletPaperRoll', 'Tomato', 'TomatoSliced', 'Towel', 'TowelHolder', 'Vase', 'Watch', 'WateringCan', 'WineBottle']
-        self.ind_to_classes = sorted(self.class_to_ind, key=lambda k:
-                                     self.class_to_ind[k])
-        # ['__background__', '__background__', 'AlarmClock', 'Apple', 'AppleSliced', 'ArmChair', 
-        # self.ind_to_classes.insert(0, '__background__')
-        ic(self.ind_to_classes)
-        # cfg.ind_to_class = self.ind_to_classes
+        self.SGG_result_ind_to_classes = sorted(self.class_to_ind, key=lambda k:
+                                                self.class_to_ind[k])
+        # cfg.ind_to_class = self.SGG_result_ind_to_classes
         self.predicate_to_ind = parser_scene.get_dict_predicate_to_ind()
         self.predicate_to_ind['__background__'] = 0
         self.ind_to_predicates = sorted(self.predicate_to_ind, key=lambda k:
                                         self.predicate_to_ind[k])
+        ic(self.SGG_train_object_classes)
+        ic(self.SGG_result_ind_to_classes)
         ic(self.ind_to_predicates)
 
     def trans_object_meta_data_to_relation_and_attribute(self, data_obj_relation_attribute, boxes_id=None, boxes_labels=None, agent_meta=None, horizontal_view_angle=0):
         if boxes_id is None:
             boxes_id, boxes_labels = [], []
             for obj_relation_attribute in data_obj_relation_attribute:
-                if obj_relation_attribute["visible"] == True and obj_relation_attribute["objectType"] in self.object_classes:
+                if obj_relation_attribute["visible"] == True and obj_relation_attribute["objectType"] in self.SGG_result_ind_to_classes:
                     boxes_id.append(obj_relation_attribute["objectId"])
-                    class_idx = self.object_classes.index(obj_relation_attribute["objectType"])
+                    class_idx = self.SGG_result_ind_to_classes.index(obj_relation_attribute["objectType"])
                     boxes_labels.append(class_idx)
         obj_relations, obj_relation_triplets, obj_attribute, obj_angle_of_view = parser_scene.transfer_object_meta_data_to_relation_and_attribute(
             boxes_id, data_obj_relation_attribute, horizontal_view_angle, agent_meta)
@@ -99,7 +98,7 @@ class TransMetaData():
         masks, boxes, boxes_labels, boxes_id = parser_scene.transfer_mask_semantic_to_bbox_label(
             mask,
             color_to_object,
-            self.object_classes,
+            self.SGG_train_object_classes,
             data_obj_relation_attribute
         )
         dict_obj_rel_attr = self.trans_object_meta_data_to_relation_and_attribute(
@@ -132,10 +131,10 @@ class AlfredDataset(Dataset):
         self.get_data_files(self.root, balance_scenes=cfg.ALFREDTEST.balance_scenes)
 
         self.trans_meta_data = TransMetaData(cfg)
-        self.ind_to_classes = self.trans_meta_data.ind_to_classes
-        self.object_classes = self.trans_meta_data.object_classes
+        self.SGG_train_object_classes = self.trans_meta_data.SGG_train_object_classes
         self.class_to_ind = self.trans_meta_data.class_to_ind
-        # cfg.ind_to_class = self.ind_to_classes
+        self.SGG_result_ind_to_classes = self.trans_meta_data.SGG_result_ind_to_classes
+        self.ind_to_class = self.SGG_result_ind_to_classes
         self.predicate_to_ind = self.trans_meta_data.predicate_to_ind
         self.ind_to_predicates = self.trans_meta_data.ind_to_predicates
 
@@ -235,7 +234,7 @@ class AlfredDataset(Dataset):
         return {"height": self.cfg.ALFREDTEST.height, "width": self.cfg.ALFREDTEST.weight}
 
     def map_class_id_to_class_name(self, class_id):
-        return self.trans_meta_data.ind_to_classes[class_id]
+        return self.trans_meta_data.SGG_train_object_classes[class_id]
 
 
 def main(cfg):
@@ -263,10 +262,10 @@ def main(cfg):
         with open(os.path.join(save_path, "object_rgb_feature.json"), "r") as f:
             object_vision_feature = json.load(f)
 
-    object_not_save = [i for i in range(len(alfred_dataset.object_classes))]
+    object_not_save = [i for i in range(len(alfred_dataset.SGG_result_ind_to_classes))]
     # object_not_save = [0, 3, 14, 25, 51, 57, 59, 62, 69, 73, 79, 87, 97, 99, 103]
-    print("Always not found: ", [alfred_dataset.object_classes[i] for i in [0, 3, 14, 51, 57, 59, 69, 97, 99]])
-    print(alfred_dataset.object_classes)
+    print("Always not found: ", [alfred_dataset.SGG_result_ind_to_classes[i] for i in [0, 3, 14, 51, 57, 59, 69, 97, 99]])
+    print(alfred_dataset.SGG_result_ind_to_classes)
 
 
     def gen_object_rgb_feature():
@@ -291,12 +290,12 @@ def main(cfg):
                     object_not_save.remove(label)
                     print("remove: ", label)
                     print("bbox:", bbox)
-                    print("object: ", alfred_dataset.object_classes[label])
+                    print("object: ", alfred_dataset.SGG_result_ind_to_classes[label])
                     rgb_feature = extractor.featurize([crop_img], batch=1)
                     GAP_rgb_feature = rgb_feature[0].mean([1, 2]).reshape(-1)
                     object_vision_feature[str(label)] = GAP_rgb_feature.to('cpu').numpy().tolist()
                     print(GAP_rgb_feature.shape)
-                    crop_img.save(os.path.join(save_path, alfred_dataset.object_classes[label] + "_{}.jpg".format(label)))
+                    crop_img.save(os.path.join(save_path, alfred_dataset.SGG_result_ind_to_classes[label] + "_{}.jpg".format(label)))
                     time.sleep(1)
                     print("Can't find object class: ", object_not_save)
             # [0, 3, 14, 51, 57, 59, 69, 97, 99]
@@ -330,7 +329,7 @@ def main(cfg):
                     object_attribute[str(label)] = attribute
                     ic(attribute)
                     print("remove: ", label)
-                    print("object: ", alfred_dataset.object_classes[label])
+                    print("object: ", alfred_dataset.SGG_result_ind_to_classes[label])
                     time.sleep(1)
                     print("Can't find object class: ", object_not_save)
             # [0, 3, 14, 51, 57, 59, 69, 97, 99]
@@ -345,7 +344,7 @@ def main(cfg):
             json.dump(object_attribute, f)
 
     gen_object_attr()
-    object_not_save = [i for i in range(len(alfred_dataset.object_classes))]
+    object_not_save = [i for i in range(len(alfred_dataset.SGG_result_ind_to_classes))]
     gen_object_rgb_feature()
 
 def get_resnet_model(cfg):

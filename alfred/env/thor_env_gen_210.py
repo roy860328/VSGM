@@ -79,8 +79,10 @@ class ThorEnv(Controller):
         event = super().step(teleport_action)
         event = self.set_hand_object_hide(event, is_hide=False)
 
-        event.third_party_camera_frames.append(dict(frame=event1.frame, objects=event1.metadata['objects']))
-        event.third_party_camera_frames.append(dict(frame=event2.frame, objects=event2.metadata['objects']))
+        event.third_party_camera_frames.append(
+            dict(frame=event1.frame, objects=event1.metadata['objects'], depth_frame=event1.depth_frame, instance_segmentation_frame=event1.instance_segmentation_frame))
+        event.third_party_camera_frames.append(
+            dict(frame=event2.frame, objects=event2.metadata['objects'], depth_frame=event2.depth_frame, instance_segmentation_frame=event2.instance_segmentation_frame))
         self.last_event = event
         return event
 

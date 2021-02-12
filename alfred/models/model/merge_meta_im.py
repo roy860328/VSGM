@@ -27,6 +27,7 @@ class Module(merge_meta):
         self.config['general']['model']['block_hidden_dim'] = 2*args.dhid
         self.root_path = os.getcwd()
         self.feat_pt = 'feat_third_party_img_and_exploration.pt'
+        self.missing = []
 
         # internal states
         self.state_t = None
@@ -115,7 +116,7 @@ class Module(merge_meta):
         third_party_all_meta_data_path = \
             os.path.join(root, "third_party_all_meta_data.json")
         if os.path.isfile(third_party_all_meta_data_path):
-            print("load third_party_all_meta_data.json {}".format(third_party_all_meta_data_path))
+            # print("load third_party_all_meta_data.json {}".format(third_party_all_meta_data_path))
             with open(third_party_all_meta_data_path, 'r') as f:
                 third_party_all_meta = json.load(f)
         else:
@@ -228,7 +229,16 @@ class Module(merge_meta):
                 all_meta_data = self._load_meta_data(root, ex["images"], im, device)
                 feat['all_meta_datas'].append(all_meta_data)  # add stop frame
 
-                # im = torch.load(os.path.join(root, self.feat_pt))
+                try:
+                    im = torch.load(os.path.join(root, self.feat_pt))
+                    if len(im['feat_conv']) != len(im['feat_conv_1'])\
+                       or len(im['feat_conv_1']) != len(im['feat_conv_2'])\
+                       or len(im['feat_conv']) < len(ex['images']):
+                        raise
+                except Exception as e:
+                    print(e)
+                    self.missing.append(root)
+
                 # num_low_actions = len(ex['plan']['low_actions'])
                 # num_feat_frames = im['feat_conv'].shape[0]
 

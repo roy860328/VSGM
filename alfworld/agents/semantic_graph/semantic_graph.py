@@ -274,10 +274,7 @@ class SceneGraph(object):
         self.isORACLE = cfg.SCENE_GRAPH.ORACLE
         self.GPU = cfg.SCENE_GRAPH.GPU
         self.GRAPH_RESULT_PATH = cfg.SCENE_GRAPH.GRAPH_RESULT_PATH
-        self.USE_OTHER_RELATION = cfg.SCENE_GRAPH.USE_OTHER_RELATION if "USE_OTHER_RELATION" in cfg.SCENE_GRAPH else False
-        if "RELATION_MODE" in cfg.SCENE_GRAPH and cfg.SCENE_GRAPH.RELATION_MODE != 0:
-            self.USE_OTHER_RELATION = cfg.SCENE_GRAPH.RELATION_MODE
-        ic(self.USE_OTHER_RELATION)
+        self.RELATION_MODE = cfg.SCENE_GRAPH.RELATION_MODE
         self.ANGLE_OF_VIEWS = cfg.SCENE_GRAPH.ANGLE_OF_VIEWS
         # vision
         self.VISION_FEATURE_SIZE = cfg.SCENE_GRAPH.VISION_FEATURE_SIZE
@@ -342,18 +339,18 @@ class SceneGraph(object):
         self.priori_graph = self.graphdata_type(obj_cls_name_to_features, self.GPU, self.dim_rgb_feature)
 
         # node word feature
-        for i, (k, word_feature) in enumerate(obj_cls_name_to_features.items()):
+        for k, word_feature in obj_cls_name_to_features.items():
             '''
             rgb_features: "0"~"105"
             attributes: "0"~"105"
-            i: "0"~"104"
             k: "1"~"105"
             word_feature: shape = [300]
+            self.priori_graph.x index from 0~104
             '''
             # rgb feature
-            rgb_feature = [rgb_features[str(i)]]
+            rgb_feature = [rgb_features[str(k)]]
             rgb_feature = torch.tensor(rgb_feature).float()
-            attribute = torch.tensor(attributes[str(i)]).float()
+            attribute = torch.tensor(attributes[str(k)]).float()
             self.priori_graph.add_node(
                 obj_cls=k,
                 attr_feature=attribute,
@@ -370,7 +367,7 @@ class SceneGraph(object):
         print("need to check word & rgb feature & relation is ok")
 
     def init_current_state_data(self):
-        self.current_state_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU)
+        self.current_state_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU, self.dim_rgb_feature)
 
     def _get_obj_cls_name_to_features(self, path, _background=False):
         def get_feature(csv_nodes_data):
@@ -522,30 +519,30 @@ class SceneGraph(object):
         # no matter isFindNode is True or False,
         # self.current_state_graph always need to add adj relation
         # if not isFindNode:
-        if self.USE_OTHER_RELATION == 2:
-            self.add_other_relation(self.current_state_graph,
-                                    current_state_graph_current_frame_obj_cls_to_node_index,
-                                    obj_relations
-                                    )
-            self.add_other_relation(self.global_graph,
-                                    global_graph_current_frame_obj_cls_to_node_index,
-                                    obj_relations
-                                    )
-        else:
-            self.add_adj_relation(self.current_state_graph,
-                                  current_state_graph_current_frame_obj_cls_to_node_index,
-                                  add_relation_anyway=True
-                                  )
-            if self.USE_OTHER_RELATION:
-                self.add_other_relation(self.global_graph,
-                                        global_graph_current_frame_obj_cls_to_node_index,
-                                        obj_relations
-                                        )
-            else:
-                self.add_adj_relation(self.global_graph,
-                                      global_graph_current_frame_obj_cls_to_node_index,
-                                      add_relation_anyway=False
-                                      )
+        self.add_other_relation(self.current_state_graph,
+                                current_state_graph_current_frame_obj_cls_to_node_index,
+                                obj_relations
+                                )
+        self.add_other_relation(self.global_graph,
+                                global_graph_current_frame_obj_cls_to_node_index,
+                                obj_relations
+                                )
+        # if self.USE_OTHER_RELATION == 2:
+        # else:
+        #     self.add_adj_relation(self.current_state_graph,
+        #                           current_state_graph_current_frame_obj_cls_to_node_index,
+        #                           add_relation_anyway=True
+        #                           )
+        #     if self.USE_OTHER_RELATION:
+        #         self.add_other_relation(self.global_graph,
+        #                                 global_graph_current_frame_obj_cls_to_node_index,
+        #                                 obj_relations
+        #                                 )
+        #     else:
+        #         self.add_adj_relation(self.global_graph,
+        #                               global_graph_current_frame_obj_cls_to_node_index,
+        #                               add_relation_anyway=False
+        #                               )
 
     def add_local_graph_to_global_graph(self, img, sgg_results, reset_current_graph=True):
         if reset_current_graph:

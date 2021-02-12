@@ -87,6 +87,8 @@ class EvalTask(Eval):
             image = np.uint8(env.last_event.frame)
             curr_image = Image.fromarray(image)
             feat['frames'] = resnet.featurize([curr_image], batch=1).unsqueeze(0)
+            curr_instance = Image.fromarray(np.uint8(env.last_event.instance_segmentation_frame))
+            feat['frames_instance'] = resnet.featurize([curr_instance], batch=1).unsqueeze(0)
             curr_depth_image = env.last_event.depth_frame * (255 / 10000)
             curr_depth_image = curr_depth_image.astype(np.uint8)
             feat['frames_depth'] = curr_depth_image

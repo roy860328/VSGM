@@ -30,8 +30,8 @@ GENERAL:
   LOAD_PRETRAINED: False
   LOAD_PRETRAINED_PATH: ""
   use_exploration_frame_feats: False
-  save_path: '../exp/Mini_MOCA_GRAPH'
-  DECODER: "Mini_MOCA_GRAPH"
+  save_path: '../exp/Mini_MOCA_GRAPH_V2'
+  DECODER: "Mini_MOCA_GRAPH_V2"
 
 SCENE_GRAPH:
   GPU: True
@@ -50,7 +50,7 @@ SCENE_GRAPH:
   SAME_VISION_FEATURE_THRESHOLD: 0.7
   MODEL: "softmax_gcn"
   GraphData: "HeteGraphData"
-  EMBED_TYPE: "WeightedSum"  # "WeightedSum", "SelfAttn"
+  EMBED_TYPE: "SelfAttn"  # "WeightedSum", "SelfAttn"
 
   NODE_INPUT_RGB_FEATURE_SIZE: 512 # resnet 512x7x7 -> GAP
   NODE_INPUT_WORD_EMBED_SIZE: 300
@@ -59,7 +59,6 @@ SCENE_GRAPH:
   EMBED_FEATURE_SIZE: 64
 
   # ATTRIBUTE
-  USE_OTHER_RELATION: True
   ATTRIBUTE_FEATURE_SIZE: 24   # 23 + 1
 
   # CHOSE_IMPORTENT_NODE

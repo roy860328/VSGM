@@ -291,3 +291,30 @@ class Eval(object):
         thirdpart_meta_data["all_meta_data_1"] = meta_datas_1
         thirdpart_meta_data["all_meta_data_2"] = meta_datas_2
         return [thirdpart_meta_data]
+
+    def get_frame_feat(cls, env, resnet, feat):
+        last_event = env.last_event
+        curr_image = Image.fromarray(np.uint8(env.last_event.frame))
+        curr_instance = Image.fromarray(np.uint8(env.last_event.instance_segmentation_frame))
+        curr_depth_image = env.last_event.depth_frame * (255 / 10000)
+        curr_depth_image = curr_depth_image.astype(np.uint8)
+
+        feat['frames_conv'], feat['frames_instance_conv'], feat['frames_depth_conv'] = \
+            cls.process_image(
+                resnet, last_event.frame, last_event.instance_segmentation_frame, last_event.depth_frame)
+        feat['frames_conv_1'], feat['frames_instance_conv_1'], feat['frames_depth_conv_1'] = \
+            cls.process_image(
+                resnet, last_event.frame, last_event.instance_segmentation_frame, last_event.depth_frame)
+        feat['frames_conv_2'], feat['frames_instance_conv_2'], feat['frames_depth_conv_2'] = \
+            cls.process_image(
+                resnet, last_event.frame, last_event.instance_segmentation_frame, last_event.depth_frame)
+        return feat
+
+    def process_image(cls, resnet, frames, frames_instance, frames_depth):
+        frames = Image.fromarray(np.uint8(frames))
+        frames = resnet.featurize([frames], batch=1).unsqueeze(0)
+        frames_instance = Image.fromarray(np.uint8(frames_instance))
+        frames_instance = resnet.featurize([frames_instance], batch=1).unsqueeze(0)
+        frames_depth = Image.fromarray(np.uint8(frames_instance * (255 / 10000)))
+        frames_depth = resnet.featurize([frames_depth], batch=1).unsqueeze(0)
+        return frames, frames_instance, frames_depth
