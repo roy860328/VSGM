@@ -23,7 +23,7 @@ You will create csv file at 'graph_analysis/data_dgl/object_alfworld.csv'
 
 ## Get rgb_feature feature data
 ```
-python sgg/alfred_data_format.py config/test_base.yaml --semantic_config_file config/ semantic_graph.yaml --sgg_config_file sgg/graph-rcnn.pytorch/configs/attribute.yaml --not_save_config
+python sgg/alfred_data_format.py config/test_base.yaml --semantic_config_file config/semantic_graph.yaml --sgg_config_file sgg/graph-rcnn.pytorch/configs/attribute.yaml --not_save_config
 ```
 
 

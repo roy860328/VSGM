@@ -47,6 +47,9 @@ class Module(seq2seq_im_moca_semantic):
         elif self.config['semantic_cfg'].GENERAL.DECODER == "Mini_MOCA_GRAPH_V6":
             import nn.vnn5 as vnn
             decoder = vnn.Mini_MOCA_GRAPH_V6
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "Mini_MOCA_GRAPH_V7":
+            import nn.vnn5 as vnn
+            decoder = vnn.Mini_MOCA_GRAPH_V7
         else:
             raise NotImplementedError()
         # else:
@@ -88,6 +91,13 @@ class Module(seq2seq_im_moca_semantic):
         '''
         semantic graph
         '''
+
+        if (self.config['semantic_cfg'].GENERAL.DECODER == "Mini_MOCA_GRAPH_V6" or self.config['semantic_cfg'].GENERAL.DECODER == "Mini_MOCA_GRAPH_V7")\
+           and self.r_state['weighted_lang_t_goal'] is not None:
+            state_t_goal, state_t_instr = self.r_state['weighted_lang_t_goal'], self.r_state['weighted_lang_t_instr']
+            print("Mini_MOCA_GRAPH_V6")
+        else:
+            state_t_goal, state_t_instr = self.r_state['state_t_goal'], self.r_state['state_t_instr']
         # batch = 1
         all_meta_datas = feat['all_meta_datas']
         feat_global_graph = []
@@ -100,14 +110,6 @@ class Module(seq2seq_im_moca_semantic):
             t_store_state = b_store_state["sgg_meta_data"]
             # cls.resnet.featurize([curr_image], batch=1).unsqueeze(0)
             t_store_state["rgb_image"] = feat['frames'][env_index, 0]
-            if self.config['semantic_cfg'].GENERAL.DECODER == "Mini_MOCA_GRAPH_V6":
-                # state_t_goal, state_t_instr = self.r_state['state_t_goal'], self.r_state['state_t_instr']
-                self.r_state['weighted_lang_t_goal'] = [lang_attn_t_goal]
-                self.r_state['weighted_lang_t_instr'] = [lang_attn_t_instr]
-                state_t_goal, state_t_instr
-                raise
-            else:
-                state_t_goal, state_t_instr = self.r_state['state_t_goal'], self.r_state['state_t_instr']
             global_graph_importent_features, current_state_graph_importent_features, history_changed_nodes_graph_importent_features, priori_importent_features,\
                 global_graph_dict_objectIds_to_score, current_state_dict_objectIds_to_score, history_changed_dict_objectIds_to_score, priori_dict_dict_objectIds_to_score =\
                 self.dec.store_and_get_graph_feature(t_store_state, env_index, state_t_goal, state_t_instr)
@@ -140,6 +142,8 @@ class Module(seq2seq_im_moca_semantic):
         self.r_state['state_t_goal'] = state_t_goal
         self.r_state['state_t_instr'] = state_t_instr
         self.r_state['e_t'] = self.dec.emb(out_action_low.max(1)[1])
+        self.r_state['weighted_lang_t_goal'] = lang_attn_t_goal
+        self.r_state['weighted_lang_t_instr'] = lang_attn_t_instr
 
         assert len(all_meta_datas) == 1, "if not the analyze_graph object ind is error"
         global_graph_dict_ANALYZE_GRAPH = self.semantic_graph_implement.scene_graphs[0].analyze_graph(

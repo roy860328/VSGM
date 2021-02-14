@@ -230,11 +230,19 @@ class Module(merge_meta):
                 feat['all_meta_datas'].append(all_meta_data)  # add stop frame
 
                 try:
+                    self.feat_pt = 'feat_third_party_img_and_exploration.pt'
+                    self.feat_pt = 'feat_depth_instance.pt'
                     im = torch.load(os.path.join(root, self.feat_pt))
-                    if len(im['feat_conv']) != len(im['feat_conv_1'])\
-                       or len(im['feat_conv_1']) != len(im['feat_conv_2'])\
-                       or len(im['feat_conv']) < len(ex['images']):
-                        raise
+                    if self.feat_pt == 'feat_third_party_img_and_exploration.pt':
+                        if len(im['feat_conv']) != len(im['feat_conv_1'])\
+                           or len(im['feat_conv_1']) != len(im['feat_conv_2'])\
+                           or len(im['feat_conv']) < len(ex['images']):
+                            raise
+                    elif self.feat_pt == 'feat_depth_instance.pt':
+                        if len(im['depth']) != len(im['instance']):
+                            raise
+                    else:
+                        raise NotImplementedError()
                 except Exception as e:
                     print(e)
                     self.missing.append(root)

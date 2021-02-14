@@ -231,3 +231,21 @@ class Eval(object):
             "sgg_meta_data": meta_data,
         }
         return [meta_datas]
+
+
+    def get_frame_feat(cls, env, resnet, feat):
+        last_event = env.last_event
+
+        feat['frames_conv'], feat['frames_instance_conv'], feat['frames_depth_conv'] = \
+            cls.process_image(
+                cls, resnet, last_event.frame, last_event.instance_segmentation_frame, last_event.depth_frame)
+        return feat
+
+    def process_image(cls, resnet, frames, frames_instance, frames_depth):
+        frames = Image.fromarray(np.uint8(frames))
+        frames = resnet.featurize([frames], batch=1).unsqueeze(0)
+        frames_instance = Image.fromarray(np.uint8(frames_instance))
+        frames_instance = resnet.featurize([frames_instance], batch=1).unsqueeze(0)
+        frames_depth = Image.fromarray(np.uint8(frames_depth * (255 / 10000))).convert('RGB')
+        frames_depth = resnet.featurize([frames_depth], batch=1).unsqueeze(0)
+        return frames, frames_instance, frames_depth

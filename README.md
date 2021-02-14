@@ -122,16 +122,47 @@ CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/witho
 CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/gan_semantic_graph.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_importent_nodes --dout exp/graph_attention --splits data/splits/oct21.json --batch 8 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --not_save_config --gpu
 ```
 
+## Mini MOCA v1-v6
+```
+CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/mini_moca_graph_softmaxgcn_v{}.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_importent_nodes --dout exp/mini_moca_graph_softmaxgcn_v{} --splits data/splits/oct21.json --batch 5 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --not_save_config --gpu --task_types 1
+
+CUDA_VISIBLE_DEVICES=1 python models/eval_moca/eval_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/importent_semantic_graph_priori_hete_gcn.yaml --model_path exp/mini_moca_graph_softmaxgcn_v3_10-02-2021_16-51-32/best_seen.pth --model seq2seq_im_moca_importent_nodes --data data/full_2.1.0/ --eval_split valid_seen --gpu  --task_types 1 --subgoals all
+```
+
+## Moca instance & depth
+mini_moca_test_mask_v1.yaml / mini_moca_test_mask_depth_v1.yaml
+```
+CUDA_VISIBLE_DEVICES=1 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/mini_moca_test_mask_v1.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_mini_test --dout exp/mini_test_mask_v1 --splits data/splits/oct21.json --batch 5 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --not_save_config --gpu --task_types 1
+
+CUDA_VISIBLE_DEVICES=1 python models/eval_thirdparty/eval_semantic.py models/config/without_env_base.yaml --model_path exp/mini_moca_graph_softmaxgcn_v3_10-02-2021_16-51-32/best_seen.pth --model seq2seq_im_moca_mini_test --data data/full_2.1.0/ --eval_split valid_seen --gpu  --task_types 1 --subgoals all
+
+CUDA_VISIBLE_DEVICES=0 python models/eval_moca/eval_semantic.py models/config/without_env_base.yaml --model_path exp/mini_test_mask_v1_12-02-2021_17-01-40/best_seen.pth --model seq2seq_im_moca_mini_test --data data/full_2.1.0/ --eval_split valid_seen --gpu  --task_types 1 --subgoals all
+```
+
+## Moca instance & depth with graph
+```
+CUDA_VISIBLE_DEVICES=1 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/mini_moca_test_mask_depth_graph_v{}.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_mini_mask_depth --dout exp/mini_moca_test_mask_depth_graph_v{} --splits data/splits/oct21.json --batch 5 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --not_save_config --gpu --task_types 1 
+
+CUDA_VISIBLE_DEVICES=0 python models/eval_moca/eval_semantic.py models/config/without_env_base.yaml --model_path exp/mini_moca_test_mask_depth_graph_v1_12-02-2021_16-59-30/best_seen.pth --model seq2seq_im_moca_mini_mask_depth --data data/full_2.1.0/ --eval_split valid_seen --gpu  --task_types 1 --subgoals all
+```
+
 ---
 ---
 # ThirdParty
+
+## Test training data is ok
+```
+CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/fast_epoch_base.yaml --data data/full_2.1.0/ --model merge_meta_im --dout exp/merge_meta_im --splits data/splits/oct21.json --batch 20 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --not_save_config --gpu
+--task_types 1
+```
+
 ## ThirdParty
 ```
-CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/fast_epoch_base.yaml --semantic_config_file models/config/importent_semantic_graph_softmax_gcn_dec.yaml --data data/full_2.1.0/ --model seq2seq_im_thirdpartyview --dout exp/thirdpartyview_softmax --splits data/splits/oct21.json --batch 5 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --not_save_config --gpu
+CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/fast_epoch_base.yaml --semantic_config_file models/config/importent_semantic_graph_softmax_gcn_dec.yaml --data data/full_2.1.0/ --model seq2seq_im_thirdpartyview --dout exp/thirdpartyview_softmax --splits data/splits/oct21.json --batch 5 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --not_save_config --gpu --task_types 1
 ```
 ## eval sub goal
 ```
-CUDA_VISIBLE_DEVICES=0 python models/eval_thirdparty/eval_semantic.py models/config/fast_epoch_base.yaml --semantic_config_file models/config/importent_semantic_graph_softmax_gcn_dec.yaml --model_path exp/thirdpartyview_softmax/best_seen.pth --model seq2seq_im_thirdpartyview --data data/full_2.1.0/ --eval_split valid_seen --gpu --subgoals GotoLocation,PickupObject --task_types 1,2
+CUDA_VISIBLE_DEVICES=0 python models/eval_thirdparty/eval_semantic.py models/config/fast_epoch_base.yaml --semantic_config_file models/config/importent_semantic_graph_softmax_gcn_dec.yaml --model_path exp/thirdpartyview_softmax/best_seen.pth --model seq2seq_im_thirdpartyview --data data/full_2.1.0/ --eval_split valid_seen --gpu --subgoals all --task_types 1
 ```
 
 ---

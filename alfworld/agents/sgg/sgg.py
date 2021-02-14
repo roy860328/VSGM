@@ -71,11 +71,12 @@ class SGG(SceneParser):
             detection_attrs = [o.to('cpu') for o in detection_attrs]
             # detections.bbox
             if self.SAVE_SGG_RESULT:
-                self.save_detect_result(imgs, detections, img_ids)
-            b_results = self.parser_sgg_result(detections, detection_pairs, detection_attrs)
+                self._save_detect_result(imgs, detections, img_ids)
+            b_results = self._parser_sgg_result(detections, detection_pairs, detection_attrs)
         return b_results
 
-    def parser_sgg_result(self, detections, detection_pairs, detection_attrs):
+
+    def _parser_sgg_result(self, detections, detection_pairs, detection_attrs):
         '''
         detections[0]
         bbox: tensor([[372.5945, 659.5366, 517.6358, 792.8099],
@@ -99,14 +100,7 @@ class SGG(SceneParser):
             b_results.append(result)
         return b_results
 
-    def load(self):
-        checkpoint = torch.load(self.cfg.MODEL.WEIGHT_IMG)
-        model_para = checkpoint["model"]
-        # for name, param in self.named_parameters():
-        #     print(name)
-        self.load_state_dict(model_para)
-
-    def save_detect_result(self, imgs, detections, img_ids=0):
+    def _save_detect_result(self, imgs, detections, img_ids=0):
         # graph-rcnn visualize_detection
         for i, prediction in enumerate(detections):
             top_prediction = select_top_predictions(prediction)
@@ -118,6 +112,26 @@ class SGG(SceneParser):
             result = overlay_class_names(result, top_prediction, self.SGG_result_ind_to_classes)
             cv2.imwrite(os.path.join(self.SAVE_SGG_RESULT_PATH, "detection_{}.jpg".format(img_ids)), result)
 
+    def _backbone_feat(self, transform_images, targets=None):
+        features = super().backbone_feat(transform_images)
+        return features
+
+    def featurize(self, images, batch=32):
+        images_normalized = torch.stack([self.transform(i) for i in images], dim=0).to(self.device)
+        out = []
+        with torch.set_grad_enabled(False):
+            for i in range(0, images_normalized.size(0), batch):
+                b = images_normalized[i:i+batch]
+                out.append(self._backbone_feat(b))
+        return torch.cat(out, dim=0)
+
+    def load(self):
+        checkpoint = torch.load(self.cfg.MODEL.WEIGHT_IMG)
+        model_para = checkpoint["model"]
+        # for name, param in self.named_parameters():
+        #     print(name)
+        self.load_state_dict(model_para)
+
 
 def load_pretrained_model(cfg, transforms, SGG_result_ind_to_classes, device):
     '''
@@ -125,7 +139,7 @@ def load_pretrained_model(cfg, transforms, SGG_result_ind_to_classes, device):
     '''
     scene_parser = SGG(cfg, transforms, SGG_result_ind_to_classes, device)
     scene_parser.load()
-    detector.eval()
+    scene_parser.eval()
     return scene_parser
 
 
@@ -141,14 +155,18 @@ if __name__ == '__main__':
     semantic_cfg
     '''
     cfg_semantic = cfg['semantic_cfg']
+    cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE = 2048
     trans_MetaData = alfred_data_format.TransMetaData(cfg_semantic)
-    scenegraph = SceneGraph(cfg_semantic, trans_MetaData.object_classes)
+    scenegraph = SceneGraph(
+        cfg_semantic, trans_MetaData.SGG_result_ind_to_classes, cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE)
     alfred_dataset = alfred_data_format.AlfredDataset(cfg_semantic)
+    max_lable = 0
     '''
     sgg_cfg
     '''
     cfg_sgg = cfg['sgg_cfg']
-    detector = load_pretrained_model(cfg_sgg, trans_MetaData.transforms, alfred_dataset.ind_to_classes, 'cuda')
+    detector = load_pretrained_model(
+        cfg_sgg, trans_MetaData.transforms, alfred_dataset.SGG_result_ind_to_classes, 'cuda')
     detector.eval()
     # detector.to(device='cuda')
 
@@ -157,3 +175,8 @@ if __name__ == '__main__':
         img = img.unsqueeze(0)
         sgg_results = detector.predict(img, idx)
         # scenegraph.add_local_graph_to_global_graph(img, sgg_results[0])
+
+        max_lable = max(max_lable, max(target.extra_fields["labels"]))
+        print(max_lable)
+        print(target.extra_fields["labels"])
+        print(target.extra_fields["objectIds"])

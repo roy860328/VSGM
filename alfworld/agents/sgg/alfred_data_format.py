@@ -14,6 +14,22 @@ import sgg.parser_scene as parser_scene
 from icecream import ic
 
 
+def rgb():
+    SAVE_PATH = os.path.join(os.getcwd(), "semantic_graph/rgb_feature")
+    OBJECT_RGB_FEATURE = "object_rgb_feature.json"
+    return SAVE_PATH, OBJECT_RGB_FEATURE
+
+
+def mask():
+    SAVE_PATH = os.path.join(os.getcwd(), "semantic_graph/mask_feature")
+    OBJECT_RGB_FEATURE = "object_mask_feature.json"
+    return SAVE_PATH, OBJECT_RGB_FEATURE
+
+
+SAVE_PATH, OBJECT_RGB_FEATURE = mask()
+OBJECT_ATTRIBUTE = "object_attribute.json"
+
+
 # Transform
 class TransMetaData():
 
@@ -131,10 +147,12 @@ class AlfredDataset(Dataset):
         self.get_data_files(self.root, balance_scenes=cfg.ALFREDTEST.balance_scenes)
 
         self.trans_meta_data = TransMetaData(cfg)
+        # train
         self.SGG_train_object_classes = self.trans_meta_data.SGG_train_object_classes
+        self.ind_to_classes = self.SGG_train_object_classes
+
         self.class_to_ind = self.trans_meta_data.class_to_ind
         self.SGG_result_ind_to_classes = self.trans_meta_data.SGG_result_ind_to_classes
-        self.ind_to_class = self.SGG_result_ind_to_classes
         self.predicate_to_ind = self.trans_meta_data.predicate_to_ind
         self.ind_to_predicates = self.trans_meta_data.ind_to_predicates
 
@@ -181,6 +199,8 @@ class AlfredDataset(Dataset):
     def __getitem__(self, idx):
         # load images ad masks
         img_path = self.imgs[idx]
+        # print("care for img_path = self.masks[idx]")
+        img_path = self.masks[idx]
         mask_path = self.masks[idx]
         meta_path = self.metas[idx]
         sgg_meta_path = self.sgg_metas[idx]
@@ -248,7 +268,10 @@ def main(cfg):
     #     collate_fn=utils.collate_fn)
     # use our dataset and defined transformations
     alfred_dataset = AlfredDataset(cfg)
-    extractor = get_resnet_model(cfg)
+    if 'sgg_cfg' in cfg:
+        extractor = get_sgg_model(cfg, alfred_dataset.trans_meta_data)
+    else:
+        extractor = get_resnet_model(cfg)
     object_vision_feature = {
         "0": [0]*512,
         # ...
@@ -257,9 +280,10 @@ def main(cfg):
         "0": [0]*23,
         # ...
     }
-    save_path = os.path.join(os.getcwd(), "semantic_graph/rgb_feature")
-    if os.path.isfile(os.path.join(save_path, "object_rgb_feature.json")):
-        with open(os.path.join(save_path, "object_rgb_feature.json"), "r") as f:
+    if not os.path.isdir(SAVE_PATH):
+        os.mkdir(SAVE_PATH)
+    if os.path.isfile(os.path.join(SAVE_PATH, OBJECT_RGB_FEATURE)):
+        with open(os.path.join(SAVE_PATH, OBJECT_RGB_FEATURE), "r") as f:
             object_vision_feature = json.load(f)
 
     object_not_save = [i for i in range(len(alfred_dataset.SGG_result_ind_to_classes))]
@@ -295,7 +319,7 @@ def main(cfg):
                     GAP_rgb_feature = rgb_feature[0].mean([1, 2]).reshape(-1)
                     object_vision_feature[str(label)] = GAP_rgb_feature.to('cpu').numpy().tolist()
                     print(GAP_rgb_feature.shape)
-                    crop_img.save(os.path.join(save_path, alfred_dataset.SGG_result_ind_to_classes[label] + "_{}.jpg".format(label)))
+                    crop_img.save(os.path.join(SAVE_PATH, alfred_dataset.SGG_result_ind_to_classes[label] + "_{}.jpg".format(label)))
                     time.sleep(1)
                     print("Can't find object class: ", object_not_save)
             # [0, 3, 14, 51, 57, 59, 69, 97, 99]
@@ -306,7 +330,7 @@ def main(cfg):
         print("Can't find object class: ", object_not_save)
         for object_label in object_not_save:
             object_vision_feature[str(object_label)] = [0]*512
-        with open(os.path.join(save_path, "object_rgb_feature.json"), "w") as f:
+        with open(os.path.join(SAVE_PATH, OBJECT_RGB_FEATURE), "w") as f:
             json.dump(object_vision_feature, f)
 
     def gen_object_attr():
@@ -321,6 +345,7 @@ def main(cfg):
                 "attributes": target.extra_fields["attributes"],
                 "objectIds": target.extra_fields["objectIds"],
             }
+            print(target.extra_fields["obj_angle_of_view"])
             img = F.to_pil_image(img)
             for ind, label in enumerate(target.extra_fields["labels"].numpy().astype(int)):
                 if label in object_not_save:
@@ -340,12 +365,13 @@ def main(cfg):
         print("Can't find object class: ", object_not_save)
         for object_label in object_not_save:
             object_attribute[str(object_label)] = [0]*23
-        with open(os.path.join(save_path, "object_attribute.json"), "w") as f:
+        with open(os.path.join(SAVE_PATH, OBJECT_ATTRIBUTE), "w") as f:
             json.dump(object_attribute, f)
 
-    gen_object_attr()
+    # gen_object_attr()
     object_not_save = [i for i in range(len(alfred_dataset.SGG_result_ind_to_classes))]
     gen_object_rgb_feature()
+
 
 def get_resnet_model(cfg):
     sys.path.append(os.path.join(os.environ['ALFRED_ROOT'], 'models'))
@@ -353,6 +379,19 @@ def get_resnet_model(cfg):
     cfg.gpu = True
     extractor = Resnet(cfg, eval=True)
     return extractor
+
+
+def get_sgg_model(cfg, trans_MetaData):
+    import sgg
+    cfg_sgg = cfg['sgg_cfg']
+    detector = sgg.load_pretrained_model(
+        cfg_sgg,
+        trans_MetaData.transforms,
+        trans_MetaData.SGG_result_ind_to_classes,
+        'cuda'
+        )
+    return detector
+
 
 def get_dataset(cfg, transform=None):
     dataset = AlfredDataset(cfg)

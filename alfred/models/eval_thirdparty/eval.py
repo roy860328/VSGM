@@ -266,10 +266,9 @@ class Eval(object):
         curr_image = Image.fromarray(np.uint8(env.last_event.frame))
         image_feature = resnet.featurize([curr_image], batch=1)[0]
         meta_datas = {
-            "sgg_meta_data": [
+            "sgg_meta_data":
                     {"rgb_image": image_feature,
                      "sgg_meta_data": env.last_event.metadata['objects']}
-                ]
         }
         # 1 & 2
         meta_datas_1 = {}
@@ -281,10 +280,9 @@ class Eval(object):
             curr_image = Image.fromarray(np_image)
             image_feature = resnet.featurize([curr_image], batch=1)[0]
             thirdParty = thirdParty_meta_data[third_id]
-            thirdParty["sgg_meta_data"] = [
-                    {"rgb_image": image_feature,
+            thirdParty["sgg_meta_data"] = {
+                     "rgb_image": image_feature,
                      "sgg_meta_data": dict_image['objects']}
-                 ]
         # merge
         thirdpart_meta_data["agent_sgg_meta_data"] = {"agent_sgg_meta_data": [env.last_event.metadata['agent']]}
         thirdpart_meta_data["all_meta_data"] = meta_datas
@@ -294,20 +292,18 @@ class Eval(object):
 
     def get_frame_feat(cls, env, resnet, feat):
         last_event = env.last_event
-        curr_image = Image.fromarray(np.uint8(env.last_event.frame))
-        curr_instance = Image.fromarray(np.uint8(env.last_event.instance_segmentation_frame))
-        curr_depth_image = env.last_event.depth_frame * (255 / 10000)
-        curr_depth_image = curr_depth_image.astype(np.uint8)
+        last_third_party_1 = last_event.third_party_camera_frames[0]
+        last_third_party_2 = last_event.third_party_camera_frames[1]
 
         feat['frames_conv'], feat['frames_instance_conv'], feat['frames_depth_conv'] = \
             cls.process_image(
-                resnet, last_event.frame, last_event.instance_segmentation_frame, last_event.depth_frame)
+                cls, resnet, last_event.frame, last_event.instance_segmentation_frame, last_event.depth_frame)
         feat['frames_conv_1'], feat['frames_instance_conv_1'], feat['frames_depth_conv_1'] = \
             cls.process_image(
-                resnet, last_event.frame, last_event.instance_segmentation_frame, last_event.depth_frame)
+                cls, resnet, last_third_party_1['frame'], last_third_party_1['instance_segmentation_frame'], last_third_party_1['depth_frame'])
         feat['frames_conv_2'], feat['frames_instance_conv_2'], feat['frames_depth_conv_2'] = \
             cls.process_image(
-                resnet, last_event.frame, last_event.instance_segmentation_frame, last_event.depth_frame)
+                cls, resnet, last_third_party_2['frame'], last_third_party_2['instance_segmentation_frame'], last_third_party_2['depth_frame'])
         return feat
 
     def process_image(cls, resnet, frames, frames_instance, frames_depth):
@@ -315,6 +311,6 @@ class Eval(object):
         frames = resnet.featurize([frames], batch=1).unsqueeze(0)
         frames_instance = Image.fromarray(np.uint8(frames_instance))
         frames_instance = resnet.featurize([frames_instance], batch=1).unsqueeze(0)
-        frames_depth = Image.fromarray(np.uint8(frames_instance * (255 / 10000)))
+        frames_depth = Image.fromarray(np.uint8(frames_depth * (255 / 10000))).convert('RGB')
         frames_depth = resnet.featurize([frames_depth], batch=1).unsqueeze(0)
         return frames, frames_instance, frames_depth

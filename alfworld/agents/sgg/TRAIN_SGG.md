@@ -158,6 +158,11 @@ Read $ALFWORLD_ROOT/agents/sgg/TRAIN_SGG.md
 object_classes = ['AlarmClock', 'Apple', 'AppleSliced', ...]
 class_to_ind = ['__background__', 'AlarmClock', 'Apple', ...]
 ```
+- train with instance mask
+```
+AlfredDataset
+img_path = self.masks[idx]
+```
 
 ```
 cd $GRAPH_RCNN_ROOT/

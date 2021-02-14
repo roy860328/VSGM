@@ -76,9 +76,9 @@ if __name__ == '__main__':
     # parser
     parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
 
-    parser.add_argument("config_file", help="path to config file")
-    parser.add_argument("--semantic_config_file", default=None, help="path to config file")
-    parser.add_argument("--sgg_config_file", default=None, help="path to config file")
+    parser.add_argument("config_file", default="models/config/without_env_base.yaml", help="path to config file")
+    parser.add_argument("--semantic_config_file", default="models/config/mini_moca_graph_softmaxgcn.yaml", help="path to config file")
+    parser.add_argument("--sgg_config_file", default=None, help="path to config file $GRAPH_RCNN_ROOT/configs/attribute.yaml")
     parser.add_argument("-p", "--params", nargs="+", metavar="my.setting=value", default=[],
                         help="override params of the config file,"
                              " e.g. -p 'training.gamma=0.95'")

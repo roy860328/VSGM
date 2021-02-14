@@ -345,6 +345,8 @@ class Module(Base):
             'enc_lang_goal': None,
             'cont_lang_instr': None,
             'enc_lang_instr': None,
+            'weighted_lang_t_goal': None,
+            'weighted_lang_t_instr': None,
         }
 
 

@@ -79,7 +79,7 @@ class Module(seq2seq_im_moca_semantic):
             # get_meta_datas(cls, env, resnet):
             t_store_state = b_store_state["sgg_meta_data"]
             # cls.resnet.featurize([curr_image], batch=1).unsqueeze(0)
-            t_store_state["rgb_image"] = feat['frames'][env_index, 0]
+            t_store_state["rgb_image"] = feat['frames_instance_conv'][env_index, 0]
             global_graph_importent_features, current_state_graph_importent_features, history_changed_nodes_graph_importent_features, priori_importent_features,\
                 global_graph_dict_objectIds_to_score, current_state_dict_objectIds_to_score, history_changed_dict_objectIds_to_score, priori_dict_dict_objectIds_to_score =\
                 self.dec.store_and_get_graph_feature(t_store_state, env_index, self.r_state['state_t_goal'], self.r_state['state_t_instr'])
@@ -98,8 +98,7 @@ class Module(seq2seq_im_moca_semantic):
             self.dec.step(
                 self.r_state['enc_lang_goal'],
                 self.r_state['enc_lang_instr'],
-                feat['frames_depth'][:, 0],
-                feat['frames_instance'][:, 0],
+                {k: v[:, 0] for k, v in feat.items() if 'frames' in k}, # feat['frames'][:, 0],
                 e_t,
                 self.r_state['state_t_goal'],
                 self.r_state['state_t_instr'],
@@ -113,6 +112,8 @@ class Module(seq2seq_im_moca_semantic):
         self.r_state['state_t_goal'] = state_t_goal
         self.r_state['state_t_instr'] = state_t_instr
         self.r_state['e_t'] = self.dec.emb(out_action_low.max(1)[1])
+        self.r_state['weighted_lang_t_goal'] = lang_attn_t_goal
+        self.r_state['weighted_lang_t_instr'] = lang_attn_t_instr
 
         assert len(all_meta_datas) == 1, "if not the analyze_graph object ind is error"
         global_graph_dict_ANALYZE_GRAPH = self.semantic_graph_implement.scene_graphs[0].analyze_graph(
@@ -210,7 +211,7 @@ class Module(seq2seq_im_moca_semantic):
                 im = torch.load(os.path.join(root, self.feat_pt))
 
                 num_low_actions = len(ex['plan']['low_actions'])
-                num_feat_frames = im.shape[0]
+                num_feat_frames = im["depth"].shape[0]
 
                 if num_low_actions != num_feat_frames:
                     keep = [None] * len(ex['plan']['low_actions'])
@@ -219,8 +220,8 @@ class Module(seq2seq_im_moca_semantic):
                         if keep[d['low_idx']] is None:
                             keep[d['low_idx']] = i
                     keep.append(keep[-1])  # stop frame
-                    feat['frames_depth_conv'].append(torch.stack(im["depth"][keep], dim=0))
-                    feat['frames_instance_conv'].append(torch.stack(im["instance"][keep], dim=0))
+                    feat['frames_depth_conv'].append(im["depth"][keep])
+                    feat['frames_instance_conv'].append(im["instance"][keep])
                 else:
                     feat['frames_depth_conv'].append(torch.cat([im["depth"], im["depth"][-1].unsqueeze(0)], dim=0))  # add stop frame
                     feat['frames_instance_conv'].append(torch.cat([im["instance"], im["instance"][-1].unsqueeze(0)], dim=0))  # add stop frame

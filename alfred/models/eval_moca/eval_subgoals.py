@@ -131,9 +131,13 @@ class EvalSubgoals(Eval):
                 break
 
             # extract visual feats
+            curr_image = Image.fromarray(np.uint8(env.last_event.frame))
+            curr_depth_image = env.last_event.depth_frame * (255 / 10000)
+            curr_depth_image = curr_depth_image.astype(np.uint8)
+            curr_instance = Image.fromarray(np.uint8(env.last_event.instance_segmentation_frame))
             feat = cls.get_frame_feat(cls, env, resnet, feat)
+            feat['frames'] = feat['frames_conv']
             feat['all_meta_datas'] = cls.get_meta_datas(cls, env, resnet)
-
             # expert teacher-forcing upto subgoal
             if t < len(expert_init_actions):
                 # get expert action
