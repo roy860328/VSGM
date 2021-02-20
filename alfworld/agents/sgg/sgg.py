@@ -75,7 +75,6 @@ class SGG(SceneParser):
             b_results = self._parser_sgg_result(detections, detection_pairs, detection_attrs)
         return b_results
 
-
     def _parser_sgg_result(self, detections, detection_pairs, detection_attrs):
         '''
         detections[0]
@@ -91,7 +90,7 @@ class SGG(SceneParser):
             print(detections[i].get_field("scores").shape)
             print("scores shape is 105 or 106?")
             result = {
-                "labels": detections[i].get_field("labels")-self.label_minus,
+                "labels": detections[i].get_field("labels"),
                 "features": detections[i].get_field("features"),
                 "attribute_logits": detection_attrs[i].get_field("attribute_logits"),
                 "obj_relations_idx_pairs": detection_pairs[i].get_field("idx_pairs"),
@@ -113,11 +112,15 @@ class SGG(SceneParser):
             cv2.imwrite(os.path.join(self.SAVE_SGG_RESULT_PATH, "detection_{}.jpg".format(img_ids)), result)
 
     def _backbone_feat(self, transform_images, targets=None):
+        # torch.Size([32, 1024, 19, 19])
         features = super().backbone_feat(transform_images)
+        features = features[0]
+        # torch.Size([32, 1024])
+        features = features.mean([2, 3])
         return features
 
     def featurize(self, images, batch=32):
-        images_normalized = torch.stack([self.transform(i) for i in images], dim=0).to(self.device)
+        images_normalized = torch.stack([self.transforms(i, None)[0] for i in images], dim=0).to(self.device)
         out = []
         with torch.set_grad_enabled(False):
             for i in range(0, images_normalized.size(0), batch):
@@ -140,6 +143,7 @@ def load_pretrained_model(cfg, transforms, SGG_result_ind_to_classes, device):
     scene_parser = SGG(cfg, transforms, SGG_result_ind_to_classes, device)
     scene_parser.load()
     scene_parser.eval()
+    scene_parser.to(device=device)
     return scene_parser
 
 
@@ -168,12 +172,14 @@ if __name__ == '__main__':
     detector = load_pretrained_model(
         cfg_sgg, trans_MetaData.transforms, alfred_dataset.SGG_result_ind_to_classes, 'cuda')
     detector.eval()
-    # detector.to(device='cuda')
 
     for i in range(100):
         img, target, idx = alfred_dataset[i]
         img = img.unsqueeze(0)
         sgg_results = detector.predict(img, idx)
+        img = alfred_dataset.get_PIL_img(i)
+        feat = detector.featurize([img, img])
+        print(feat.shape)
         # scenegraph.add_local_graph_to_global_graph(img, sgg_results[0])
 
         max_lable = max(max_lable, max(target.extra_fields["labels"]))

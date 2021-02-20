@@ -338,6 +338,7 @@ class SceneGraph(object):
         obj_cls_name_to_features = self._get_obj_cls_name_to_features(path_object_embedding, _background=True)
         self.priori_graph = self.graphdata_type(obj_cls_name_to_features, self.GPU, self.dim_rgb_feature)
 
+        assert len(rgb_features["0"]) == self.dim_rgb_feature, "shape must be same, else Graph Net downsample would have error"
         # node word feature
         for k, word_feature in obj_cls_name_to_features.items():
             '''
@@ -480,7 +481,10 @@ class SceneGraph(object):
         if reset_current_graph:
             self.init_current_state_data()
         # global average pooling, https://discuss.pytorch.org/t/how-can-i-perform-global-average-pooling-before-the-last-fully-connected-layer/74352
-        feature_img = feature_img.mean([1, 2]).reshape(1, -1)
+        if len(feature_img.shape) == 3:
+            feature_img = feature_img.mean([1, 2]).reshape(1, -1)
+        else:
+            feature_img = feature_img.reshape(1, -1)
         tar_ids = target["objectIds"]
         obj_clses = target["labels"].numpy().astype(int)
         obj_attributes = target["attributes"]

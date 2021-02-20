@@ -178,7 +178,7 @@ Change $GRAPH_RCNN_ROOT/configs/attribute.yaml parameter
 MODEL.SAVE_SGG_RESULT_PATH (測試產生visualize的照片儲存位置)
 ```
 ```
-CUDA_VISIBLE_DEVICES=1 python main.py --config-file configs/attribute.yaml --inference --resume 194999 --visualize --instance 10
+CUDA_VISIBLE_DEVICES=1 python main.py --config-file configs/attribute.yaml --inference --resume 123456 --visualize --instance 10
 ```
 
 #### CUDA out of memory
@@ -189,7 +189,7 @@ reduce PRE_NMS_TOP_N_TEST, POST_NMS_TOP_N_TEST, FPN_POST_NMS_TOP_N_TEST
 1. Pretrain model PATH: MODEL.WEIGHT_IMG 
 Change $GRAPH_RCNN_ROOT/configs/attribute.yaml parameter
 2.
-python sgg/sgg.py config/semantic_graph_base.yaml --semantic_config_file config/semantic_graph.yaml --sgg_config_file $GRAPH_RCNN_ROOT/configs/attribute.yaml
+CUDA_VISIBLE_DEVICES=1 python sgg/sgg.py config/semantic_graph_base.yaml --semantic_config_file config/semantic_graph.yaml --sgg_config_file $GRAPH_RCNN_ROOT/configs/attribute.yaml
 ```
 - SGG result attribute
 "labels"

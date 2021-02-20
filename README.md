@@ -47,10 +47,15 @@ python scripts/augment_trajectories_third_party_camera_frames210.py --data_path 
 python scripts/augment_meta_data_trajectories_third_party_camera_frames.py --data_path ../data/full_2.1.0/ --num_threads 10 --smooth_nav --time_delays
 ```
 3. extract exploration img to resnet feature to 'feat_third_party_img_and_exploration.pt'
+feat_depth_instance.pt
+feat_third_party_img_and_exploration.pt
+feat_sgg_depth_instance.pt
 ```
 python models/utils/extract_resnet.py --data data/full_2.1.0 --batch 64 --gpu --visual_model resnet18 --img_folder high_res_images,raw_images_1,raw_images_2,exploration_meta,exploration_meta_1,exploration_meta_2 --keyname feat_conv,feat_conv_1,feat_conv_2,feat_exploration_conv,feat_exploration_conv_1,feat_exploration_conv_2 --skip_existing --str_save_ft_name feat_third_party_img_and_exploration.pt
 
 python models/utils/extract_resnet.py --data data/full_2.1.0 --batch 64 --gpu --visual_model resnet18 --img_folder depth_images,instance_masks --keyname depth,instance --skip_existing --str_save_ft_name feat_depth_instance.pt
+
+CUDA_VISIBLE_DEVICES=1 python models/utils/extract_resnet.py --data data/full_2.1.0 --batch 64 --gpu --visual_model sgg --img_folder depth_images,instance_masks --keyname depth,instance --skip_existing --str_save_ft_name feat_sgg_depth_instance.pt --sgg_config_file $GRAPH_RCNN_ROOT/configs/attribute.yaml
 ```
 4. get event.metadata['agent']
 cameraHorizon, position, rotation
@@ -63,10 +68,12 @@ agent
 object
 "name": "Mug_a12c171b(Clone)copy24", "position": {"x": -0.6516613, "y": 0.8507198, "z": -0.6635949}, "rotation": {"x": 0.00138341438, "y": 0.000116876137, "z": -0.0008958757}
 
-5. merge thirdparty meta to 'third_party_all_meta_data.json'
+5. merge thirdparty meta to 'third_party_all_meta_data.json' & test feat_third_party_img_and_exploration, feat_depth_instance, feat_sgg_depth_instance is ok
 ```
 CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/memory_semantic_graph.yaml --data data/full_2.1.0/ --model merge_meta_im --dout exp/just_merge_meta --splits data/splits/oct21.json --batch 20 --gpu
 ```
+
+WARNING: if use "feat_sgg_xxx.pt", config "FEAT_NAME", "NODE_INPUT_RGB_FEATURE_SIZE", "PRIORI_OBJ_RBG_FEATURE_EMBEDDING" need change
 
 ## Config SETTING
 ATTRIBUTE_FEATURE_SIZE: 26   # 23 + 2 (ANGLE_OF_VIEWS) + 1 (unique_obj_index)
@@ -144,6 +151,11 @@ CUDA_VISIBLE_DEVICES=0 python models/eval_moca/eval_semantic.py models/config/wi
 CUDA_VISIBLE_DEVICES=1 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/mini_moca_test_mask_depth_graph_v{}.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_mini_mask_depth --dout exp/mini_moca_test_mask_depth_graph_v{} --splits data/splits/oct21.json --batch 5 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --not_save_config --gpu --task_types 1 
 
 CUDA_VISIBLE_DEVICES=0 python models/eval_moca/eval_semantic.py models/config/without_env_base.yaml --model_path exp/mini_moca_test_mask_depth_graph_v1_12-02-2021_16-59-30/best_seen.pth --model seq2seq_im_moca_mini_mask_depth --data data/full_2.1.0/ --eval_split valid_seen --gpu  --task_types 1 --subgoals all
+```
+
+## MOCA + cell_graph (seq2seq_im_moca_mini_mask_depth_big_change)
+```
+CUDA_VISIBLE_DEVICES=1 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/mini_moca_test_BigChange_mask_graph_v1.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_mini_mask_depth_big_change --dout exp/BigChange_mask_graph_v1 --splits data/splits/oct21.json --batch 5 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --not_save_config --gpu --task_types 1
 ```
 
 ---

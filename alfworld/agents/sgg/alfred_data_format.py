@@ -26,7 +26,15 @@ def mask():
     return SAVE_PATH, OBJECT_RGB_FEATURE
 
 
+def sgg_mask():
+    SAVE_PATH = os.path.join(os.getcwd(), "semantic_graph/sgg_mask_feature")
+    OBJECT_RGB_FEATURE = "object_sgg_mask_feature.json"
+    return SAVE_PATH, OBJECT_RGB_FEATURE
+
+
+SAVE_PATH, OBJECT_RGB_FEATURE = rgb()
 SAVE_PATH, OBJECT_RGB_FEATURE = mask()
+SAVE_PATH, OBJECT_RGB_FEATURE = sgg_mask()
 OBJECT_ATTRIBUTE = "object_attribute.json"
 
 
@@ -53,8 +61,8 @@ class TransMetaData():
         self.predicate_to_ind['__background__'] = 0
         self.ind_to_predicates = sorted(self.predicate_to_ind, key=lambda k:
                                         self.predicate_to_ind[k])
-        ic(self.SGG_train_object_classes)
-        ic(self.SGG_result_ind_to_classes)
+        ic(len(self.SGG_train_object_classes))
+        ic(len(self.SGG_result_ind_to_classes))
         ic(self.ind_to_predicates)
 
     def trans_object_meta_data_to_relation_and_attribute(self, data_obj_relation_attribute, boxes_id=None, boxes_labels=None, agent_meta=None, horizontal_view_angle=0):
@@ -232,6 +240,7 @@ class AlfredDataset(Dataset):
         relation_labels = sgg_data["relation_labels"]
         attributes = sgg_data["attributes"]
         objectIds = sgg_data["objectIds"]
+        angle_of_views = sgg_data["angle_of_views"]
 
         if len(boxes) == 0:
             return None, None
@@ -245,6 +254,7 @@ class AlfredDataset(Dataset):
         target.add_field("relation_labels", relation_labels)
         target.add_field("attributes", attributes)
         target.add_field("objectIds", objectIds)
+        target.add_field("angle_of_views", angle_of_views)
         target = target.clip_to_image(remove_empty=False)
 
         return img, target, idx
@@ -256,20 +266,20 @@ class AlfredDataset(Dataset):
     def map_class_id_to_class_name(self, class_id):
         return self.trans_meta_data.SGG_train_object_classes[class_id]
 
+    def get_PIL_img(self, idx):
+        img_path = self.imgs[idx]
+        img_path = self.masks[idx]
+        return Image.open(img_path).convert('RGB')
 
-def main(cfg):
+def main(cfgs):
     from random import shuffle
     import cv2
     from torchvision.transforms import functional as F
     import time
-    # define training and validation data loaders
-    # data_loader = torch.utils.data.DataLoader(
-    #     dataset, batch_size=cfg.batch_size, shuffle=True, num_workers=4,
-    #     collate_fn=utils.collate_fn)
-    # use our dataset and defined transformations
+    cfg = cfgs['semantic_cfg']
     alfred_dataset = AlfredDataset(cfg)
-    if 'sgg_cfg' in cfg:
-        extractor = get_sgg_model(cfg, alfred_dataset.trans_meta_data)
+    if 'sgg_cfg' in cfgs:
+        extractor = get_sgg_model(cfgs, alfred_dataset.trans_meta_data)
     else:
         extractor = get_resnet_model(cfg)
     object_vision_feature = {
@@ -316,7 +326,10 @@ def main(cfg):
                     print("bbox:", bbox)
                     print("object: ", alfred_dataset.SGG_result_ind_to_classes[label])
                     rgb_feature = extractor.featurize([crop_img], batch=1)
-                    GAP_rgb_feature = rgb_feature[0].mean([1, 2]).reshape(-1)
+                    if len(rgb_feature.shape) >= 3:
+                        GAP_rgb_feature = rgb_feature[0].mean([1, 2]).reshape(-1)
+                    else:
+                        GAP_rgb_feature = rgb_feature.reshape(-1)
                     object_vision_feature[str(label)] = GAP_rgb_feature.to('cpu').numpy().tolist()
                     print(GAP_rgb_feature.shape)
                     crop_img.save(os.path.join(SAVE_PATH, alfred_dataset.SGG_result_ind_to_classes[label] + "_{}.jpg".format(label)))
@@ -328,8 +341,9 @@ def main(cfg):
             img.close()
             # import pdb; pdb.set_trace()
         print("Can't find object class: ", object_not_save)
+        object_vision_feature["0"] = [0]*GAP_rgb_feature.shape[0]
         for object_label in object_not_save:
-            object_vision_feature[str(object_label)] = [0]*512
+            object_vision_feature[str(object_label)] = [0]*GAP_rgb_feature.shape[0]
         with open(os.path.join(SAVE_PATH, OBJECT_RGB_FEATURE), "w") as f:
             json.dump(object_vision_feature, f)
 
@@ -345,7 +359,7 @@ def main(cfg):
                 "attributes": target.extra_fields["attributes"],
                 "objectIds": target.extra_fields["objectIds"],
             }
-            print(target.extra_fields["obj_angle_of_view"])
+            print(target.extra_fields["angle_of_views"])
             img = F.to_pil_image(img)
             for ind, label in enumerate(target.extra_fields["labels"].numpy().astype(int)):
                 if label in object_not_save:
@@ -382,9 +396,10 @@ def get_resnet_model(cfg):
 
 
 def get_sgg_model(cfg, trans_MetaData):
-    import sgg
+    # import sgg
+    from sgg.sgg import load_pretrained_model
     cfg_sgg = cfg['sgg_cfg']
-    detector = sgg.load_pretrained_model(
+    detector = load_pretrained_model(
         cfg_sgg,
         trans_MetaData.transforms,
         trans_MetaData.SGG_result_ind_to_classes,
@@ -401,4 +416,4 @@ def get_dataset(cfg, transform=None):
 if __name__ == "__main__":
     import modules.generic as generic
     cfg = generic.load_config()
-    main(cfg['semantic_cfg'])
+    main(cfg)

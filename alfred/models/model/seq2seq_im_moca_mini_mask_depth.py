@@ -21,13 +21,20 @@ class Module(seq2seq_im_moca_semantic):
         '''
         super().__init__(args, vocab, importent_nodes=True)
         IMPORTENT_NDOES_FEATURE = self.config['semantic_cfg'].SCENE_GRAPH.EMBED_FEATURE_SIZE
-        args_scene_graph = self.config['semantic_cfg'].SCENE_GRAPH
         if self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskDepthGraph_V1":
             decoder = vnn.MOCAMaskDepthGraph_V1
         elif self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskDepthGraph_V2":
             decoder = vnn.MOCAMaskDepthGraph_V2
         elif self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskDepthGraph_V3":
             decoder = vnn.MOCAMaskDepthGraph_V3
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskDepthGraph_V4":
+            decoder = vnn.MOCAMaskDepthGraph_V4
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskDepthGraph_V5":
+            decoder = vnn.MOCAMaskDepthGraph_V5
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskGraph_V1":
+            decoder = vnn.MOCAMaskGraph_V1
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskGraph_V2":
+            decoder = vnn.MOCAMaskGraph_V2
         else:
             raise NotImplementedError()
         # else:
@@ -40,7 +47,10 @@ class Module(seq2seq_im_moca_semantic):
                            actor_dropout=args.actor_dropout,
                            input_dropout=args.input_dropout,
                            teacher_forcing=args.dec_teacher_forcing)
-        self.feat_pt = 'feat_depth_instance.pt'
+        if "FEAT_NAME" in self.config['semantic_cfg'].GENERAL and self.config['semantic_cfg'].GENERAL.FEAT_NAME != "feat_conv.pt":
+            self.feat_pt = self.config['semantic_cfg'].GENERAL.FEAT_NAME
+        else:
+            self.feat_pt = 'feat_depth_instance.pt'
 
     def step(self, feat, prev_action=None):
         '''
@@ -114,6 +124,29 @@ class Module(seq2seq_im_moca_semantic):
         self.r_state['state_t_goal'] = state_t_goal
         self.r_state['state_t_instr'] = state_t_instr
         self.r_state['e_t'] = self.dec.emb(out_action_low.max(1)[1])
+        if self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskDepthGraph_V1":
+            lang_attn_t_goal = lang_attn_t_goal
+            lang_attn_t_instr = lang_attn_t_instr
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskDepthGraph_V2":
+            lang_attn_t_goal = lang_attn_t_goal
+            lang_attn_t_instr = lang_attn_t_instr
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskDepthGraph_V3":
+            lang_attn_t_goal = state_t_goal
+            lang_attn_t_instr = state_t_instr
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskDepthGraph_V4":
+            lang_attn_t_goal = state_t_goal
+            lang_attn_t_instr = state_t_instr
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskDepthGraph_V5":
+            lang_attn_t_goal = state_t_goal
+            lang_attn_t_instr = state_t_instr
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskGraph_V1":
+            lang_attn_t_goal = state_t_goal
+            lang_attn_t_instr = state_t_instr
+        elif self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskGraph_V2":
+            lang_attn_t_goal = lang_attn_t_goal
+            lang_attn_t_instr = lang_attn_t_instr
+        else:
+            raise NotImplementedError()
         self.r_state['weighted_lang_t_goal'] = lang_attn_t_goal
         self.r_state['weighted_lang_t_instr'] = lang_attn_t_instr
 

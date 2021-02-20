@@ -232,6 +232,7 @@ class Module(merge_meta):
                 try:
                     self.feat_pt = 'feat_third_party_img_and_exploration.pt'
                     self.feat_pt = 'feat_depth_instance.pt'
+                    self.feat_pt = 'feat_sgg_depth_instance.pt'
                     im = torch.load(os.path.join(root, self.feat_pt))
                     if self.feat_pt == 'feat_third_party_img_and_exploration.pt':
                         if len(im['feat_conv']) != len(im['feat_conv_1'])\
@@ -241,7 +242,11 @@ class Module(merge_meta):
                     elif self.feat_pt == 'feat_depth_instance.pt':
                         if len(im['depth']) != len(im['instance']):
                             raise
+                    elif self.feat_pt == 'feat_sgg_depth_instance.pt':
+                        if len(im['depth']) != len(im['instance']):
+                            raise
                     else:
+                        print("NotImplementedError Please implement")
                         raise NotImplementedError()
                 except Exception as e:
                     print(e)

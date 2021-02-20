@@ -13,7 +13,7 @@ pip install torch-geometric
 ## Word embedding 
 For semantic_graph object class name to fasttext word embedding
 
-### Get Object feature '.csv'
+### Get Object word feature '.csv'
 change graph_analysis/data/objects.txt
 ```
 cd graph_analysis
@@ -21,9 +21,28 @@ python create_dgl_data.py --object
 ```
 You will create csv file at 'graph_analysis/data_dgl/object_alfworld.csv'
 
-## Get rgb_feature feature data
+## Get img_feature feature data
+Please see $ALFWORLD_ROOT/agents/sgg/TRAIN_SGG.md "2.generate images, masks, meta, sgg_meta".
+Gen detector train data first. For AlfredDataset class load data
+
+1. rgb_feature
+set SAVE_PATH, OBJECT_RGB_FEATURE = rgb()
+```
+python sgg/alfred_data_format.py config/test_base.yaml --semantic_config_file config/semantic_graph.yaml --not_save_config
+```
+2. mask_feature
+set SAVE_PATH, OBJECT_RGB_FEATURE = mask()
+```
+python sgg/alfred_data_format.py config/test_base.yaml --semantic_config_file config/semantic_graph.yaml --not_save_config
+```
+3. sgg_mask_feature
+set SAVE_PATH, OBJECT_RGB_FEATURE = sgg_mask()
 ```
 python sgg/alfred_data_format.py config/test_base.yaml --semantic_config_file config/semantic_graph.yaml --sgg_config_file sgg/graph-rcnn.pytorch/configs/attribute.yaml --not_save_config
+
+or
+
+python sgg/alfred_data_format.py config/test_base.yaml --semantic_config_file config/semantic_graph.yaml --sgg_config_file $GRAPH_RCNN_ROOT/configs/attribute.yaml --not_save_config
 ```
 
 

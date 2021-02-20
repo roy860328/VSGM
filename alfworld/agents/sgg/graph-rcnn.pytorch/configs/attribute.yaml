@@ -18,9 +18,11 @@ INPUT:
 MODEL:
   SAVE_SGG_RESULT: True
   SAVE_SGG_RESULT_PATH: "/home/alfworld/sgg_detector/"
-  WEIGHT_IMG: "/home/graph-rcnn.pytorch/checkpoints/vg_benchmark_object/R-101-C4/sg_baseline_joint_2/BatchSize_4/Base_LR_0.0005/checkpoint_final.pth"
+  # WEIGHT_IMG: "/home/graph-rcnn.pytorch/checkpoints/vg_benchmark_object/R-101-C4/sg_baseline_joint_2/BatchSize_4/Base_LR_0.0005/checkpoint_final.pth"
+  # WEIGHT_IMG: "/home/graph-rcnn.pytorch/checkpoints/vg_benchmark_object/R-101-C4/sg_baseline_joint_2/BatchSize_4/Base_LR_0.0005/checkpoint_0179999.pth"
+  WEIGHT_IMG: "/home/graph-rcnn.pytorch/checkpoints/vg_benchmark_object/R-101-C4/sg_baseline_joint_2/BatchSize_4/mask_train_feat_attribute_base_lr_0.0005/checkpoint_0234999.pth"
   WEIGHT_DET: ""
-  RELATION_ON: True
+  RELATION_ON: False
   ATTRIBUTE_ON: True
   ALGORITHM: "sg_baseline"
   USE_FREQ_PRIOR: False
@@ -52,7 +54,7 @@ MODEL:
     POS_WEIGHT: 50.0
     ATTRIBUTE_LOSS_WEIGHT: 1.0
     NUM_ATTRIBUTES: 23                 # 201 for VG, 501 for GQA
-    MAX_ATTRIBUTES: 10             
+    MAX_ATTRIBUTES: 23             
     ATTRIBUTE_BGFG_SAMPLE: True    
     ATTRIBUTE_BGFG_RATIO: 3   
 SOLVER:
