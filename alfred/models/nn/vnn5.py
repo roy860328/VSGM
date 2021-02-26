@@ -1674,7 +1674,8 @@ class MOCAMaskDepthGraph_V5(MOCAMaskDepthGraph_V4):
         nn.init.uniform_(self.go, -0.1, 0.1)
 
         self.scale_dot_attn = ScaledDotAttn(dhid, 128, dhid, 128)
-        self.dynamic_conv = DynamicConvLayer(dhid)
+        dframe_channel = 1024 if dframe//2 == 3*9*9 else 512
+        self.dynamic_conv = DynamicConvLayer(dhid=dhid, d_out_hid=dframe_channel)
 
     def step(self, enc_goal, enc_instr, frames, e_t, state_tm1_goal, state_tm1_instr,
             feat_global_graph,

@@ -38,10 +38,6 @@ python sgg/alfred_data_format.py config/test_base.yaml --semantic_config_file co
 3. sgg_mask_feature
 set SAVE_PATH, OBJECT_RGB_FEATURE = sgg_mask()
 ```
-python sgg/alfred_data_format.py config/test_base.yaml --semantic_config_file config/semantic_graph.yaml --sgg_config_file sgg/graph-rcnn.pytorch/configs/attribute.yaml --not_save_config
-
-or
-
 python sgg/alfred_data_format.py config/test_base.yaml --semantic_config_file config/semantic_graph.yaml --sgg_config_file $GRAPH_RCNN_ROOT/configs/attribute.yaml --not_save_config
 ```
 

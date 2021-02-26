@@ -58,9 +58,11 @@ class Eval(object):
             self.resnet = Resnet(args, device='cuda', eval=True, share_memory=True, use_conv_feat=True)
         else:
             self.resnet = Resnet(args, device='cpu', eval=True, share_memory=True, use_conv_feat=True)
-        if 'sgg_cfg' in args:
-            from model.sgg.sgg import load_pretrained_model
-            cfg_sgg = args['sgg_cfg']
+        if 'sgg_config_file' in args:
+            import sys
+            sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents', 'sgg'))
+            from sgg.sgg import load_pretrained_model
+            cfg_sgg = args.config_file['sgg_cfg']
             self.resnet = load_pretrained_model(
                 cfg_sgg,
                 self.model.semantic_graph_implement.trans_MetaData.transforms,
@@ -241,20 +243,21 @@ class Eval(object):
         }
         return [meta_datas]
 
-
     def get_frame_feat(cls, env, resnet, feat):
         last_event = env.last_event
 
         feat['frames_conv'], feat['frames_instance_conv'], feat['frames_depth_conv'] = \
             cls.process_image(
-                cls, resnet, last_event.frame, last_event.instance_segmentation_frame, last_event.depth_frame)
+                cls, feat, resnet, last_event.frame, last_event.instance_segmentation_frame, last_event.depth_frame)
         return feat
 
-    def process_image(cls, resnet, frames, frames_instance, frames_depth):
+    def process_image(cls, feat, resnet, frames, frames_instance, frames_depth):
         frames = Image.fromarray(np.uint8(frames))
         frames = resnet.featurize([frames], batch=1).unsqueeze(0)
         frames_instance = Image.fromarray(np.uint8(frames_instance))
+        feat["frames_instance"] = frames_instance
         frames_instance = resnet.featurize([frames_instance], batch=1).unsqueeze(0)
         frames_depth = Image.fromarray(np.uint8(frames_depth * (255 / 10000))).convert('RGB')
+        feat["frames_depth"] = frames_depth
         frames_depth = resnet.featurize([frames_depth], batch=1).unsqueeze(0)
         return frames, frames_instance, frames_depth

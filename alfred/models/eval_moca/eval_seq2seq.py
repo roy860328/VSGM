@@ -44,6 +44,8 @@ if __name__ == '__main__':
     parser.add_argument('--debug', dest='debug', action='store_true')
     parser.add_argument('--fast_epoch', dest='fast_epoch', action='store_true')
 
+    parser.add_argument('--task_types', type=str, help="task_types", default="1,2,3,4,5,6")
+
     # parse arguments
     args = parser.parse_args()
 

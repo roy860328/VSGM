@@ -32,7 +32,10 @@ class Module(seq2seq_im_moca_mini_mask_depth):
                            actor_dropout=args.actor_dropout,
                            input_dropout=args.input_dropout,
                            teacher_forcing=args.dec_teacher_forcing)
-        self.feat_pt = 'feat_depth_instance.pt'
+        if self.config['semantic_cfg'].GENERAL.FEAT_NAME != "feat_conv.pt":
+            self.feat_pt = self.config['semantic_cfg'].GENERAL.FEAT_NAME
+        else:
+            self.feat_pt = 'feat_depth_instance.pt'
 
     def step(self, feat, prev_action=None):
         '''
@@ -59,8 +62,8 @@ class Module(seq2seq_im_moca_mini_mask_depth):
         # previous action embedding
         e_t = self.embed_action(prev_action) if prev_action is not None else self.r_state['e_t']
 
-        if self.r_state['weighted_lang_t_graph'] is None:
-            self.r_state['weighted_lang_t_graph'] = self.r_state['cont_lang_instr'], torch.zeros_like(self.r_state['cont_lang_instr'])
+        if self.r_state['state_t_graph'] is None:
+            self.r_state['state_t_graph'] = self.r_state['cont_lang_instr'], torch.zeros_like(self.r_state['cont_lang_instr'])
 
         if self.r_state['state_t_goal'] is None:
             self.r_state['state_t_goal'] = self.r_state['cont_lang_goal'], torch.zeros_like(self.r_state['cont_lang_goal'])
@@ -78,7 +81,7 @@ class Module(seq2seq_im_moca_mini_mask_depth):
             b_store_state = all_meta_datas[env_index]
             global_graph_importent_features, current_state_graph_importent_features, history_changed_nodes_graph_importent_features, priori_importent_features,\
                 global_graph_dict_objectIds_to_score, current_state_dict_objectIds_to_score, history_changed_dict_objectIds_to_score, priori_dict_dict_objectIds_to_score =\
-                self.dec.store_and_get_graph_feature(b_store_state, feat, 0, env_index, self.r_state['weighted_lang_t_graph'], self.r_state['weighted_lang_t_graph'])
+                self.dec.store_and_get_graph_feature(b_store_state, feat, 0, env_index, self.r_state['state_t_graph'], self.r_state['state_t_graph'])
             feat_global_graph.append(global_graph_importent_features)
             feat_current_state_graph.append(current_state_graph_importent_features)
             feat_history_changed_nodes_graph.append(history_changed_nodes_graph_importent_features)
@@ -115,7 +118,7 @@ class Module(seq2seq_im_moca_mini_mask_depth):
         else:
             lang_attn_t_graph = state_t_instr
             raise NotImplementedError()
-        self.r_state['weighted_lang_t_graph'] = lang_attn_t_graph
+        self.r_state['state_t_graph'] = lang_attn_t_graph
 
         assert len(all_meta_datas) == 1, "if not the analyze_graph object ind is error"
         global_graph_dict_ANALYZE_GRAPH = self.semantic_graph_implement.scene_graphs[0].analyze_graph(

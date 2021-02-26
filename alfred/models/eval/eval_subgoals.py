@@ -110,7 +110,7 @@ class EvalSubgoals(Eval):
             feat['frames_instance'] = resnet.featurize([curr_instance], batch=1).unsqueeze(0)
             curr_depth_image = np.uint8(env.last_event.depth_frame)
             feat['frames_depth'] = curr_depth_image
-            feat['all_meta_datas'] = cls.get_meta_datas(env)
+            feat['all_meta_datas'] = cls.get_meta_datas(cls, env, resnet)
 
             # expert teacher-forcing upto subgoal
             if t < len(expert_init_actions):

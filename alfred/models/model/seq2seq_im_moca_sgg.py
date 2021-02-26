@@ -11,6 +11,7 @@ from model.seq2seq_im_moca_semantic import Module as seq2seq_im_moca_semantic
 import gen.constants as constants
 # # 1 background + 108 object + 10
 classes = [0] + constants.OBJECTS + ['AppleSliced', 'ShowerCurtain', 'TomatoSliced', 'LettuceSliced', 'Lamp', 'ShowerHead', 'EggCracked', 'BreadSliced', 'PotatoSliced', 'Faucet']
+from PIL import Image
 
 
 class Module(seq2seq_im_moca_semantic):
@@ -21,20 +22,8 @@ class Module(seq2seq_im_moca_semantic):
         '''
         super().__init__(args, vocab, importent_nodes=True)
         IMPORTENT_NDOES_FEATURE = self.config['semantic_cfg'].SCENE_GRAPH.EMBED_FEATURE_SIZE
-        if self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskDepthGraph_V1":
-            decoder = vnn.MOCAMaskDepthGraph_V1
-        elif self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskDepthGraph_V2":
-            decoder = vnn.MOCAMaskDepthGraph_V2
-        elif self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskDepthGraph_V3":
-            decoder = vnn.MOCAMaskDepthGraph_V3
-        elif self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskDepthGraph_V4":
-            decoder = vnn.MOCAMaskDepthGraph_V4
-        elif self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskDepthGraph_V5":
+        if self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskDepthGraph_V5":
             decoder = vnn.MOCAMaskDepthGraph_V5
-        elif self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskGraph_V1":
-            decoder = vnn.MOCAMaskGraph_V1
-        elif self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskGraph_V2":
-            decoder = vnn.MOCAMaskGraph_V2
         else:
             print("self.config['semantic_cfg'].GENERAL.DECODER not found\n", self.config['semantic_cfg'].GENERAL.DECODER)
             return
@@ -82,6 +71,10 @@ class Module(seq2seq_im_moca_semantic):
             self.r_state['weighted_lang_t_goal'] = self.r_state['cont_lang_goal'], torch.zeros_like(self.r_state['cont_lang_goal'])
             self.r_state['weighted_lang_t_instr'] = self.r_state['cont_lang_instr'], torch.zeros_like(self.r_state['cont_lang_instr'])
 
+        feat["frames_instance"] = \
+            self.semantic_graph_implement.trans_MetaData.transforms(feat["frames_instance"])
+        feat["frames_depth"] = \
+            self.semantic_graph_implement.trans_MetaData.transforms(feat["frames_depth"])
         '''
         semantic graph
         '''
@@ -172,7 +165,6 @@ class Module(seq2seq_im_moca_semantic):
         feat['priori_dict_ANALYZE_GRAPH'] = priori_dict_ANALYZE_GRAPH
         return feat
 
-
     def featurize(self, batch, load_mask=True, load_frames=True):
         '''
         tensorize and pad batch input
@@ -245,22 +237,11 @@ class Module(seq2seq_im_moca_semantic):
                 feat['all_meta_datas'].append(all_meta_data)  # add stop frame
 
                 im = torch.load(os.path.join(root, self.feat_pt))
+                images = self._load_img(os.path.join(root, 'instance_masks'), ex["images"], name_pt="feat_instance_tranform.pt", type_image=".png")
+                images_depth = self._load_img(os.path.join(root, 'depth_images'), ex["images"], name_pt="feat_depth_tranform.pt", type_image=".png")
 
-                num_low_actions = len(ex['plan']['low_actions'])
-                num_feat_frames = im["depth"].shape[0]
-
-                if num_low_actions != num_feat_frames:
-                    keep = [None] * len(ex['plan']['low_actions'])
-                    for i, d in enumerate(ex['images']):
-                        # only add frames linked with low-level actions (i.e. skip filler frames like smooth rotations and dish washing)
-                        if keep[d['low_idx']] is None:
-                            keep[d['low_idx']] = i
-                    keep.append(keep[-1])  # stop frame
-                    feat['frames_depth_conv'].append(im["depth"][keep])
-                    feat['frames_instance_conv'].append(im["instance"][keep])
-                else:
-                    feat['frames_depth_conv'].append(torch.cat([im["depth"], im["depth"][-1].unsqueeze(0)], dim=0))  # add stop frame
-                    feat['frames_instance_conv'].append(torch.cat([im["instance"], im["instance"][-1].unsqueeze(0)], dim=0))  # add stop frame
+                feat['frames_instance'].append(images)  # add stop frame
+                feat['frames_depth'].append(images_depth)  # add stop frame
 
         # tensorization and padding
         for k, v in feat.items():
@@ -303,11 +284,11 @@ class Module(seq2seq_im_moca_semantic):
         frames = {}
         for k, v in feat.items():
             if 'frames' in k:
-                frames[k] = self.vis_dropout(feat[k])
+                # frames[k] = self.vis_dropout(feat[k])
+                frames[k] = feat[k]
         res = self.dec(enc_lang_goal, enc_lang_instr, frames, feat['all_meta_datas'], max_decode=max_decode, gold=feat['action_low'], state_0_goal=state_0_goal, state_0_instr=state_0_instr)
         feat.update(res)
         return feat
-
 
     def compute_loss(self, out, batch, feat):
         '''
@@ -322,3 +303,41 @@ class Module(seq2seq_im_moca_semantic):
         #     print("frames_instance_conv ", feat['frames_instance_conv'].shape)
         #     print("device ", feat['frames_instance_conv'].device)
         return super().compute_loss(out, batch, feat)
+
+    def _load_img(self, path, list_img_traj, name_pt=None, type_image=".png"):
+        path_pt = os.path.join(path, name_pt)
+        def _load_with_path():
+            print("_load with path", path_pt)
+            frames_depth = None
+            low_idx = -1
+            for i, dict_frame in enumerate(list_img_traj):
+                # 60 actions need 61 frames
+                if low_idx != dict_frame["low_idx"]:
+                    low_idx = dict_frame["low_idx"]
+                else:
+                    continue
+                name_frame = dict_frame["image_name"].split(".")[0]
+                frame_path = os.path.join(path, name_frame + type_image)
+                if os.path.isfile(frame_path):
+                    img_depth = Image.open(frame_path)
+                else:
+                    print("file is not exist: {}".format(frame_path))
+                img_depth = \
+                    self.semantic_graph_implement.trans_MetaData.transforms(img_depth)
+
+                if frames_depth is None:
+                    frames_depth = img_depth
+                else:
+                    frames_depth = torch.cat([frames_depth, img_depth], dim=0)
+            frames_depth = torch.cat([frames_depth, img_depth], dim=0)
+            torch.save(frames_depth, path_pt)
+            return frames_depth
+
+        def _load_with_pt():
+            frames_depth = torch.load(path_pt)
+            return frames_depth
+        if os.path.isfile(path_pt):
+            frames_depth = _load_with_pt()
+        else:
+            frames_depth = _load_with_path()
+        return frames_depth

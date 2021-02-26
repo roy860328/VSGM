@@ -32,7 +32,7 @@ GENERAL:
   use_exploration_frame_feats: False
   save_path: '../exp/MOCAMaskDepthGraph_V5'
   DECODER: "MOCAMaskDepthGraph_V5"
-  FEAT_NAME: "feat_sgg_depth_instance.pt"
+  FEAT_NAME: "feat_sgg_depth_instance_test.pt"
 
 SCENE_GRAPH:
   GPU: True
@@ -43,7 +43,7 @@ SCENE_GRAPH:
   # PRIORI
   PRIORI: True
   PRIORI_OBJ_NAME_EMBEDDING: "data_dgl/object.csv" # $GRAPH_ANALYSIS/data_dgl/object.csv
-  PRIORI_OBJ_RBG_FEATURE_EMBEDDING: "sgg_mask_feature/object_mask_feature.json" # $ALFWORLD_ROOT/agents/semantic_graph/rgb_feature/object_rgb_feature.json
+  PRIORI_OBJ_RBG_FEATURE_EMBEDDING: "sgg_mask_feature/object_sgg_mask_feature.json" # $ALFWORLD_ROOT/agents/semantic_graph/rgb_feature/object_rgb_feature.json
   PRIORI_OBJ_ATTRIBUTE_FEATURE: "rgb_feature/object_attribute.json" # $ALFWORLD_ROOT/agents/semantic_graph/rgb_feature/object_rgb_feature.json
   PRIORI_OBJ_ADJ: "visual_genome/A.csv" # $GRAPH_ANALYSIS/visual_genome/A.csv
   #

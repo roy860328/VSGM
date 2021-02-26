@@ -75,6 +75,7 @@ class Module(merge_meta):
                 }
                 meta_datas["exploration_sgg_meta_data"].append(meta_data)
             return meta_datas
+
         def agent_sequences_to_one(META_DATA_FILE="meta_agent.json",
                                    SGG_META="agent_meta",
                                    EXPLORATION_META="exploration_agent_meta",
@@ -232,18 +233,20 @@ class Module(merge_meta):
                 try:
                     self.feat_pt = 'feat_third_party_img_and_exploration.pt'
                     self.feat_pt = 'feat_depth_instance.pt'
-                    self.feat_pt = 'feat_sgg_depth_instance.pt'
+                    self.feat_pt = 'feat_sgg_depth_instance_test.pt'
                     im = torch.load(os.path.join(root, self.feat_pt))
                     if self.feat_pt == 'feat_third_party_img_and_exploration.pt':
                         if len(im['feat_conv']) != len(im['feat_conv_1'])\
                            or len(im['feat_conv_1']) != len(im['feat_conv_2'])\
-                           or len(im['feat_conv']) < len(ex['images']):
+                           or len(im['feat_conv']) < len(ex['images'])\
+                           or len(im['feat_conv']) == 0:
                             raise
                     elif self.feat_pt == 'feat_depth_instance.pt':
-                        if len(im['depth']) != len(im['instance']):
+                        if len(im['depth']) != len(im['instance']) or len(im['instance']) == 0:
                             raise
-                    elif self.feat_pt == 'feat_sgg_depth_instance.pt':
-                        if len(im['depth']) != len(im['instance']):
+                    elif self.feat_pt == 'feat_sgg_depth_instance_test.pt':
+                        if len(im['depth']) != len(im['instance']) or len(im['instance']) == 0\
+                           or torch.tensor(im['instance']).shape[1:] != (1024, 9, 9):
                             raise
                     else:
                         print("NotImplementedError Please implement")

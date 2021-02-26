@@ -1,7 +1,7 @@
 DATASET:
   NAME: "vg"
   MODE: "benchmark"
-  TRAIN_BATCH_SIZE: 3
+  TRAIN_BATCH_SIZE: 4
   TEST_BATCH_SIZE: 1
 ALFREDTEST:
   data_path: "/home/alfworld/detector/data/test/"
@@ -19,10 +19,10 @@ MODEL:
   SAVE_SGG_RESULT: True
   SAVE_SGG_RESULT_PATH: "/home/alfworld/sgg_detector/"
   # WEIGHT_IMG: "/home/graph-rcnn.pytorch/checkpoints/vg_benchmark_object/R-101-C4/sg_baseline_joint_2/BatchSize_4/Base_LR_0.0005/checkpoint_final.pth"
-  # WEIGHT_IMG: "/home/graph-rcnn.pytorch/checkpoints/vg_benchmark_object/R-101-C4/sg_baseline_joint_2/BatchSize_4/rgb_train_feat_base_lr_0.0005/checkpoint_final.pth"
-  # WEIGHT_IMG: "/home/graph-rcnn.pytorch/checkpoints/vg_benchmark_object/R-101-C4/sg_baseline_joint_2/BatchSize_4/mask_train_feat_attribute_base_lr_0.0005/checkpoint_0234999.pth"
-  WEIGHT_IMG: "/home/graph-rcnn.pytorch/checkpoints/vg_benchmark_object/R-101-C4/sg_baseline_joint_2/BatchSize_4/mask_train_feat_base_lr_0.0005/checkpoint_0179999.pth"
-  RELATION_ON: True
+  # WEIGHT_IMG: "/home/graph-rcnn.pytorch/checkpoints/vg_benchmark_object/R-101-C4/sg_baseline_joint_2/BatchSize_4/Base_LR_0.0005/checkpoint_0179999.pth"
+  WEIGHT_IMG: "/home/graph-rcnn.pytorch/checkpoints/vg_benchmark_object/R-101-C4/sg_baseline_joint_2/BatchSize_4/mask_train_feat_attribute_base_lr_0.0005/checkpoint_0234999.pth"
+  WEIGHT_DET: ""
+  RELATION_ON: False
   ATTRIBUTE_ON: True
   ALGORITHM: "sg_baseline"
   USE_FREQ_PRIOR: False

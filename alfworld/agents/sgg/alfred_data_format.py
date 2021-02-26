@@ -31,17 +31,23 @@ def sgg_mask():
     OBJECT_RGB_FEATURE = "object_sgg_mask_feature.json"
     return SAVE_PATH, OBJECT_RGB_FEATURE
 
+def sgg_mask_2048():
+    SAVE_PATH = os.path.join(os.getcwd(), "semantic_graph/sgg_mask_feature_2048")
+    OBJECT_RGB_FEATURE = "object_sgg_mask_feature_2048.json"
+    return SAVE_PATH, OBJECT_RGB_FEATURE
+
 
 SAVE_PATH, OBJECT_RGB_FEATURE = rgb()
 SAVE_PATH, OBJECT_RGB_FEATURE = mask()
 SAVE_PATH, OBJECT_RGB_FEATURE = sgg_mask()
+SAVE_PATH, OBJECT_RGB_FEATURE = sgg_mask_2048()
 OBJECT_ATTRIBUTE = "object_attribute.json"
 
 
 # Transform
 class TransMetaData():
 
-    def __init__(self, cfg):
+    def __init__(self, cfg, FOR_SGG_TRAIN_LABEL=False):
         super(TransMetaData, self).__init__()
         self.cfg = cfg
         self.transforms = parser_scene.get_transform(cfg, train=True)
@@ -61,6 +67,7 @@ class TransMetaData():
         self.predicate_to_ind['__background__'] = 0
         self.ind_to_predicates = sorted(self.predicate_to_ind, key=lambda k:
                                         self.predicate_to_ind[k])
+        self.FOR_SGG_TRAIN_LABEL = FOR_SGG_TRAIN_LABEL
         ic(len(self.SGG_train_object_classes))
         ic(len(self.SGG_result_ind_to_classes))
         ic(self.ind_to_predicates)
@@ -119,10 +126,11 @@ class TransMetaData():
         return dict_obj_rel_attr
 
     def trans_meta_data_to_sgg(self, mask, color_to_object, data_obj_relation_attribute):
+        object_classes = self.SGG_train_object_classes if self.FOR_SGG_TRAIN_LABEL else self.SGG_result_ind_to_classes
         masks, boxes, boxes_labels, boxes_id = parser_scene.transfer_mask_semantic_to_bbox_label(
             mask,
             color_to_object,
-            self.SGG_train_object_classes,
+            object_classes,
             data_obj_relation_attribute
         )
         dict_obj_rel_attr = self.trans_object_meta_data_to_relation_and_attribute(
@@ -142,7 +150,7 @@ data from gen/scripts/augment_sgg_trajectories.py
 
 
 class AlfredDataset(Dataset):
-    def __init__(self, cfg):
+    def __init__(self, cfg, FOR_SGG_TRAIN_LABEL=False):
         from sys import platform
         if platform == "win32":
             cfg.ALFREDTEST.data_path = "D:\\alfred\\alfworld\\detector\\data\\test"
@@ -154,7 +162,7 @@ class AlfredDataset(Dataset):
         # ensure that they are aligned
         self.get_data_files(self.root, balance_scenes=cfg.ALFREDTEST.balance_scenes)
 
-        self.trans_meta_data = TransMetaData(cfg)
+        self.trans_meta_data = TransMetaData(cfg, FOR_SGG_TRAIN_LABEL)
         # train
         self.SGG_train_object_classes = self.trans_meta_data.SGG_train_object_classes
         self.ind_to_classes = self.SGG_train_object_classes
@@ -277,7 +285,7 @@ def main(cfgs):
     from torchvision.transforms import functional as F
     import time
     cfg = cfgs['semantic_cfg']
-    alfred_dataset = AlfredDataset(cfg)
+    alfred_dataset = AlfredDataset(cfg, FOR_SGG_TRAIN_LABEL=False)
     if 'sgg_cfg' in cfgs:
         extractor = get_sgg_model(cfgs, alfred_dataset.trans_meta_data)
     else:
@@ -297,10 +305,9 @@ def main(cfgs):
             object_vision_feature = json.load(f)
 
     object_not_save = [i for i in range(len(alfred_dataset.SGG_result_ind_to_classes))]
-    # object_not_save = [0, 3, 14, 25, 51, 57, 59, 62, 69, 73, 79, 87, 97, 99, 103]
-    print("Always not found: ", [alfred_dataset.SGG_result_ind_to_classes[i] for i in [0, 3, 14, 51, 57, 59, 69, 97, 99]])
+    always_not_found = [0, 3, 14, 51, 57, 59, 69, 97, 99]
     print(alfred_dataset.SGG_result_ind_to_classes)
-
+    print("Always not found: ", [alfred_dataset.SGG_result_ind_to_classes[i] for i in always_not_found])
 
     def gen_object_rgb_feature():
         indices = list(range(len(alfred_dataset)))
@@ -325,6 +332,7 @@ def main(cfgs):
                     print("remove: ", label)
                     print("bbox:", bbox)
                     print("object: ", alfred_dataset.SGG_result_ind_to_classes[label])
+                    print("objectIds: ", target.extra_fields["objectIds"][ind])
                     rgb_feature = extractor.featurize([crop_img], batch=1)
                     if len(rgb_feature.shape) >= 3:
                         GAP_rgb_feature = rgb_feature[0].mean([1, 2]).reshape(-1)
@@ -344,6 +352,43 @@ def main(cfgs):
         object_vision_feature["0"] = [0]*GAP_rgb_feature.shape[0]
         for object_label in object_not_save:
             object_vision_feature[str(object_label)] = [0]*GAP_rgb_feature.shape[0]
+        with open(os.path.join(SAVE_PATH, OBJECT_RGB_FEATURE), "w") as f:
+            json.dump(object_vision_feature, f)
+
+    def gen_object_SGG_feature():
+        indices = list(range(len(alfred_dataset)))
+        shuffle(indices)
+        for i in indices:
+            img, target, idx = alfred_dataset[i]
+            img = img.unsqueeze(0)
+            sgg_results = extractor.predict(img, idx)
+            sgg_result = sgg_results[0]
+            img = F.to_pil_image(img[0])
+            for ind, label in enumerate(sgg_result["labels"].numpy().astype(int)):
+                if label in object_not_save:
+                    bbox = sgg_result["bbox"][ind].numpy().astype(int)
+                    crop_img = img.crop(bbox)
+                    if crop_img.size[0] * crop_img.size[1] < 1500:# or min(bbox) == 0 or max(bbox) == 400:
+                        continue
+                    object_not_save.remove(label)
+                    print("remove: ", label)
+                    print("bbox:", bbox)
+                    print("object: ", alfred_dataset.SGG_result_ind_to_classes[label])
+                    feature = sgg_result["features"][ind]
+                    feature = feature.reshape(-1)
+                    object_vision_feature[str(label)] = feature.to('cpu').numpy().tolist()
+                    print(feature.shape)
+                    crop_img.save(os.path.join(SAVE_PATH, alfred_dataset.SGG_result_ind_to_classes[label] + "_{}.jpg".format(label)))
+                    print("Can't find object class: ", object_not_save)
+            # [0, 3, 14, 51, 57, 59, 69, 97, 99]
+            if len(object_not_save) <= 9:
+                break
+            img.close()
+            # import pdb; pdb.set_trace()
+        print("Can't find object class: ", object_not_save)
+        object_vision_feature["0"] = [0]*feature.shape[0]
+        for object_label in object_not_save:
+            object_vision_feature[str(object_label)] = [0]*feature.shape[0]
         with open(os.path.join(SAVE_PATH, OBJECT_RGB_FEATURE), "w") as f:
             json.dump(object_vision_feature, f)
 
@@ -384,7 +429,8 @@ def main(cfgs):
 
     # gen_object_attr()
     object_not_save = [i for i in range(len(alfred_dataset.SGG_result_ind_to_classes))]
-    gen_object_rgb_feature()
+    # gen_object_rgb_feature()
+    gen_object_SGG_feature()
 
 
 def get_resnet_model(cfg):
@@ -408,8 +454,8 @@ def get_sgg_model(cfg, trans_MetaData):
     return detector
 
 
-def get_dataset(cfg, transform=None):
-    dataset = AlfredDataset(cfg)
+def get_dataset(cfg, transform=None, FOR_SGG_TRAIN_LABEL=False):
+    dataset = AlfredDataset(cfg, FOR_SGG_TRAIN_LABEL=FOR_SGG_TRAIN_LABEL)
     return dataset
 
 

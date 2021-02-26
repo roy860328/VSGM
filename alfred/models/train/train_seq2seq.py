@@ -71,6 +71,9 @@ if __name__ == '__main__':
     parser.add_argument('--contrastive_margin', help='weight of progress monitor', default=0.1, type=float)
     parser.add_argument('--print', help='', action='store_true')
     parser.add_argument('--augmentation', help='', action='store_true')
+
+    parser.add_argument('--task_types', type=str, help="task_types", default="1,2,3,4,5,6")
+
     # args and init
     args = parser.parse_args()
     args.dout = args.dout.format(**vars(args)) + "_" + time.strftime("%d-%m-%Y_%H-%M-%S")

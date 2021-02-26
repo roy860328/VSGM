@@ -11,6 +11,19 @@ from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
 import glob
 import random
 
+TASK_TYPES = {"1": "pick_and_place",
+              "2": "look_at_obj_in_light",
+              "3": "pick_clean_then_place_in_recep",
+              "4": "pick_heat_then_place_in_recep",
+              "5": "pick_cool_then_place_in_recep",
+              "6": "pick_two_obj_and_place"}
+
+def check_task_type_in(root, task_types):
+    for task_type in task_types:
+        if task_type in root:
+            return True
+    return False
+
 def load_sgg(args):
     sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents', 'sgg'))
     from alfred_data_format import get_dataset, get_sgg_model
@@ -34,9 +47,14 @@ if __name__ == '__main__':
     parser.add_argument('--str_save_ft_name', help='str_save_ft_name', default='')
     parser.add_argument('--img_folder', help='folder containing raw images', default='raw_images')
     parser.add_argument("--sgg_config_file", default=None, help="path to config file")
-
+    parser.add_argument('--task_types', type=str, help="task_types", default="1,2,3,4,5,6")
     # parser
     args = parser.parse_args()
+
+    task_types = []
+    for tt_id in args.task_types.split(','):
+        if tt_id in TASK_TYPES:
+            task_types.append(TASK_TYPES[tt_id])
 
     if args.str_save_ft_name == "":
         raise "str_save_ft_name must have xxxx.pt"
@@ -62,9 +80,11 @@ if __name__ == '__main__':
         walk = os.walk(args.data + search)
         roots += [root for root, dirs, files in walk if os.path.basename(root) == main_search_img_folder]
     random.shuffle(roots)
-    print(len(roots))
+    print("search len ", len(roots))
     for i, root in enumerate(roots):
         if os.path.basename(root) == main_search_img_folder:
+            if not check_task_type_in(root, task_types):
+                continue
             feat_img_dict = {}
             root = root.replace(main_search_img_folder, '')
             for img_folder, keyname in zip(args.img_folder.split(','), args.keyname.split(',')):
@@ -83,7 +103,7 @@ if __name__ == '__main__':
                         print('{}'.format(root_img))
                         image_loader = Image.open if isinstance(fimages[0], str) else Image.fromarray
                         images = [image_loader(f).convert('RGB') for f in fimages]
-                        feat = extractor.featurize(images, batch=args.batch)
+                        feat = extractor.featurize(images, batch=args.batch, GAP_Pooling=True)
                         feat_img_dict[keyname] = feat.cpu()
                     except Exception as e:
                         print(e)

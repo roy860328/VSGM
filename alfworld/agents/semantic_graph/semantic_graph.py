@@ -338,6 +338,8 @@ class SceneGraph(object):
         obj_cls_name_to_features = self._get_obj_cls_name_to_features(path_object_embedding, _background=True)
         self.priori_graph = self.graphdata_type(obj_cls_name_to_features, self.GPU, self.dim_rgb_feature)
 
+        ic("Prior visual feature: ", len(rgb_features["0"]))
+        ic("NODE_INPUT_RGB_FEATURE_SIZE: ", self.dim_rgb_feature)
         assert len(rgb_features["0"]) == self.dim_rgb_feature, "shape must be same, else Graph Net downsample would have error"
         # node word feature
         for k, word_feature in obj_cls_name_to_features.items():

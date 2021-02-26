@@ -41,9 +41,6 @@ class SemanticGraphImplement(torch.nn.Module):
         self.EMBED_CURRENT_STATE = self.cfg_semantic.SCENE_GRAPH.EMBED_CURRENT_STATE
         self.EMBED_HISTORY_CHANGED_NODES = self.cfg_semantic.SCENE_GRAPH.EMBED_HISTORY_CHANGED_NODES
         self.RESULT_FEATURE = self.cfg_semantic.SCENE_GRAPH.RESULT_FEATURE
-        if not self.isORACLE:
-            self.cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE =\
-                self.cfg_semantic.SCENE_GRAPH.VISION_FEATURE_SIZE
         ic(self.cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE)
 
         # model
@@ -135,7 +132,7 @@ class SemanticGraphImplement(torch.nn.Module):
             results = self.detector(rgb_image)
             result = results[0]
             scene_graph.add_local_graph_to_global_graph(rgb_image, result, reset_current_graph=reset_current_graph)
-
+            return results
     def get_priori_feature(self, env_index, hidden_state):
         raise NotImplementedError
         scene_graph = self.scene_graphs[env_index]

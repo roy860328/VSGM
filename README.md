@@ -55,7 +55,8 @@ python models/utils/extract_resnet.py --data data/full_2.1.0 --batch 64 --gpu --
 
 python models/utils/extract_resnet.py --data data/full_2.1.0 --batch 64 --gpu --visual_model resnet18 --img_folder depth_images,instance_masks --keyname depth,instance --skip_existing --str_save_ft_name feat_depth_instance.pt
 
-CUDA_VISIBLE_DEVICES=1 python models/utils/extract_resnet.py --data data/full_2.1.0 --batch 64 --gpu --visual_model sgg --img_folder depth_images,instance_masks --keyname depth,instance --skip_existing --str_save_ft_name feat_sgg_depth_instance.pt --sgg_config_file $GRAPH_RCNN_ROOT/configs/attribute.yaml
+CUDA_VISIBLE_DEVICES=1 python models/utils/extract_resnet.py --data data/full_2.1.0 --batch 64 --gpu --visual_model sgg --img_folder depth_images,instance_masks --keyname depth,instance --skip_existing --str_save_ft_name feat_sgg_depth_instance.pt --sgg_config_file $GRAPH_RCNN_ROOT/configs/attribute.yaml --task_types 1,2,3,4,5,6
+--task_types 1
 ```
 4. get event.metadata['agent']
 cameraHorizon, position, rotation
@@ -71,6 +72,7 @@ object
 5. merge thirdparty meta to 'third_party_all_meta_data.json' & test feat_third_party_img_and_exploration, feat_depth_instance, feat_sgg_depth_instance is ok
 ```
 CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/memory_semantic_graph.yaml --data data/full_2.1.0/ --model merge_meta_im --dout exp/just_merge_meta --splits data/splits/oct21.json --batch 20 --gpu
+--task_types 1
 ```
 
 WARNING: if use "feat_sgg_xxx.pt", config "FEAT_NAME", "NODE_INPUT_RGB_FEATURE_SIZE", "PRIORI_OBJ_RBG_FEATURE_EMBEDDING" need change
@@ -141,8 +143,9 @@ mini_moca_test_mask_v1.yaml / mini_moca_test_mask_depth_v1.yaml
 ```
 CUDA_VISIBLE_DEVICES=1 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/mini_moca_test_mask_v1.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_mini_test --dout exp/mini_test_mask_v1 --splits data/splits/oct21.json --batch 5 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --not_save_config --gpu --task_types 1
 
+1. (thirdparty have eval bug) 
 CUDA_VISIBLE_DEVICES=1 python models/eval_thirdparty/eval_semantic.py models/config/without_env_base.yaml --model_path exp/mini_moca_graph_softmaxgcn_v3_10-02-2021_16-51-32/best_seen.pth --model seq2seq_im_moca_mini_test --data data/full_2.1.0/ --eval_split valid_seen --gpu  --task_types 1 --subgoals all
-
+2.
 CUDA_VISIBLE_DEVICES=0 python models/eval_moca/eval_semantic.py models/config/without_env_base.yaml --model_path exp/mini_test_mask_v1_12-02-2021_17-01-40/best_seen.pth --model seq2seq_im_moca_mini_test --data data/full_2.1.0/ --eval_split valid_seen --gpu  --task_types 1 --subgoals all
 ```
 
@@ -156,7 +159,29 @@ CUDA_VISIBLE_DEVICES=0 python models/eval_moca/eval_semantic.py models/config/wi
 ## MOCA + cell_graph (seq2seq_im_moca_mini_mask_depth_big_change)
 ```
 CUDA_VISIBLE_DEVICES=1 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/mini_moca_test_BigChange_mask_graph_v1.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_mini_mask_depth_big_change --dout exp/BigChange_mask_graph_v1 --splits data/splits/oct21.json --batch 5 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --not_save_config --gpu --task_types 1
+
+CUDA_VISIBLE_DEVICES=0 python models/eval_moca/eval_semantic.py models/config/without_env_base.yaml --model_path exp/BigChange_mask_graph_v1_21-02-2021_09-47-16/best_seen.pth --model seq2seq_im_moca_mini_mask_depth_big_change --data data/full_2.1.0/ --eval_split valid_seen --gpu  --task_types 1 --subgoals all
 ```
+
+## sgg feat.pt
+1.
+--dframe 3*9*9 (origin: 3*7*7)
+
+2.
+dframe_channel = 1024 if dframe//2 == 3*9*9 else 512
+self.dynamic_conv = DynamicConvLayer(dhid=dhid, d_out_hid=dframe_channel)
+
+3. 
+if use "feat_sgg_xxx.pt", config "FEAT_NAME", "NODE_INPUT_RGB_FEATURE_SIZE", "PRIORI_OBJ_RBG_FEATURE_EMBEDDING" need change
+```
+CUDA_VISIBLE_DEVICES=1 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/mini_moca_test_mask_depth_graph_sgg_feat_v5.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_mini_mask_depth --dout exp/sgg_feat_mini_moca_test_mask_depth_graph_v5 --splits data/splits/oct21.json --batch 5 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --not_save_config --gpu --task_types 1 --dframe 243
+```
+
+4. eval
+```
+--sgg_config_file $GRAPH_RCNN_ROOT/configs/attribute.yaml
+```
+
 
 ---
 ---

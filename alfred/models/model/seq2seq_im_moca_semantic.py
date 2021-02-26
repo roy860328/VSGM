@@ -347,6 +347,7 @@ class Module(Base):
             'enc_lang_instr': None,
             'weighted_lang_t_goal': None,
             'weighted_lang_t_instr': None,
+            'state_t_graph': None,
         }
 
 

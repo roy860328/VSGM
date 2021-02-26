@@ -92,7 +92,7 @@ class EvalTask(Eval):
             curr_depth_image = env.last_event.depth_frame * (255 / 10000)
             curr_depth_image = curr_depth_image.astype(np.uint8)
             feat['frames_depth'] = curr_depth_image
-            feat['all_meta_datas'] = cls.get_meta_datas(env)
+            feat['all_meta_datas'] = cls.get_meta_datas(cls, env, resnet)
             # forward model
             m_out = model.step(feat)
             m_pred = model.extract_preds(m_out, [traj_data], feat, clean_special_tokens=False)

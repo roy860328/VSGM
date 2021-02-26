@@ -198,14 +198,14 @@ class Eval(object):
                 meta_datas["exploration_sgg_meta_data"].append(meta_data)
         return meta_datas
 
-    def get_meta_datas(self, env):
-        image = np.uint8(env.last_event.frame)
-        curr_image = Image.fromarray(image)
+    def get_meta_datas(cls, env, resnet):
+        curr_image = Image.fromarray(np.uint8(env.last_event.frame))
+        image_feature = resnet.featurize([curr_image], batch=1)[0]
         meta_data = {
-            "rgb_image": curr_image,
+            "rgb_image": image_feature,
             "sgg_meta_data": env.last_event.metadata['objects'],
         }
         meta_datas = {
-            "sgg_meta_data": [meta_data],
+            "sgg_meta_data": meta_data,
         }
-        return meta_datas
+        return [meta_datas]

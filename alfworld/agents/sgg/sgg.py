@@ -47,7 +47,7 @@ class SGG(SceneParser):
                                 [1, 0],
                                 [1, 2],
                                 [2, 0],
-                                [2, 1]], device='cuda:0'), 
+                                [2, 1]], device='cuda:0'),
             'scores': tensor([[0.9716, 0.0284],
                             [0.9784, 0.0216],
                             [0.9716, 0.0284],
@@ -90,9 +90,11 @@ class SGG(SceneParser):
             print(detections[i].get_field("scores").shape)
             print("scores shape is 105 or 106?")
             result = {
+                "backbone": detections[i].get_field("backbone"),
                 "labels": detections[i].get_field("labels"),
+                "bbox": detections[i].get_field("bbox"),
                 "features": detections[i].get_field("features"),
-                "attribute_logits": detection_attrs[i].get_field("attribute_logits"),
+                "attribute_logits": detection_attrs[i].get_field("attributes"),
                 "obj_relations_idx_pairs": detection_pairs[i].get_field("idx_pairs"),
                 "obj_relations_scores": detection_pairs[i].get_field("scores"),
             }
@@ -111,21 +113,25 @@ class SGG(SceneParser):
             result = overlay_class_names(result, top_prediction, self.SGG_result_ind_to_classes)
             cv2.imwrite(os.path.join(self.SAVE_SGG_RESULT_PATH, "detection_{}.jpg".format(img_ids)), result)
 
-    def _backbone_feat(self, transform_images, targets=None):
+    def _backbone_feat(self, transform_images, GAP_Pooling, targets=None):
         # torch.Size([32, 1024, 19, 19])
         features = super().backbone_feat(transform_images)
         features = features[0]
-        # torch.Size([32, 1024])
-        features = features.mean([2, 3])
+        if GAP_Pooling:
+            # torch.Size([32, 1024])
+            # features = features.mean([2, 3])
+            # torch.Size([32, 1024, 9, 9])
+            m = torch.nn.MaxPool2d(2, stride=2)
+            features = m(features)
         return features
 
-    def featurize(self, images, batch=32):
+    def featurize(self, images, batch=32, GAP_Pooling=True):
         images_normalized = torch.stack([self.transforms(i, None)[0] for i in images], dim=0).to(self.device)
         out = []
         with torch.set_grad_enabled(False):
             for i in range(0, images_normalized.size(0), batch):
                 b = images_normalized[i:i+batch]
-                out.append(self._backbone_feat(b))
+                out.append(self._backbone_feat(b, GAP_Pooling))
         return torch.cat(out, dim=0)
 
     def load(self):
@@ -159,7 +165,7 @@ if __name__ == '__main__':
     semantic_cfg
     '''
     cfg_semantic = cfg['semantic_cfg']
-    cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE = 2048
+    cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE = 1024
     trans_MetaData = alfred_data_format.TransMetaData(cfg_semantic)
     scenegraph = SceneGraph(
         cfg_semantic, trans_MetaData.SGG_result_ind_to_classes, cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE)
@@ -176,13 +182,15 @@ if __name__ == '__main__':
     for i in range(100):
         img, target, idx = alfred_dataset[i]
         img = img.unsqueeze(0)
+        import pdb; pdb.set_trace()
         sgg_results = detector.predict(img, idx)
         img = alfred_dataset.get_PIL_img(i)
         feat = detector.featurize([img, img])
         print(feat.shape)
-        # scenegraph.add_local_graph_to_global_graph(img, sgg_results[0])
+        scenegraph.add_local_graph_to_global_graph(img, sgg_results[0])
 
         max_lable = max(max_lable, max(target.extra_fields["labels"]))
         print(max_lable)
         print(target.extra_fields["labels"])
         print(target.extra_fields["objectIds"])
+        raise

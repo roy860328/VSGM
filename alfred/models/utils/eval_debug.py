@@ -52,9 +52,15 @@ class EvalDebug():
     def store_state_case(self, file_name, save_dir, goal_instr, step_instr):
         save_fail_case = os.path.join(save_dir, file_name + "_state.txt")
         with open(save_fail_case, 'w') as f:
-            f.write("Goal: " + goal_instr + "\nstep_instr: ")
+            f.write("Save Dir: " + save_fail_case)
+            f.write("\nGoal: " + goal_instr + "\nstep_instr: ")
             f.write("\nstep_instr: ".join(step_instr) + "\n")
             f.write(self.fail_reason)
+
+    def store_current_state(self, file_name, save_dir, text):
+        save_fail_case = os.path.join(save_dir, file_name + "_state.txt")
+        with open(save_fail_case, 'a') as f:
+            f.write("\n" + text)
 
     def record(self, save_dir, traj_data, goal_instr, step_instr, fail_reason, success, fps=2, eval_idx=""):
         # path
@@ -69,14 +75,15 @@ class EvalDebug():
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
 
-        self.images_to_video(file_name, save_dir, goal_instr, fps)
         self.store_state_case(file_name, save_dir, goal_instr, step_instr)
+        self.images_to_video(file_name, save_dir, goal_instr, fps)
         self.reset_data()
 
     def images_to_video(self, file_name, save_dir, goal_instr, fps):
-        file_name += ".mp4"
-        save_video_dir = os.path.join(save_dir, file_name)
+        v_file_name = file_name + ".mp4"
+        save_video_dir = os.path.join(save_dir, v_file_name)
         writer = imageio.get_writer(save_video_dir, fps=fps)
+        i = 0
         # data
         for image, depth, dict_action, lang_instr, fail_reason in\
             zip(self.images, self.depths, self.list_actions, self.lang_instr, self.fail_reason_list):
@@ -102,6 +109,7 @@ class EvalDebug():
                 p = np.round(p, decimals=2)
             else:
                 p = []
+            str_step = "step: " + str(i)
             str_action_low = dict_action["action_low"]
             str_navi_oper = "navi: " + dict_action["action_navi_low"] +\
                 ", oper: " + dict_action["action_operation_low"]
@@ -112,11 +120,24 @@ class EvalDebug():
             str_priori_dict_ANALYZE_GRAPH = "priori " + str(dict_action["priori_dict_ANALYZE_GRAPH"]).replace(":", "").replace(" ", "")
             str_mask = str(dict_action["pred_class"]) + ", " + dict_action["object"]
             str_subgoal_progress = str(dict_action["subgoal_t"]) + ", " + str(dict_action["progress_t"])
+            self.store_current_state(file_name, save_dir, str_step)
+            self.store_current_state(file_name, save_dir, str_action_low)
+            self.store_current_state(file_name, save_dir, str_mask)
+            self.store_current_state(file_name, save_dir, "Fail: " + fail_reason)
+            self.store_current_state(file_name, save_dir, str_global_graph_dict_ANALYZE_GRAPH)
+            self.store_current_state(file_name, save_dir, str_current_state_dict_ANALYZE_GRAPH)
+            self.store_current_state(file_name, save_dir, str_history_changed_dict_ANALYZE_GRAPH)
+            self.store_current_state(file_name, save_dir, str_priori_dict_ANALYZE_GRAPH)
+            self.store_current_state(file_name, save_dir, str_subgoal_progress)
+            i += 1
             '''
             write
             '''
             self.writeText(
-                cat_image, str_action_low, toptomLeftCornerOfText, color)
+                cat_image, str_step, toptomLeftCornerOfText, color)
+            self.writeText(
+                cat_image, str_action_low, (toptomLeftCornerOfText[0]+100, toptomLeftCornerOfText[1]), color)
+            '''
             # navi oper
             self.writeText(
                 cat_image, str_navi_oper, topmiddleLeftCornerOfText, r_fontColor)
@@ -124,7 +145,7 @@ class EvalDebug():
             self.writeText(
                 cat_image, str_p_navi_or_operation, (topmiddleLeftCornerOfText[0], topmiddleLeftCornerOfText[1]+30), r_fontColor)
             '''
-            ANALYZE_GRAPH
+            # ANALYZE_GRAPH
             '''
             self.writeText(
                 cat_image, str_global_graph_dict_ANALYZE_GRAPH, (topmiddleLeftCornerOfText[0], topmiddleLeftCornerOfText[1]+60), r_fontColor, fontscale=0.6)
@@ -149,6 +170,7 @@ class EvalDebug():
             # goal persent: subgoal_t progress_t
             self.writeText(
                 cat_image, str_subgoal_progress, (topmiddleOfText[0], topmiddleOfText[1]+270), r_fontColor)
+            '''
             writer.append_data(cat_image)
         writer.close()
 
