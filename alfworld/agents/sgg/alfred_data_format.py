@@ -379,6 +379,7 @@ def main(cfgs):
                     object_vision_feature[str(label)] = feature.to('cpu').numpy().tolist()
                     print(feature.shape)
                     crop_img.save(os.path.join(SAVE_PATH, alfred_dataset.SGG_result_ind_to_classes[label] + "_{}.jpg".format(label)))
+                    img.save(os.path.join(SAVE_PATH, alfred_dataset.SGG_result_ind_to_classes[label] + "_{}i.jpg".format(label)))
                     print("Can't find object class: ", object_not_save)
             # [0, 3, 14, 51, 57, 59, 69, 97, 99]
             if len(object_not_save) <= 9:

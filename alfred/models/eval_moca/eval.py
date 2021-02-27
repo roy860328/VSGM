@@ -58,7 +58,7 @@ class Eval(object):
             self.resnet = Resnet(args, device='cuda', eval=True, share_memory=True, use_conv_feat=True)
         else:
             self.resnet = Resnet(args, device='cpu', eval=True, share_memory=True, use_conv_feat=True)
-        if 'sgg_config_file' in args:
+        if args.sgg_config_file is not None:
             import sys
             sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents', 'sgg'))
             from sgg.sgg import load_pretrained_model
@@ -255,9 +255,9 @@ class Eval(object):
         frames = Image.fromarray(np.uint8(frames))
         frames = resnet.featurize([frames], batch=1).unsqueeze(0)
         frames_instance = Image.fromarray(np.uint8(frames_instance))
-        feat["frames_instance"] = frames_instance
+        feat["frame_instance"] = [[frames_instance]]
         frames_instance = resnet.featurize([frames_instance], batch=1).unsqueeze(0)
         frames_depth = Image.fromarray(np.uint8(frames_depth * (255 / 10000))).convert('RGB')
-        feat["frames_depth"] = frames_depth
+        feat["frame_depth"] = [[frames_depth]]
         frames_depth = resnet.featurize([frames_depth], batch=1).unsqueeze(0)
         return frames, frames_instance, frames_depth

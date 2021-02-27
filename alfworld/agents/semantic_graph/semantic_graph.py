@@ -277,7 +277,6 @@ class SceneGraph(object):
         self.RELATION_MODE = cfg.SCENE_GRAPH.RELATION_MODE
         self.ANGLE_OF_VIEWS = cfg.SCENE_GRAPH.ANGLE_OF_VIEWS
         # vision
-        self.VISION_FEATURE_SIZE = cfg.SCENE_GRAPH.VISION_FEATURE_SIZE
         self.SAME_VISION_FEATURE_THRESHOLD = cfg.SCENE_GRAPH.SAME_VISION_FEATURE_THRESHOLD
         # object class name
         self.object_classes_index_to_name = object_classes_index_to_name
@@ -439,21 +438,22 @@ class SceneGraph(object):
             os.mkdir(self.GRAPH_RESULT_PATH)
         utils.save_graph_data(self.global_graph, self.GRAPH_RESULT_PATH)
 
-    def compare_existing_node(self, obj_cls, feature, compare_feature_len=0):
+    # Imagehash https://content-blockchain.org/research/testing-different-image-hash-functions/
+    # https://pypi.org/project/ImageHash/
+    def compare_global_graph_existing_node(self, obj_cls, feature):
         obj_id = None
-        raise "Care for use which graph"
         nodes = self.global_graph.x
         obj_cls_to_ind = self.global_graph.obj_cls_to_ind
         for suspect_node_ind in obj_cls_to_ind[obj_cls]:
             suspect_node_feature = nodes[suspect_node_ind]
-            suspect_node_feature = suspect_node_feature[:compare_feature_len].clone().to('cpu')
+            suspect_node_feature = suspect_node_feature[-self.dim_rgb_feature:].clone().to('cpu')
             similarity = self.compare_features(feature, suspect_node_feature)[0,0]
-            print("similarity: ", similarity)
+            # print("similarity: ", similarity)
             if similarity >= self.SAME_VISION_FEATURE_THRESHOLD:
                 # node ind to obj_id
                 obj_id = self.global_graph.ind_to_obj_id[suspect_node_ind]
-                break
-        return obj_id
+                return obj_id, True
+        return obj_id, False
 
     def compare_features(self, feature1, feature2):
         return cosine_similarity(feature1.reshape(1, -1), feature2.reshape(1, -1))
@@ -466,7 +466,7 @@ class SceneGraph(object):
             if not relation_have_been_add or add_relation_anyway:
                 graph.update_adj_relation(node_ind, obj_cls, self.adj)
 
-    def add_other_relation(self, graph, current_frame_obj_cls_to_node_index, obj_relations):
+    def add_ai2_thor_relation(self, graph, current_frame_obj_cls_to_node_index, obj_relations):
         '''
         current_frame_obj_cls_to_node_index: [(ind, obj_cls, isFindNode), ...]
         '''
@@ -525,59 +525,79 @@ class SceneGraph(object):
         # no matter isFindNode is True or False,
         # self.current_state_graph always need to add adj relation
         # if not isFindNode:
-        self.add_other_relation(self.current_state_graph,
-                                current_state_graph_current_frame_obj_cls_to_node_index,
-                                obj_relations
-                                )
-        self.add_other_relation(self.global_graph,
-                                global_graph_current_frame_obj_cls_to_node_index,
-                                obj_relations
-                                )
-        # if self.USE_OTHER_RELATION == 2:
-        # else:
-        #     self.add_adj_relation(self.current_state_graph,
-        #                           current_state_graph_current_frame_obj_cls_to_node_index,
-        #                           add_relation_anyway=True
-        #                           )
-        #     if self.USE_OTHER_RELATION:
-        #         self.add_other_relation(self.global_graph,
-        #                                 global_graph_current_frame_obj_cls_to_node_index,
-        #                                 obj_relations
-        #                                 )
-        #     else:
-        #         self.add_adj_relation(self.global_graph,
-        #                               global_graph_current_frame_obj_cls_to_node_index,
-        #                               add_relation_anyway=False
-        #                               )
+        self.add_ai2_thor_relation(self.current_state_graph,
+                                   current_state_graph_current_frame_obj_cls_to_node_index,
+                                   obj_relations
+                                   )
+        self.add_ai2_thor_relation(self.global_graph,
+                                   global_graph_current_frame_obj_cls_to_node_index,
+                                   obj_relations
+                                   )
+
+        # self.add_adj_relation(self.current_state_graph,
+        #                       current_state_graph_current_frame_obj_cls_to_node_index,
+        #                       add_relation_anyway=True
+        #                       )
+        # self.add_ai2_thor_relation(self.global_graph,
+        #                            global_graph_current_frame_obj_cls_to_node_index,
+        #                            obj_relations
+        #                            )
 
     def add_local_graph_to_global_graph(self, img, sgg_results, reset_current_graph=True):
         if reset_current_graph:
             self.init_current_state_data()
-        current_frame_obj_cls_to_node_index = []
+        global_graph_current_frame_obj_cls_to_node_index, current_state_graph_current_frame_obj_cls_to_node_index = [], []
         obj_clses = sgg_results["labels"].numpy().astype(int)
+        # torch.Size([16, 2048, 1, 1])
         obj_features = sgg_results["features"]
+        # torch.Size([16, 23])
         obj_attributes = sgg_results["attribute_logits"]
+        # array([[ 0,  1],
+        #        [ 0,  2],
+        #        [ 0,  3],
+        #        [ 0,  4], ...
         obj_relations_idx_pairs = sgg_results["obj_relations_idx_pairs"].numpy().astype(int)
+        # tensor([[9.9977e-01, 2.3437e-04],
+        #         [2.1592e-01, 7.8408e-01],
+        #         [2.6653e-01, 7.3347e-01],
+        #         [6.4093e-01, 3.5907e-01], ...
         obj_relations_scores = sgg_results["obj_relations_scores"]
+        # import pdb; pdb.set_trace()
         for i, obj_cls in enumerate(obj_clses):
-            obj_feature = obj_features[i].reshape(-1)
+            obj_feature = obj_features[i].reshape(1, -1)
             obj_attribute = obj_attributes[i].reshape(-1)
-            feature = torch.cat([obj_feature, obj_attribute], dim=0)
-            obj_id = self.compare_existing_node(obj_cls, feature, compare_feature_len=self.VISION_FEATURE_SIZE)
+            obj_id, isFindNode = self.compare_global_graph_existing_node(obj_cls, obj_feature)
             if obj_id is not None:
-                ind, isFeatureChange = self.global_graph.update_node(obj_cls, feature, obj_id)
+                ind, _ = self.global_graph.update_node(obj_cls, obj_attribute, obj_id, feature_img=obj_feature)
             else:
-                ind = self.global_graph.add_node(obj_cls, feature)
-            current_frame_obj_cls_to_node_index.append(ind)
+                ind = self.global_graph.add_node(obj_cls, obj_attribute, feature_img=obj_feature)
+            current_state_node_ind = self.current_state_graph.add_node(obj_cls, obj_attribute, feature_img=obj_feature)
 
+            global_graph_current_frame_obj_cls_to_node_index.append((ind, obj_cls, isFindNode))
+            current_state_graph_current_frame_obj_cls_to_node_index.append((current_state_node_ind, obj_cls, isFindNode))
+
+        obj_relations = []
         for i, max_relation in enumerate(torch.argmax(obj_relations_scores, dim=1).numpy()):
+            # relation sgg: "0" no relation. "1" ai2-thor relation
             if max_relation == 1:
-                src_obj_ind, dst_obj_ind = obj_relations_idx_pairs[i]
-                src_node_ind = current_frame_obj_cls_to_node_index[src_obj_ind]
-                dst_node_ind = current_frame_obj_cls_to_node_index[dst_obj_ind]
-                print("src_node_ind {}, dst_node_ind {}, relation {}".format(src_node_ind, dst_node_ind, max_relation))
-                self.global_graph.update_relation(src_node_ind, dst_node_ind, max_relation)
+                # src_obj_ind, dst_obj_ind = obj_relations_idx_pairs[i]
+                # obj_relation_triplet = src_obj_ind, dst_obj_ind, relation
+                obj_relation_triplet = obj_relations_idx_pairs[i].tolist() + [max_relation]
+                obj_relations.append(obj_relation_triplet)
+                # debug
+                # src_obj_ind, dst_obj_ind = obj_relations_idx_pairs[i]
+                # src_node_ind = global_graph_current_frame_obj_cls_to_node_index[src_obj_ind]
+                # dst_node_ind = global_graph_current_frame_obj_cls_to_node_index[dst_obj_ind]
+                # print("src_node_ind {}, dst_node_ind {}, relation {}".format(src_node_ind, dst_node_ind, max_relation))
 
+        self.add_ai2_thor_relation(self.current_state_graph,
+                                   current_state_graph_current_frame_obj_cls_to_node_index,
+                                   obj_relations
+                                   )
+        self.add_ai2_thor_relation(self.global_graph,
+                                   global_graph_current_frame_obj_cls_to_node_index,
+                                   obj_relations
+                                   )
 
 if __name__ == '__main__':
     sys.path.insert(0, os.environ['ALFWORLD_ROOT'])

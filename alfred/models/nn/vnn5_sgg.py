@@ -199,7 +199,7 @@ class MOCAMaskDepthGraph_V5(nn.Module):
     action decoder with subgoal and progress monitoring
     '''
 
-    def __init__(self, emb, dframe, dhid, semantic_graph_implement, IMPORTENT_NDOES_FEATURE,
+    def __init__(self, emb, dframe, dhid, semantic_graph_implement, IMPORTENT_NDOES_FEATURE, sgg_pool,
                  pframe=300, attn_dropout=0., hstate_dropout=0., actor_dropout=0., input_dropout=0.,
                  teacher_forcing=False):
         super().__init__(
@@ -241,8 +241,10 @@ class MOCAMaskDepthGraph_V5(nn.Module):
         nn.init.uniform_(self.go, -0.1, 0.1)
 
         self.scale_dot_attn = ScaledDotAttn(dhid, 128, dhid, 128)
-        dframe_channel = 1024 if dframe//2 == 3*9*9 else 512
+        dframe_channel = 1024
         self.dynamic_conv = DynamicConvLayer(dhid=dhid, d_out_hid=dframe_channel)
+
+        self.conv_pool = torch.nn.MaxPool2d(sgg_pool, stride=sgg_pool)
 
     def step(self, enc_goal, enc_instr, frames, e_t, state_tm1_goal, state_tm1_instr,
             feat_global_graph,
@@ -264,10 +266,10 @@ class MOCAMaskDepthGraph_V5(nn.Module):
         weighted_lang_t_instr, lang_attn_t_instr = self.scale_dot_attn(lang_feat_t_instr, h_tm1_instr)
 
         # dynamic convolution
-        vis_feat_t_goal_instance = self.dynamic_conv(frames["frames_instance_conv"], weighted_lang_t_goal)
-        vis_feat_t_instr_instance = self.dynamic_conv(frames["frames_instance_conv"], weighted_lang_t_instr)
-        vis_feat_t_goal_frames_depth = self.dynamic_conv(frames["frames_depth_conv"], weighted_lang_t_goal)
-        vis_feat_t_instr_frames_depth = self.dynamic_conv(frames["frames_depth_conv"], weighted_lang_t_instr)
+        vis_feat_t_goal_instance = self.dynamic_conv(self.conv_pool(frames["frames_instance_conv"]), weighted_lang_t_goal)
+        vis_feat_t_instr_instance = self.dynamic_conv(self.conv_pool(frames["frames_instance_conv"]), weighted_lang_t_instr)
+        vis_feat_t_goal_frames_depth = self.dynamic_conv(self.conv_pool(frames["frames_depth_conv"]), weighted_lang_t_goal)
+        vis_feat_t_instr_frames_depth = self.dynamic_conv(self.conv_pool(frames["frames_depth_conv"]), weighted_lang_t_instr)
         vis_feat_t_goal = torch.cat([vis_feat_t_goal_instance, vis_feat_t_goal_frames_depth], dim=1)
         vis_feat_t_instr = torch.cat([vis_feat_t_instr_instance, vis_feat_t_instr_frames_depth], dim=1)
 
@@ -384,16 +386,16 @@ class MOCAMaskDepthGraph_V5(nn.Module):
             # eval (eval moca b_store_state["sgg_meta_data"] type is dict)
             else:
                 t_store_state = b_store_state["sgg_meta_data"]
-            t_store_state["rgb_image"] = frames["frames_instance"][env_index, t]
+            t_store_state["rgb_image"] = frames["frame_instance"][env_index, t]
             if "all_meta_data" in t_store_state:
                 t_store_state = t_store_state["all_meta_data"]
             sgg_results = self.semantic_graph_implement.store_data_to_graph(
                 store_state=t_store_state,
                 env_index=env_index
             )
-            sgg_depth_results = self.semantic_graph_implement.detector(frames["frames_depth"][env_index, t])
-            frames["frames_instance_conv"] = sgg_results[0]["backbone"]
-            frames["frames_depth_conv"] = sgg_depth_results[0]["backbone"]
+            sgg_depth_results = self.semantic_graph_implement.detector(frames["frame_depth"][env_index, t])
+            frames["frames_instance_conv"] = [[sgg_results[0]["backbone"]]]
+            frames["frames_depth_conv"] = [[sgg_depth_results[0]["backbone"]]]
             global_graph_importent_features, global_graph_dict_objectIds_to_score = \
                 self.semantic_graph_implement.chose_importent_node_feature(
                     chose_type="GLOBAL_GRAPH",

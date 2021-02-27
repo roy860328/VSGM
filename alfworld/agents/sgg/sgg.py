@@ -66,16 +66,17 @@ class SGG(SceneParser):
             imgs = imgs.to(self.device)
             output = self.forward(imgs)
             detections, detection_pairs, detection_attrs = output
+            detections_backbone = [o.backbone for o in detections]
             detections = [o.to('cpu') for o in detections]
             detection_pairs = [o.to('cpu') for o in detection_pairs]
             detection_attrs = [o.to('cpu') for o in detection_attrs]
             # detections.bbox
             if self.SAVE_SGG_RESULT:
                 self._save_detect_result(imgs, detections, img_ids)
-            b_results = self._parser_sgg_result(detections, detection_pairs, detection_attrs)
+            b_results = self._parser_sgg_result(detections_backbone, detections, detection_pairs, detection_attrs)
         return b_results
 
-    def _parser_sgg_result(self, detections, detection_pairs, detection_attrs):
+    def _parser_sgg_result(self, detections_backbone, detections, detection_pairs, detection_attrs):
         '''
         detections[0]
         bbox: tensor([[372.5945, 659.5366, 517.6358, 792.8099],
@@ -85,14 +86,16 @@ class SGG(SceneParser):
         '''
         b_results = []
         for i in range(len(detections)):
-            print(detections[i].get_field("labels").shape)
-            print(detections[i].get_field("features").shape)
-            print(detections[i].get_field("scores").shape)
-            print("scores shape is 105 or 106?")
+            # print(detections[i].get_field("labels").shape)
+            # print(detections[i].get_field("features").shape)
+            # torch.Size([16])
+            # print(detections[i].get_field("scores").shape)
             result = {
-                "backbone": detections[i].get_field("backbone"),
+                "backbone": detections_backbone[i],
+                "bbox": detections[i].bbox,
+                # torch.Size([16])
                 "labels": detections[i].get_field("labels"),
-                "bbox": detections[i].get_field("bbox"),
+                # torch.Size([16, 2048, 1, 1])
                 "features": detections[i].get_field("features"),
                 "attribute_logits": detection_attrs[i].get_field("attributes"),
                 "obj_relations_idx_pairs": detection_pairs[i].get_field("idx_pairs"),
@@ -165,7 +168,7 @@ if __name__ == '__main__':
     semantic_cfg
     '''
     cfg_semantic = cfg['semantic_cfg']
-    cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE = 1024
+    # cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE = 2048
     trans_MetaData = alfred_data_format.TransMetaData(cfg_semantic)
     scenegraph = SceneGraph(
         cfg_semantic, trans_MetaData.SGG_result_ind_to_classes, cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE)
@@ -179,18 +182,18 @@ if __name__ == '__main__':
         cfg_sgg, trans_MetaData.transforms, alfred_dataset.SGG_result_ind_to_classes, 'cuda')
     detector.eval()
 
-    for i in range(100):
+    for i in range(10):
         img, target, idx = alfred_dataset[i]
         img = img.unsqueeze(0)
-        import pdb; pdb.set_trace()
         sgg_results = detector.predict(img, idx)
         img = alfred_dataset.get_PIL_img(i)
-        feat = detector.featurize([img, img])
-        print(feat.shape)
         scenegraph.add_local_graph_to_global_graph(img, sgg_results[0])
 
-        max_lable = max(max_lable, max(target.extra_fields["labels"]))
-        print(max_lable)
-        print(target.extra_fields["labels"])
-        print(target.extra_fields["objectIds"])
-        raise
+        # feat = detector.featurize([img, img])
+        # print("featurize: ", feat.shape)
+
+        # for debug sgg max_lable same as SGG_train_object_classes
+        # max_lable = max(max_lable, max(target.extra_fields["labels"]))
+        # print(max_lable)
+        # print(target.extra_fields["labels"])
+        # print(target.extra_fields["objectIds"])

@@ -133,6 +133,7 @@ class SemanticGraphImplement(torch.nn.Module):
             result = results[0]
             scene_graph.add_local_graph_to_global_graph(rgb_image, result, reset_current_graph=reset_current_graph)
             return results
+
     def get_priori_feature(self, env_index, hidden_state):
         raise NotImplementedError
         scene_graph = self.scene_graphs[env_index]

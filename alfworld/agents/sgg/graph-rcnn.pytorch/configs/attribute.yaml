@@ -21,7 +21,7 @@ MODEL:
   # WEIGHT_IMG: "/home/graph-rcnn.pytorch/checkpoints/vg_benchmark_object/R-101-C4/sg_baseline_joint_2/BatchSize_4/Base_LR_0.0005/checkpoint_final.pth"
   # WEIGHT_IMG: "/home/graph-rcnn.pytorch/checkpoints/vg_benchmark_object/R-101-C4/sg_baseline_joint_2/BatchSize_4/rgb_train_feat_base_lr_0.0005/checkpoint_final.pth"
   # WEIGHT_IMG: "/home/graph-rcnn.pytorch/checkpoints/vg_benchmark_object/R-101-C4/sg_baseline_joint_2/BatchSize_4/mask_train_feat_attribute_base_lr_0.0005/checkpoint_0234999.pth"
-  WEIGHT_IMG: "/home/graph-rcnn.pytorch/checkpoints/vg_benchmark_object/R-101-C4/sg_baseline_joint_2/BatchSize_4/mask_train_feat_base_lr_0.0005/checkpoint_0179999.pth"
+  WEIGHT_IMG: "/home/graph-rcnn.pytorch/checkpoints/vg_benchmark_object/R-101-C4/sg_baseline_joint_2/BatchSize_4/Base_LR_0.0005/checkpoint_0000001.pth"
   RELATION_ON: True
   ATTRIBUTE_ON: True
   ALGORITHM: "sg_baseline"

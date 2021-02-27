@@ -146,6 +146,7 @@ if __name__ == '__main__':
     parser.add_argument('--print', help='', action='store_true')
 
     parser.add_argument('--task_types', type=str, help="task_types", default="1,2,3,4,5,6")
+    parser.add_argument('--sgg_pool', type=int, default=2)
 
     # args and init
     args = parser.parse_args()

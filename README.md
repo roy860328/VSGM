@@ -141,7 +141,7 @@ CUDA_VISIBLE_DEVICES=1 python models/eval_moca/eval_semantic.py models/config/wi
 ## Moca instance & depth
 mini_moca_test_mask_v1.yaml / mini_moca_test_mask_depth_v1.yaml
 ```
-CUDA_VISIBLE_DEVICES=1 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/mini_moca_test_mask_v1.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_mini_test --dout exp/mini_test_mask_v1 --splits data/splits/oct21.json --batch 5 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --not_save_config --gpu --task_types 1
+CUDA_VISIBLE_DEVICES=1 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/mini_moca_test_mask_v1.yaml --data data/full_2.1.0/ --model   --dout exp/mini_test_mask_v1 --splits data/splits/oct21.json --batch 5 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --not_save_config --gpu --task_types 1
 
 1. (thirdparty have eval bug) 
 CUDA_VISIBLE_DEVICES=1 python models/eval_thirdparty/eval_semantic.py models/config/without_env_base.yaml --model_path exp/mini_moca_graph_softmaxgcn_v3_10-02-2021_16-51-32/best_seen.pth --model seq2seq_im_moca_mini_test --data data/full_2.1.0/ --eval_split valid_seen --gpu  --task_types 1 --subgoals all
@@ -182,6 +182,18 @@ CUDA_VISIBLE_DEVICES=1 python models/train/train_semantic.py models/config/witho
 --sgg_config_file $GRAPH_RCNN_ROOT/configs/attribute.yaml
 ```
 
+## SGG model without Oracle
+WARNING: When you eval, must transforms image
+```
+# eval.py
+feat["frame_instance"] = [[frames_instance]]
+# Module.step()
+self.semantic_graph_implement.trans_MetaData.transforms(feat["frames_instance"])
+```
+
+```
+CUDA_VISIBLE_DEVICES=1 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/sgg_without_oracle.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_sgg --dout exp/sgg_without_oracle --splits data/splits/oct21.json --batch 5 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --not_save_config --gpu --task_types 1 --dframe 243 --sgg_pool 2
+```
 
 ---
 ---

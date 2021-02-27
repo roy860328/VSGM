@@ -58,7 +58,7 @@ class Eval(object):
             self.resnet = Resnet(args, device='cuda', eval=True, share_memory=True, use_conv_feat=True)
         else:
             self.resnet = Resnet(args, device='cpu', eval=True, share_memory=True, use_conv_feat=True)
-        if 'sgg_config_file' in args:
+        if args.sgg_config_file is not None:
             import sys
             sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents', 'sgg'))
             from sgg.sgg import load_pretrained_model

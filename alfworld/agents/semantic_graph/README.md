@@ -40,7 +40,19 @@ set SAVE_PATH, OBJECT_RGB_FEATURE = sgg_mask()
 ```
 python sgg/alfred_data_format.py config/test_base.yaml --semantic_config_file config/semantic_graph.yaml --sgg_config_file $GRAPH_RCNN_ROOT/configs/attribute.yaml --not_save_config
 ```
+4. sgg_mask_2048
+set SAVE_PATH, OBJECT_RGB_FEATURE = sgg_mask_2048()
 
+## semantic_graph
+### GraphData & HeteGraphData
+node: [word 300 + rgb feature 512] or [word 300 + rgb feature 2048]
+attribute: 23 + 1
+relation: only have relation "0".
+```
+# update_relation didn't use relation para
+def update_relation(self, node_src, node_dst, relation):
+```
+relation sgg: "0" no relation. "1" ai2-thor relation
 
 ## Test Memory Graph is OK
 ```
