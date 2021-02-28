@@ -11,10 +11,11 @@ from lib.scene_parser.rcnn.utils.visualize import select_top_predictions, overla
 from torchvision.transforms import functional as F
 
 
-class SGG(SceneParser):
+class SGG:
     def __init__(self, cfg, transforms, SGG_result_ind_to_classes, device):
-        super(SGG, self).__init__(cfg)
+        super().__init__()
         self.cfg = cfg
+        self.scene_parser = SceneParser(cfg)
         self.transforms = transforms
         self.SGG_result_ind_to_classes = SGG_result_ind_to_classes
         self.device = device
@@ -22,6 +23,10 @@ class SGG(SceneParser):
         self.SAVE_SGG_RESULT_PATH = cfg.MODEL.SAVE_SGG_RESULT_PATH
         if self.SAVE_SGG_RESULT and not os.path.exists(self.SAVE_SGG_RESULT_PATH):
             os.mkdir(self.SAVE_SGG_RESULT_PATH)
+
+    def __call__(self, imgs):
+        b_results = self.predict(imgs)
+        return b_results
 
     def predict(self, imgs, img_ids=0):
         '''
@@ -59,12 +64,13 @@ class SGG(SceneParser):
             extra_fields : 'labels', 'scores', 'logits', 'features', 'attribute_logits'
         '''
         with torch.no_grad():
-            # import pdb; pdb.set_trace()
             if type(imgs) != torch.Tensor:
                 imgs = [Image.fromarray(imgs) for img in imgs]
                 imgs = self.transforms(imgs)
+            elif len(imgs.shape) < 4:
+                 imgs = imgs.unsqueeze(0)
             imgs = imgs.to(self.device)
-            output = self.forward(imgs)
+            output = self.scene_parser.forward(imgs)
             detections, detection_pairs, detection_attrs = output
             detections_backbone = [o.backbone for o in detections]
             detections = [o.to('cpu') for o in detections]
@@ -94,7 +100,7 @@ class SGG(SceneParser):
                 "backbone": detections_backbone[i],
                 "bbox": detections[i].bbox,
                 # torch.Size([16])
-                "labels": detections[i].get_field("labels"),
+                "labels": detections[i].get_field("labels")+1,
                 # torch.Size([16, 2048, 1, 1])
                 "features": detections[i].get_field("features"),
                 "attribute_logits": detection_attrs[i].get_field("attributes"),
@@ -118,7 +124,7 @@ class SGG(SceneParser):
 
     def _backbone_feat(self, transform_images, GAP_Pooling, targets=None):
         # torch.Size([32, 1024, 19, 19])
-        features = super().backbone_feat(transform_images)
+        features = self.scene_parser.backbone_feat(transform_images)
         features = features[0]
         if GAP_Pooling:
             # torch.Size([32, 1024])
@@ -142,8 +148,13 @@ class SGG(SceneParser):
         model_para = checkpoint["model"]
         # for name, param in self.named_parameters():
         #     print(name)
-        self.load_state_dict(model_para)
+        self.scene_parser.load_state_dict(model_para)
 
+    def eval(self):
+        self.scene_parser.eval()
+
+    def to(self, device):
+        self.scene_parser.to(device=torch.device(device))
 
 def load_pretrained_model(cfg, transforms, SGG_result_ind_to_classes, device):
     '''

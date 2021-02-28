@@ -69,10 +69,10 @@ class SemanticGraphImplement(torch.nn.Module):
                 self.cfg_sgg,
                 self.trans_MetaData.transforms,
                 self.trans_MetaData.SGG_result_ind_to_classes,
-                'cuda'
+                "cuda:%d" % self.cfg_semantic.SGG.GPU,
                 )
             self.detector.eval()
-            self.detector.cuda()
+            self.detector.to(device="cuda:%d" % self.cfg_semantic.SGG.GPU)
         self.use_gpu = config['general']['use_cuda']
 
     def reset_all_scene_graph(self):
@@ -111,7 +111,7 @@ class SemanticGraphImplement(torch.nn.Module):
         return store_state
 
     # for alfred model/nn
-    def store_data_to_graph(self, thor=None, store_state=None, env_index=None, reset_current_graph=True, agent_meta=None, horizontal_view_angle=0):
+    def store_data_to_graph(self, thor=None, store_state=None, env_index=None, reset_current_graph=True, agent_meta=None, horizontal_view_angle=0, sgg_results=None):
         if thor is not None:
             store_state = self.get_env_last_event_data(thor)
         if store_state is None:
@@ -128,11 +128,11 @@ class SemanticGraphImplement(torch.nn.Module):
             target = self.trans_MetaData.trans_object_meta_data_to_relation_and_attribute(sgg_meta_data, agent_meta=agent_meta, horizontal_view_angle=horizontal_view_angle)
             scene_graph.add_oracle_local_graph_to_global_graph(rgb_image, target, reset_current_graph=reset_current_graph)
         else:
-            rgb_image = rgb_image.unsqueeze(0)
-            results = self.detector(rgb_image)
-            result = results[0]
-            scene_graph.add_local_graph_to_global_graph(rgb_image, result, reset_current_graph=reset_current_graph)
-            return results
+            # rgb_image = rgb_image.unsqueeze(0)
+            # results = self.detector(rgb_image)
+            # result = results[0]
+            sgg_result = sgg_results[0]
+            scene_graph.add_local_graph_to_global_graph(rgb_image, sgg_result, reset_current_graph=reset_current_graph)
 
     def get_priori_feature(self, env_index, hidden_state):
         raise NotImplementedError

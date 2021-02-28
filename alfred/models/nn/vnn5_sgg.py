@@ -199,13 +199,11 @@ class MOCAMaskDepthGraph_V5(nn.Module):
     action decoder with subgoal and progress monitoring
     '''
 
-    def __init__(self, emb, dframe, dhid, semantic_graph_implement, IMPORTENT_NDOES_FEATURE, sgg_pool,
+    def __init__(self, emb, dframe, dhid, semantic_graph_implement, IMPORTENT_NDOES_FEATURE,
+                 sgg_pool, gpu_id,
                  pframe=300, attn_dropout=0., hstate_dropout=0., actor_dropout=0., input_dropout=0.,
                  teacher_forcing=False):
-        super().__init__(
-            emb, dframe, dhid, semantic_graph_implement, IMPORTENT_NDOES_FEATURE,
-            pframe, attn_dropout, hstate_dropout, actor_dropout, input_dropout,
-            teacher_forcing,)
+        super().__init__()
         demb = emb.weight.size(1)
 
         dframe *= 2
@@ -245,6 +243,7 @@ class MOCAMaskDepthGraph_V5(nn.Module):
         self.dynamic_conv = DynamicConvLayer(dhid=dhid, d_out_hid=dframe_channel)
 
         self.conv_pool = torch.nn.MaxPool2d(sgg_pool, stride=sgg_pool)
+        self.gpu_id = "cuda:%d" % gpu_id
 
     def step(self, enc_goal, enc_instr, frames, e_t, state_tm1_goal, state_tm1_instr,
             feat_global_graph,
@@ -322,7 +321,7 @@ class MOCAMaskDepthGraph_V5(nn.Module):
         subgoals = []
         progresses = []
         for t in range(max_t):
-            self.semantic_graph_implement
+            frames_conv = {}
             feat_global_graph = []
             feat_current_state_graph = []
             feat_history_changed_nodes_graph = []
@@ -330,7 +329,7 @@ class MOCAMaskDepthGraph_V5(nn.Module):
             for env_index in range(len(all_meta_datas)):
                 b_store_state = all_meta_datas[env_index]
                 global_graph_importent_features, current_state_graph_importent_features, history_changed_nodes_graph_importent_features, priori_importent_features, *_ =\
-                    self.store_and_get_graph_feature(b_store_state, frames, t, env_index, state_t_goal, state_t_instr)
+                    self.store_and_get_graph_feature(b_store_state, frames, t, env_index, state_t_goal, state_t_instr, frames_conv)
                 feat_global_graph.append(global_graph_importent_features)
                 feat_current_state_graph.append(current_state_graph_importent_features)
                 feat_history_changed_nodes_graph.append(history_changed_nodes_graph_importent_features)
@@ -344,7 +343,7 @@ class MOCAMaskDepthGraph_V5(nn.Module):
                 self.step(
                     enc_goal,
                     enc_instr,
-                    {k: v[:, t] for k, v in frames.items()}, # frames[:, t],
+                    {k: torch.cat(v, dim=0).to(device=self.gpu_id) for k, v in frames_conv.items()},# frames[:, t],
                     e_t,
                     state_t_goal,
                     state_t_instr,
@@ -378,7 +377,15 @@ class MOCAMaskDepthGraph_V5(nn.Module):
         }
         return results
 
-    def store_and_get_graph_feature(self, b_store_state, frames, t, env_index, state_t_goal, state_t_instr):
+    def store_and_get_graph_feature(self, b_store_state, frames, t, env_index, state_t_goal, state_t_instr, frames_conv):
+        sgg_results = self.semantic_graph_implement.detector(frames["frames_instance"][env_index, t])
+        sgg_depth_results = self.semantic_graph_implement.detector(frames["frames_depth"][env_index, t])
+        if "frames_instance_conv" not in frames_conv:
+            frames_conv["frames_instance_conv"] = [sgg_results[0]["backbone"]]
+            frames_conv["frames_depth_conv"] = [sgg_depth_results[0]["backbone"]]
+        else:
+            frames_conv["frames_instance_conv"].append(sgg_results[0]["backbone"])
+            frames_conv["frames_depth_conv"].append(sgg_depth_results[0]["backbone"])
         if len(b_store_state["sgg_meta_data"]) > t:
             # train
             if type(b_store_state["sgg_meta_data"]) == list:
@@ -386,16 +393,14 @@ class MOCAMaskDepthGraph_V5(nn.Module):
             # eval (eval moca b_store_state["sgg_meta_data"] type is dict)
             else:
                 t_store_state = b_store_state["sgg_meta_data"]
-            t_store_state["rgb_image"] = frames["frame_instance"][env_index, t]
+            t_store_state["rgb_image"] = frames["frames_instance"][env_index, t]
             if "all_meta_data" in t_store_state:
                 t_store_state = t_store_state["all_meta_data"]
-            sgg_results = self.semantic_graph_implement.store_data_to_graph(
+            self.semantic_graph_implement.store_data_to_graph(
                 store_state=t_store_state,
-                env_index=env_index
+                env_index=env_index,
+                sgg_results=sgg_results
             )
-            sgg_depth_results = self.semantic_graph_implement.detector(frames["frame_depth"][env_index, t])
-            frames["frames_instance_conv"] = [[sgg_results[0]["backbone"]]]
-            frames["frames_depth_conv"] = [[sgg_depth_results[0]["backbone"]]]
             global_graph_importent_features, global_graph_dict_objectIds_to_score = \
                 self.semantic_graph_implement.chose_importent_node_feature(
                     chose_type="GLOBAL_GRAPH",

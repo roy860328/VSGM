@@ -265,7 +265,7 @@ class AlfredDataset(Dataset):
         target.add_field("angle_of_views", angle_of_views)
         target = target.clip_to_image(remove_empty=False)
 
-        return img, target, idx
+        return img, target, idx, Image.open(self.imgs[idx]).convert("RGB")
 
     def get_img_info(self, img_id):
         # w, h = self.im_sizes[img_id, :]
@@ -306,6 +306,7 @@ def main(cfgs):
 
     object_not_save = [i for i in range(len(alfred_dataset.SGG_result_ind_to_classes))]
     always_not_found = [0, 3, 14, 51, 57, 59, 69, 97, 99]
+    # sgg_always_not_found = [0, 1, 3, 14, 51, 57, 59, 69, 97, 99]
     print(alfred_dataset.SGG_result_ind_to_classes)
     print("Always not found: ", [alfred_dataset.SGG_result_ind_to_classes[i] for i in always_not_found])
 
@@ -359,7 +360,7 @@ def main(cfgs):
         indices = list(range(len(alfred_dataset)))
         shuffle(indices)
         for i in indices:
-            img, target, idx = alfred_dataset[i]
+            img, target, idx, img2 = alfred_dataset[i]
             img = img.unsqueeze(0)
             sgg_results = extractor.predict(img, idx)
             sgg_result = sgg_results[0]
@@ -380,6 +381,7 @@ def main(cfgs):
                     print(feature.shape)
                     crop_img.save(os.path.join(SAVE_PATH, alfred_dataset.SGG_result_ind_to_classes[label] + "_{}.jpg".format(label)))
                     img.save(os.path.join(SAVE_PATH, alfred_dataset.SGG_result_ind_to_classes[label] + "_{}i.jpg".format(label)))
+                    img2.save(os.path.join(SAVE_PATH, alfred_dataset.SGG_result_ind_to_classes[label] + "_{}o.jpg".format(label)))
                     print("Can't find object class: ", object_not_save)
             # [0, 3, 14, 51, 57, 59, 69, 97, 99]
             if len(object_not_save) <= 9:

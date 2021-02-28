@@ -93,3 +93,9 @@ _C.SCENE_GRAPH.NUM_CHOSE_NODE = 10 # (16+24) * 10 nodes + 128, NODE_OUT_FEATURE_
 
 
 _C.SCENE_GRAPH.RESULT_FEATURE = 128
+
+#############
+###
+#############
+_C.SGG = CN()
+_C.SGG.GPU = 1

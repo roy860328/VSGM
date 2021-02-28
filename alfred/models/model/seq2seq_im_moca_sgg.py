@@ -31,7 +31,7 @@ class Module(seq2seq_im_moca_semantic):
         #     decoder = vnn.ImportentNodes
         self.dec = decoder(self.emb_action_low, args.dframe, 2*args.dhid,
                            self.semantic_graph_implement, IMPORTENT_NDOES_FEATURE,
-                           args.sgg_pool,
+                           args.sgg_pool, args.gpu_id,
                            pframe=args.pframe,
                            attn_dropout=args.attn_dropout,
                            hstate_dropout=args.hstate_dropout,
@@ -72,10 +72,10 @@ class Module(seq2seq_im_moca_semantic):
             self.r_state['weighted_lang_t_goal'] = self.r_state['cont_lang_goal'], torch.zeros_like(self.r_state['cont_lang_goal'])
             self.r_state['weighted_lang_t_instr'] = self.r_state['cont_lang_instr'], torch.zeros_like(self.r_state['cont_lang_instr'])
 
-        feat["frame_instance"] = \
-            self.semantic_graph_implement.trans_MetaData.transforms(feat["frame_instance"])
-        feat["frame_depth"] = \
-            self.semantic_graph_implement.trans_MetaData.transforms(feat["frame_depth"])
+        feat["frames_instance"] = \
+            self.semantic_graph_implement.trans_MetaData.transforms(feat["frame_instance"], None)[0]
+        feat["frames_depth"] = \
+            self.semantic_graph_implement.trans_MetaData.transforms(feat["frame_depth"], None)[0]
         '''
         semantic graph
         '''
@@ -302,11 +302,12 @@ class Module(seq2seq_im_moca_semantic):
                 name_frame = dict_frame["image_name"].split(".")[0]
                 frame_path = os.path.join(path, name_frame + type_image)
                 if os.path.isfile(frame_path):
-                    img_depth = Image.open(frame_path)
+                    img_depth = Image.open(frame_path).convert("RGB")
                 else:
                     print("file is not exist: {}".format(frame_path))
                 img_depth = \
-                    self.semantic_graph_implement.trans_MetaData.transforms(img_depth)
+                    self.semantic_graph_implement.trans_MetaData.transforms(img_depth, None)[0]
+                img_depth = img_depth.unsqueeze(0)
 
                 if frames_depth is None:
                     frames_depth = img_depth
@@ -319,8 +320,9 @@ class Module(seq2seq_im_moca_semantic):
         def _load_with_pt():
             frames_depth = torch.load(path_pt)
             return frames_depth
-        if os.path.isfile(path_pt):
-            frames_depth = _load_with_pt()
-        else:
-            frames_depth = _load_with_path()
+        # if os.path.isfile(path_pt):
+        #     frames_depth = _load_with_pt()
+        # else:
+        #     frames_depth = _load_with_path()
+        frames_depth = _load_with_path()
         return frames_depth

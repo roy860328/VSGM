@@ -82,10 +82,10 @@ class Net(torch.nn.Module):
         dict_ANALYZE_GRAPH = None
         # no edge, without gcn
         if edge_obj_to_obj is None:
-            if self.PRINT_DEBUG:
-                print("WARNING edge_obj_to_obj is None")
-                if attributes is None:
-                    print("WARNING attributes is None")
+            # if self.PRINT_DEBUG:
+            #     print("WARNING edge_obj_to_obj is None")
+            #     if attributes is None:
+            #         print("WARNING attributes is None")
             # have node
             if attributes is not None:
                 # torch.Size([10, 300])
@@ -150,10 +150,10 @@ class Net(torch.nn.Module):
         dict_ANALYZE_GRAPH = None
         # no edge, without gcn
         if edge_obj_to_obj is None:
-            if self.PRINT_DEBUG:
-                print("WARNING edge_obj_to_obj is None")
-                if attributes is None:
-                    print("WARNING attributes is None")
+            # if self.PRINT_DEBUG:
+            #     print("WARNING edge_obj_to_obj is None")
+            #     if attributes is None:
+            #         print("WARNING attributes is None")
             # have node
             if attributes is not None:
                 # torch.Size([10, 300])
