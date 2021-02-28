@@ -70,6 +70,7 @@ class SGG:
             elif len(imgs.shape) < 4:
                  imgs = imgs.unsqueeze(0)
             imgs = imgs.to(self.device)
+            # imgs = imgs.to('cuda')
             output = self.scene_parser.forward(imgs)
             detections, detection_pairs, detection_attrs = output
             detections_backbone = [o.backbone for o in detections]
@@ -155,6 +156,7 @@ class SGG:
 
     def to(self, device):
         self.scene_parser.to(device=torch.device(device))
+        # self.scene_parser.cuda()
 
 def load_pretrained_model(cfg, transforms, SGG_result_ind_to_classes, device):
     '''

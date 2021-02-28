@@ -18,7 +18,7 @@ __all__ = ['GraphData', 'SceneGraph', 'HeteGraphData']
 
 class GraphData(Data):
     def __init__(self, obj_cls_name_to_features, GPU, x=None, edge_index=None, edge_attr=None, y=None,
-                 pos=None, normal=None, face=None, **kwargs):
+                 pos=None, normal=None, face=None, device='cuda',**kwargs):
         super(GraphData, self).__init__(x=None, edge_index=None, edge_attr=None, y=None,
                                         pos=None, normal=None, face=None, **kwargs)
         # {'ButterKnife|-00.06|+01.11|+00.25': 0, 'Lettuce|-00.06|+01.19|-00.76': 1, 'Statue|+00.22|+01.11|-00.51': 2, 'CounterTop|-00.08|+01.15|00.00': 3, 'Knife|+00.22|+01.14|+00.25': 4, 'LightSwitch|+02.33|+01.31|-00.16': 5, 'DishSponge|-00.06|+01.11|-00.25': 6, 'Vase|-00.34|+01.11|+00.25': 7, 'Book|+00.16|+01.10|+00.62': 8}
@@ -37,6 +37,7 @@ class GraphData(Data):
         # torch.Size([300])
         self.obj_cls_to_features = obj_cls_name_to_features
         self.GPU = GPU
+        self.device = device
 
     def __inc__(self, key, value):
         increasing_funcs = ["edge_obj_to_obj"]
@@ -96,7 +97,7 @@ class GraphData(Data):
         '''
         tensor_node = torch.tensor([[node_src], [node_dst]], dtype=torch.long).contiguous()
         if self.GPU:
-            tensor_node = tensor_node.cuda()
+            tensor_node = tensor_node.to(self.device)
         if self.edge_obj_to_obj is None:
             self.edge_obj_to_obj = tensor_node
         else:
@@ -128,13 +129,13 @@ class GraphData(Data):
     def get_wore_embed(self, obj_cls):
         word_embed = self.obj_cls_to_features[obj_cls].clone().detach()
         if self.GPU:
-            word_embed = word_embed.cuda()
+            word_embed = word_embed.to(self.device)
         return word_embed
 
     def _cat_feature_and_wore_embed(self, obj_cls, feature):
         feature = feature.clone().detach()
         if self.GPU:
-            feature = feature.cuda()
+            feature = feature.to(self.device)
         word_embed = self.get_wore_embed(obj_cls)
         feature = torch.cat([feature, word_embed])
         return feature
@@ -142,10 +143,10 @@ class GraphData(Data):
 
 class HeteGraphData(GraphData):
     def __init__(self, obj_cls_name_to_features, GPU, dim_rgb_feature, x=None, edge_index=None, edge_attr=None, y=None,
-                 pos=None, normal=None, face=None, **kwargs):
+                 pos=None, normal=None, face=None, device="cuda", **kwargs):
         super(HeteGraphData, self).__init__(obj_cls_name_to_features, GPU,
                                             x=None, edge_index=None, edge_attr=None, y=None,
-                                            pos=None, normal=None, face=None, **kwargs)
+                                            pos=None, normal=None, face=None, device=device, **kwargs)
         self.attributes = None
         self.dim_rgb_feature = dim_rgb_feature
 
@@ -161,7 +162,7 @@ class HeteGraphData(GraphData):
         unique_obj_index_tensor = torch.tensor([unique_obj_index], dtype=torch.float)
         feature = torch.cat([feature, unique_obj_index_tensor]).unsqueeze(0)
         if self.GPU:
-            feature = feature.cuda()
+            feature = feature.to(self.device)
         return feature, unique_obj_index
 
     def add_node(self, obj_cls, attr_feature, obj_id=None, feature_img=None):
@@ -170,7 +171,7 @@ class HeteGraphData(GraphData):
 
         if feature_img is not None:
             if self.GPU:
-                feature_img = feature_img.cuda()
+                feature_img = feature_img.to(self.device)
             node_feature = torch.cat([node_feature, feature_img], dim=1)
         # init self.x
         if self.x is None:
@@ -198,9 +199,9 @@ class HeteGraphData(GraphData):
         isFeatureChange = False
         ind = self.obj_id_to_ind[obj_id]
         if self.GPU:
-            attr_feature = attr_feature.cuda()
+            attr_feature = attr_feature.to(self.device)
             if feature_img is not None:
-                feature_img = feature_img.cuda()
+                feature_img = feature_img.to(self.device)
         if not torch.equal(self.attributes[ind][:-1], attr_feature):
             isFeatureChange = True
         # set feature
@@ -231,7 +232,7 @@ class HeteGraphData(GraphData):
         '''
         tensor_node = torch.tensor([[node_src], [node_dst]], dtype=torch.long).contiguous()
         if self.GPU:
-            tensor_node = tensor_node.cuda()
+            tensor_node = tensor_node.to(self.device)
         if self.edge_obj_to_obj is None:
             self.edge_obj_to_obj = tensor_node
         else:
@@ -267,9 +268,10 @@ class HeteGraphData(GraphData):
 class SceneGraph(object):
     """docstring for SceneGraph"""
 
-    def __init__(self, cfg, object_classes_index_to_name, dim_rgb_feature):
+    def __init__(self, cfg, object_classes_index_to_name, dim_rgb_feature, device="cuda"):
         super(SceneGraph, self).__init__()
         #
+        self.device = device
         self.cfg = cfg
         self.isORACLE = cfg.SCENE_GRAPH.ORACLE
         self.GPU = cfg.SCENE_GRAPH.GPU
@@ -315,9 +317,9 @@ class SceneGraph(object):
                 Please read alfworld/agents/semantic_graph/word_embed/README.md"
 
     def init_graph_data(self):
-        self.global_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU, self.dim_rgb_feature)
-        self.current_state_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU, self.dim_rgb_feature)
-        self.history_changed_nodes_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU, self.dim_rgb_feature)
+        self.global_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU, self.dim_rgb_feature, device=self.device)
+        self.current_state_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU, self.dim_rgb_feature, device=self.device)
+        self.history_changed_nodes_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU, self.dim_rgb_feature, device=self.device)
 
     # adjacency_matrix_and_all_feature
     def _set_priori_graph(self):
@@ -335,7 +337,7 @@ class SceneGraph(object):
         with open(path_object_attribute, 'r') as f:
             attributes = json.load(f)
         obj_cls_name_to_features = self._get_obj_cls_name_to_features(path_object_embedding, _background=True)
-        self.priori_graph = self.graphdata_type(obj_cls_name_to_features, self.GPU, self.dim_rgb_feature)
+        self.priori_graph = self.graphdata_type(obj_cls_name_to_features, self.GPU, self.dim_rgb_feature, device=self.device)
 
         ic("Prior visual feature: ", len(rgb_features["0"]))
         ic("NODE_INPUT_RGB_FEATURE_SIZE: ", self.dim_rgb_feature)
@@ -369,7 +371,7 @@ class SceneGraph(object):
         print("need to check word & rgb feature & relation is ok")
 
     def init_current_state_data(self):
-        self.current_state_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU, self.dim_rgb_feature)
+        self.current_state_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU, self.dim_rgb_feature, device=self.device)
 
     def _get_obj_cls_name_to_features(self, path, _background=False):
         def get_feature(csv_nodes_data):

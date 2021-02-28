@@ -102,7 +102,7 @@ class DotAttnChoseImportentNode(nn.Module):
                 print("WARNING hidden_state is None")
             hidden_state = torch.zeros((1, self.bert_hidden_size))
             if self.GPU:
-                hidden_state = hidden_state.to('cuda')
+                hidden_state = hidden_state.to(self.hidden_state_to_node.device)
         elif hidden_state.shape[0] > 1:
             raise "nodes only can accept one batch, hidden_state == torch.Size([1, ?])"
         # torch.Size([1, 40])
@@ -164,7 +164,7 @@ class WeightedSoftmaxSum(nn.Module):
                 print("WARNING hidden_state is None")
             hidden_state = torch.zeros((1, self.bert_hidden_size))
             if self.GPU:
-                hidden_state = hidden_state.to('cuda')
+                hidden_state = hidden_state.to(self.hidden_state_to_node.device)
         elif hidden_state.shape[0] > 1:
             raise "nodes only can accept one batch, hidden_state == torch.Size([1, ?])"
         # torch.Size([1, 40])

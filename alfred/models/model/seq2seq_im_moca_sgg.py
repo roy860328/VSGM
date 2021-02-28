@@ -42,6 +42,8 @@ class Module(seq2seq_im_moca_semantic):
             self.feat_pt = self.config['semantic_cfg'].GENERAL.FEAT_NAME
         else:
             self.feat_pt = 'feat_sgg_depth_instance_test.pt'
+        self.device = torch.device(self.args.gpu_id) if self.args.gpu else torch.device('cpu')
+        self.to(self.device)
 
     def step(self, feat, prev_action=None):
         '''
@@ -152,7 +154,7 @@ class Module(seq2seq_im_moca_semantic):
         '''
         tensorize and pad batch input
         '''
-        device = torch.device('cuda') if self.args.gpu else torch.device('cpu')
+        device = torch.device(self.args.gpu_id) if self.args.gpu else torch.device('cpu')
         feat = collections.defaultdict(list)
 
         for ex in batch:

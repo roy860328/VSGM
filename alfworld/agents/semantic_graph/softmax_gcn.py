@@ -8,7 +8,7 @@ import graph_embed
 # https://github.com/rusty1s/pytorch_geometric/issues/1083
 class Net(torch.nn.Module):
     """docstring for Net"""
-    def __init__(self, cfg, config=None, PRINT_DEBUG=False):
+    def __init__(self, cfg, config=None, PRINT_DEBUG=False, device='cuda'):
         super(Net, self).__init__()
         input_size = cfg.SCENE_GRAPH.NODE_MIDDEL_FEATURE_SIZE
         middle_size = cfg.SCENE_GRAPH.NODE_MIDDEL_FEATURE_SIZE
@@ -16,6 +16,7 @@ class Net(torch.nn.Module):
         output_size = cfg.SCENE_GRAPH.NODE_OUT_FEATURE_SIZE
         # True => one of the variables needed for gradient computation has been modified by an inplace operation
         normalize = cfg.SCENE_GRAPH.NORMALIZATION
+        self.device = device
         self.cfg = cfg
         self.PRINT_DEBUG = PRINT_DEBUG
         self.node_word_embed_downsample = nn.Linear(cfg.SCENE_GRAPH.NODE_INPUT_WORD_EMBED_SIZE, middle_size//2)
@@ -48,8 +49,9 @@ class Net(torch.nn.Module):
                 self.EMBED_FEATURE_SIZE,
                 NUM_CHOSE_NODE,
                 cfg.SCENE_GRAPH.GPU,
-                PRINT_DEBUG=PRINT_DEBUG
+                PRINT_DEBUG=PRINT_DEBUG,
             )
+        self.to(device)
 
     def forward(self, data, CHOSE_IMPORTENT_NODE=False, hidden_state=None):
         '''
@@ -101,7 +103,7 @@ class Net(torch.nn.Module):
             else:
                 x = torch.zeros((1, self.EMBED_FEATURE_SIZE))
                 if self.cfg.SCENE_GRAPH.GPU:
-                    x = x.to('cuda')
+                    x = x.to(self.device)
         else:
             x = x.clone().detach()
             attributes = attributes.clone().detach()
@@ -156,7 +158,7 @@ class Net(torch.nn.Module):
             else:
                 chose_nodes = torch.zeros((1, self.CHOSE_IMPORTENT_NODE_OUTPUT_SHAPE))
                 if self.cfg.SCENE_GRAPH.GPU:
-                    chose_nodes = chose_nodes.to('cuda')
+                    chose_nodes = chose_nodes.to(self.device)
         else:
             x = x.clone().detach()
             attributes = attributes.clone().detach()

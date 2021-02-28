@@ -93,7 +93,7 @@ if __name__ == '__main__':
     parser.add_argument('--save_every_epoch', help='save model after every epoch (warning: consumes a lot of space)', action='store_true')
     parser.add_argument('--model', help='model to use seq2seq_im/gcn_im', default='seq2seq_im')
     parser.add_argument('--gpu', help='use gpu', action='store_true')
-    parser.add_argument('--gpu_id', help='use gpu 0/1', default=0, type=int)
+    parser.add_argument('--gpu_id', help='use gpu 0/1', default="cuda", type=str)
     parser.add_argument('--dout', help='where to save model', default='exp/model,{model}')
     parser.add_argument('--resume', help='load a checkpoint')
 
@@ -157,9 +157,9 @@ if __name__ == '__main__':
     args.dout = args.dout.format(**vars(args)) + "_" + time.strftime("%d-%m-%Y_%H-%M-%S")
     torch.manual_seed(args.seed)
 
-    device = torch.device("cuda:%d" % args.gpu_id if torch.cuda.is_available() else "cpu")
-    if torch.cuda.is_available():
-        torch.cuda.set_device(device)
+    # device = torch.device("cuda:%d" % args.gpu_id if torch.cuda.is_available() else "cpu")
+    # if torch.cuda.is_available():
+    #     torch.cuda.set_device(device)
 
     # check if dataset has been preprocessed
     if not os.path.exists(os.path.join(args.data, "%s.vocab" % args.pp_folder)) and not args.preprocess:
@@ -199,7 +199,7 @@ if __name__ == '__main__':
 
     if args.gpu:
         from torch import nn
-        model = model.to(torch.device("cuda"))
+        model = model.to(args.gpu_id)
         if not optimizer is None:
             optimizer_to(optimizer, torch.device("cuda:%d" % args.gpu_id))
 

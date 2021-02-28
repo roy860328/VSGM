@@ -25,7 +25,7 @@ from icecream import ic
 
 
 class SemanticGraphImplement(torch.nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, device="cuda"):
         super(SemanticGraphImplement, self).__init__()
         '''
         NEW
@@ -51,7 +51,8 @@ class SemanticGraphImplement(torch.nn.Module):
             PRINT_DEBUG=self.PRINT_DEBUG
             )
         if self.use_gpu:
-            self.graph_embed_model.cuda()
+            # self.graph_embed_model.cuda()
+            self.graph_embed_model.to(device)
         self.trans_MetaData = alfred_data_format.TransMetaData(
             self.cfg_semantic)
         self.scene_graphs = []
@@ -60,6 +61,7 @@ class SemanticGraphImplement(torch.nn.Module):
                 self.cfg_semantic,
                 self.trans_MetaData.SGG_result_ind_to_classes,
                 self.cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE,
+                device=device,
                 )
             self.scene_graphs.append(scene_graph)
         # initialize model

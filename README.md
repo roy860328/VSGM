@@ -195,7 +195,7 @@ SGG:
 ```
 
 ```
-python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/sgg_without_oracle.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_sgg --dout exp/sgg_without_oracle --splits data/splits/oct21.json --batch 5 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --not_save_config --gpu --task_types 1 --dframe 243 --sgg_pool 2 --sgg_config_file $GRAPH_RCNN_ROOT/configs/attribute.yaml
+CUDA_VISIBLE_DEVICES=1 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/sgg_without_oracle.yaml --data data/full_2.1.0/ --model seq2seq_im_moca_sgg --dout exp/sgg_without_oracle --splits data/splits/oct21.json --batch 5 --pm_aux_loss_wt 0.1 --subgoal_aux_loss_wt 0.1 --demb 100 --dhid 256 --not_save_config --gpu --task_types 1 --dframe 243 --sgg_pool 2 --sgg_config_file $GRAPH_RCNN_ROOT/configs/attribute.yaml
 ```
 
 ---

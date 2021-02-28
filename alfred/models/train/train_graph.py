@@ -10,13 +10,13 @@ import json
 import time
 from data.preprocess import Dataset
 from importlib import import_module
-from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
+import argparse
 from models.utils.helper_utils import optimizer_to
 # SET ALFRED_ROOT=D:\alfred
 
 if __name__ == '__main__':
     # parser
-    parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(description="ALFRED Graph")
 
     # settings
     parser.add_argument('--seed', help='random seed', default=123, type=int)
@@ -27,7 +27,7 @@ if __name__ == '__main__':
     parser.add_argument('--save_every_epoch', help='save model after every epoch (warning: consumes a lot of space)', action='store_true')
     parser.add_argument('--model', help='model to use seq2seq_im/gcn_im', default='seq2seq_im')
     parser.add_argument('--gpu', help='use gpu', action='store_true')
-    parser.add_argument('--gpu_id', help='use gpu 0/1', default=0, type=int)
+    parser.add_argument('--gpu_id', help='use gpu 0/1', default="cuda", type=str)
     parser.add_argument('--dout', help='where to save model', default='exp/model,{model}')
     parser.add_argument('--resume', help='load a checkpoint')
 

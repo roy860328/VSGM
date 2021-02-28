@@ -43,7 +43,7 @@ class Module(Base):
         self.config['general']['model']['block_hidden_dim'] = 2*args.dhid
         SEMANTIC_GRAPH_RESULT_FEATURE = self.config['semantic_cfg'].SCENE_GRAPH.RESULT_FEATURE
         # Semantic graph create
-        self.semantic_graph_implement = oracle_sgg_dagger_agent.SemanticGraphImplement(self.config)
+        self.semantic_graph_implement = oracle_sgg_dagger_agent.SemanticGraphImplement(self.config, self.args.gpu_id)
 
         # encoder and self-attention
         self.enc_goal = nn.LSTM(args.demb, args.dhid, bidirectional=True, batch_first=True)
