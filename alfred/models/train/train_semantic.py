@@ -146,6 +146,9 @@ if __name__ == '__main__':
     parser.add_argument('--print', help='', action='store_true')
 
     parser.add_argument('--task_types', type=str, help="task_types", default="1,2,3,4,5,6")
+    # MOCAMaskDepthGraph_V5
+    # 1024*18*18 -> 1024*9*9
+    # self.conv_pool = torch.nn.MaxPool2d(sgg_pool, stride=sgg_pool)
     parser.add_argument('--sgg_pool', type=int, default=2)
 
     # args and init

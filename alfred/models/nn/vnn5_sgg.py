@@ -242,6 +242,7 @@ class MOCAMaskDepthGraph_V5(nn.Module):
         dframe_channel = 1024
         self.dynamic_conv = DynamicConvLayer(dhid=dhid, d_out_hid=dframe_channel)
 
+        # 1024*18*18 -> 1024*9*9
         self.conv_pool = torch.nn.MaxPool2d(sgg_pool, stride=sgg_pool)
         self.gpu_id = gpu_id
 

@@ -59,17 +59,20 @@ class Eval(object):
         else:
             self.resnet = Resnet(args, device='cpu', eval=True, share_memory=True, use_conv_feat=True)
         if args.sgg_config_file is not None:
-            import sys
-            sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents', 'sgg'))
-            from sgg.sgg import load_pretrained_model
-            cfg_sgg = args.config_file['sgg_cfg']
-            self.resnet = load_pretrained_model(
-                cfg_sgg,
-                self.model.semantic_graph_implement.trans_MetaData.transforms,
-                self.model.semantic_graph_implement.trans_MetaData.SGG_result_ind_to_classes,
-                'cuda'
-                )
-
+            self.model.to(self.model.args.gpu_id)
+            self.resnet = self.model.semantic_graph_implement.detector
+            # import sys
+            # sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents'))
+            # from sgg.sgg import load_pretrained_model
+            # cfg_sgg = args.config_file['sgg_cfg']
+            # self.resnet = load_pretrained_model(
+            #     cfg_sgg,
+            #     self.model.semantic_graph_implement.trans_MetaData.transforms,
+            #     self.model.semantic_graph_implement.trans_MetaData.SGG_result_ind_to_classes,
+            #     "cuda:%d" % cfg_sgg.SGG.GPU,
+            #     )
+            # self.detector.eval()
+            # self.detector.to(device="cuda:%d" % cfg_sgg.SGG.GPU)
         # success and failure lists
         self.create_stats()
 
@@ -254,10 +257,10 @@ class Eval(object):
     def process_image(cls, feat, resnet, frames, frames_instance, frames_depth):
         frames = Image.fromarray(np.uint8(frames))
         frames = resnet.featurize([frames], batch=1).unsqueeze(0)
-        frames_instance = Image.fromarray(np.uint8(frames_instance))
-        feat["frame_instance"] = [[frames_instance]]
+        frames_instance = Image.fromarray(np.uint8(frames_instance)).convert("RGB")
+        feat["frame_instance"] = frames_instance
         frames_instance = resnet.featurize([frames_instance], batch=1).unsqueeze(0)
         frames_depth = Image.fromarray(np.uint8(frames_depth * (255 / 10000))).convert('RGB')
-        feat["frame_depth"] = [[frames_depth]]
+        feat["frame_depth"] = frames_depth
         frames_depth = resnet.featurize([frames_depth], batch=1).unsqueeze(0)
         return frames, frames_instance, frames_depth

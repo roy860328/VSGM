@@ -2,7 +2,7 @@ import os
 import sys
 import torch
 from torch_geometric.data import Data
-from collections import defaultdict
+from collections import defaultdict, Counter
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT']))
@@ -278,10 +278,16 @@ class SceneGraph(object):
         self.GRAPH_RESULT_PATH = cfg.SCENE_GRAPH.GRAPH_RESULT_PATH
         self.RELATION_MODE = cfg.SCENE_GRAPH.RELATION_MODE
         self.ANGLE_OF_VIEWS = cfg.SCENE_GRAPH.ANGLE_OF_VIEWS
-        # vision
-        self.SAME_VISION_FEATURE_THRESHOLD = cfg.SCENE_GRAPH.SAME_VISION_FEATURE_THRESHOLD
+        '''
+        # SGG vision
+        '''
+        self.SAME_VISION_FEATURE_THRESHOLD = cfg.SGG.SAME_VISION_FEATURE_THRESHOLD\
+            if "SAME_VISION_FEATURE_THRESHOLD" in cfg.SGG else cfg.SCENE_GRAPH.SAME_VISION_FEATURE_THRESHOLD
+        self.SEARCH_EXISTING_NODE_METHOD = cfg.SGG.SEARCH_EXISTING_NODE_METHOD\
+            if "SEARCH_EXISTING_NODE_METHOD" in cfg.SGG else "BASIC"
         # object class name
         self.object_classes_index_to_name = object_classes_index_to_name
+
         '''
         Load node data feature & relation
         '''
@@ -443,6 +449,14 @@ class SceneGraph(object):
     # Imagehash https://content-blockchain.org/research/testing-different-image-hash-functions/
     # https://pypi.org/project/ImageHash/
     def compare_global_graph_existing_node(self, obj_cls, feature):
+        '''
+        obj_cls: object class
+        feature: visual feature (sgg feature)
+
+        obj_id: obj_id in global graph
+        node_ind: obj_cls_to_ind in global graph
+        isFindNode: similarity >= self.SAME_VISION_FEATURE_THRESHOLD
+        '''
         obj_id = None
         nodes = self.global_graph.x
         obj_cls_to_ind = self.global_graph.obj_cls_to_ind
@@ -454,8 +468,8 @@ class SceneGraph(object):
             if similarity >= self.SAME_VISION_FEATURE_THRESHOLD:
                 # node ind to obj_id
                 obj_id = self.global_graph.ind_to_obj_id[suspect_node_ind]
-                return obj_id, True
-        return obj_id, False
+                return obj_id, suspect_node_ind, True
+        return obj_id, None, False
 
     def compare_features(self, feature1, feature2):
         return cosine_similarity(feature1.reshape(1, -1), feature2.reshape(1, -1))
@@ -476,7 +490,8 @@ class SceneGraph(object):
             src_obj_ind, dst_obj_ind, relation = obj_relation_triplet
             src_node_ind = current_frame_obj_cls_to_node_index[src_obj_ind][0]
             dst_node_ind = current_frame_obj_cls_to_node_index[dst_obj_ind][0]
-            graph.update_relation(src_node_ind, dst_node_ind, relation)
+            if src_node_ind is not None and dst_node_ind is not None:
+                graph.update_relation(src_node_ind, dst_node_ind, relation)
 
     def add_oracle_local_graph_to_global_graph(self, feature_img, target, reset_current_graph=True):
         '''
@@ -546,38 +561,23 @@ class SceneGraph(object):
         #                            )
 
     def add_local_graph_to_global_graph(self, img, sgg_results, reset_current_graph=True):
-        if reset_current_graph:
-            self.init_current_state_data()
-        global_graph_current_frame_obj_cls_to_node_index, current_state_graph_current_frame_obj_cls_to_node_index = [], []
-        obj_clses = sgg_results["labels"].numpy().astype(int)
-        # torch.Size([16, 2048, 1, 1])
-        obj_features = sgg_results["features"]
-        # torch.Size([16, 23])
-        obj_attributes = sgg_results["attribute_logits"]
-        # array([[ 0,  1],
-        #        [ 0,  2],
-        #        [ 0,  3],
-        #        [ 0,  4], ...
-        obj_relations_idx_pairs = sgg_results["obj_relations_idx_pairs"].numpy().astype(int)
+        if "JACCARD" == self.SEARCH_EXISTING_NODE_METHOD:
+            current_state_graph_current_frame_obj_cls_to_node_index, global_graph_current_frame_obj_cls_to_node_index = \
+                self._jaccard(img, sgg_results, reset_current_graph)
+        else:
+            current_state_graph_current_frame_obj_cls_to_node_index, global_graph_current_frame_obj_cls_to_node_index = \
+                self._basic(img, sgg_results, reset_current_graph)
+
         # tensor([[9.9977e-01, 2.3437e-04],
         #         [2.1592e-01, 7.8408e-01],
         #         [2.6653e-01, 7.3347e-01],
         #         [6.4093e-01, 3.5907e-01], ...
         obj_relations_scores = sgg_results["obj_relations_scores"]
-        # import pdb; pdb.set_trace()
-        for i, obj_cls in enumerate(obj_clses):
-            obj_feature = obj_features[i].reshape(1, -1)
-            obj_attribute = obj_attributes[i].reshape(-1)
-            obj_id, isFindNode = self.compare_global_graph_existing_node(obj_cls, obj_feature)
-            if obj_id is not None:
-                ind, _ = self.global_graph.update_node(obj_cls, obj_attribute, obj_id, feature_img=obj_feature)
-            else:
-                ind = self.global_graph.add_node(obj_cls, obj_attribute, feature_img=obj_feature)
-            current_state_node_ind = self.current_state_graph.add_node(obj_cls, obj_attribute, feature_img=obj_feature)
-
-            global_graph_current_frame_obj_cls_to_node_index.append((ind, obj_cls, isFindNode))
-            current_state_graph_current_frame_obj_cls_to_node_index.append((current_state_node_ind, obj_cls, isFindNode))
-
+        # array([[ 0,  1],
+        #        [ 0,  2],
+        #        [ 0,  3],
+        #        [ 0,  4], ...
+        obj_relations_idx_pairs = sgg_results["obj_relations_idx_pairs"].numpy().astype(int)
         obj_relations = []
         for i, max_relation in enumerate(torch.argmax(obj_relations_scores, dim=1).numpy()):
             # relation sgg: "0" no relation. "1" ai2-thor relation
@@ -600,6 +600,74 @@ class SceneGraph(object):
                                    global_graph_current_frame_obj_cls_to_node_index,
                                    obj_relations
                                    )
+
+    def _basic(self, img, sgg_results, reset_current_graph=True):
+        if reset_current_graph:
+            self.init_current_state_data()
+        global_graph_current_frame_obj_cls_to_node_index, current_state_graph_current_frame_obj_cls_to_node_index = [], []
+        obj_clses = sgg_results["labels"].numpy().astype(int)
+        # torch.Size([16, 2048, 1, 1])
+        obj_features = sgg_results["features"]
+        # torch.Size([16, 23])
+        obj_attributes = sgg_results["attribute_logits"]
+        # import pdb; pdb.set_trace()
+        for i, obj_cls in enumerate(obj_clses):
+            obj_feature = obj_features[i].reshape(1, -1)
+            obj_attribute = obj_attributes[i].reshape(-1)
+            obj_id, exist_node_ind, isFindNode = self.compare_global_graph_existing_node(obj_cls, obj_feature)
+            if obj_id is not None:
+                ind, _ = self.global_graph.update_node(obj_cls, obj_attribute, obj_id, feature_img=obj_feature)
+            else:
+                ind = self.global_graph.add_node(obj_cls, obj_attribute, feature_img=obj_feature)
+            current_state_node_ind = self.current_state_graph.add_node(obj_cls, obj_attribute, feature_img=obj_feature)
+
+            global_graph_current_frame_obj_cls_to_node_index.append((ind, obj_cls, isFindNode))
+            current_state_graph_current_frame_obj_cls_to_node_index.append((current_state_node_ind, obj_cls, isFindNode))
+
+        return current_state_graph_current_frame_obj_cls_to_node_index, global_graph_current_frame_obj_cls_to_node_index
+
+    def _jaccard(self, img, sgg_results, reset_current_graph=True):
+        def jaccard_similarity(pre_graph, curr_graph):
+            # [15, 50, 85, 24, 45, 52, 3, 5]
+            p_graph_object_list = pre_graph.list_node_obj_cls
+            # [15, 50, 85, 24, 45, 52, 30, 102, 10, 10]
+            c_graph_object_list = curr_graph.list_node_obj_cls
+            # [30, 102, 10, 10]
+            return list((Counter(c_graph_object_list) - Counter(p_graph_object_list)).elements())
+        self.pre_current_state_graph = self.current_state_graph
+        if reset_current_graph:
+            self.init_current_state_data()
+        global_graph_current_frame_obj_cls_to_node_index, current_state_graph_current_frame_obj_cls_to_node_index = [], []
+        obj_clses = sgg_results["labels"].numpy().astype(int)
+        # torch.Size([16, 2048, 1, 1])
+        obj_features = sgg_results["features"]
+        # torch.Size([16, 23])
+        obj_attributes = sgg_results["attribute_logits"]
+        # import pdb; pdb.set_trace()
+        for i, obj_cls in enumerate(obj_clses):
+            obj_feature = obj_features[i].reshape(1, -1)
+            obj_attribute = obj_attributes[i].reshape(-1)
+            current_state_node_ind = self.current_state_graph.add_node(obj_cls, obj_attribute, feature_img=obj_feature)
+            current_state_graph_current_frame_obj_cls_to_node_index.append((current_state_node_ind, obj_cls, False))
+        extra_object = jaccard_similarity(self.pre_current_state_graph, self.current_state_graph)
+        for i, obj_cls in enumerate(obj_clses):
+            obj_feature = obj_features[i].reshape(1, -1)
+            obj_attribute = obj_attributes[i].reshape(-1)
+            obj_id, exist_node_ind, isFindNode = self.compare_global_graph_existing_node(obj_cls, obj_feature)
+            # [30, 102, 10, 10]
+            if obj_cls in extra_object:
+                if obj_id is not None:
+                    ind, _ = self.global_graph.update_node(obj_cls, obj_attribute, obj_id, feature_img=obj_feature)
+                else:
+                    ind = self.global_graph.add_node(obj_cls, obj_attribute, feature_img=obj_feature)
+            else:
+                if exist_node_ind is not None:
+                    ind = exist_node_ind
+                else:
+                    ind = None
+            global_graph_current_frame_obj_cls_to_node_index.append((ind, obj_cls, isFindNode))
+        return current_state_graph_current_frame_obj_cls_to_node_index, global_graph_current_frame_obj_cls_to_node_index
+
 
 if __name__ == '__main__':
     sys.path.insert(0, os.environ['ALFWORLD_ROOT'])

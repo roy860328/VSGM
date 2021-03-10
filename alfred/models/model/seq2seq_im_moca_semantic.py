@@ -34,6 +34,7 @@ class Module(Base):
         Seq2Seq agent
         '''
         super().__init__(args, vocab)
+        self.device = torch.device('cuda') if self.args.gpu else torch.device('cpu')
         '''
         semantic
         '''
@@ -150,7 +151,7 @@ class Module(Base):
         '''
         tensorize and pad batch input
         '''
-        device = torch.device('cuda') if self.args.gpu else torch.device('cpu')
+        device = self.device
         feat = collections.defaultdict(list)
 
         for ex in batch:
@@ -459,7 +460,7 @@ class Module(Base):
         '''
         embed low-level action
         '''
-        device = torch.device('cuda') if self.args.gpu else torch.device('cpu')
+        device = self.device
         action_num = torch.tensor(self.vocab['action_low'].word2index(action), device=device)
         action_emb = self.dec.emb(action_num).unsqueeze(0)
         return action_emb

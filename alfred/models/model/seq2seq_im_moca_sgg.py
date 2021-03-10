@@ -75,14 +75,15 @@ class Module(seq2seq_im_moca_semantic):
             self.r_state['weighted_lang_t_instr'] = self.r_state['cont_lang_instr'], torch.zeros_like(self.r_state['cont_lang_instr'])
 
         feat["frames_instance"] = \
-            self.semantic_graph_implement.trans_MetaData.transforms(feat["frame_instance"], None)[0]
+            self.semantic_graph_implement.trans_MetaData.transforms(feat["frame_instance"], None)[0].unsqueeze(0).unsqueeze(0)
         feat["frames_depth"] = \
-            self.semantic_graph_implement.trans_MetaData.transforms(feat["frame_depth"], None)[0]
+            self.semantic_graph_implement.trans_MetaData.transforms(feat["frame_depth"], None)[0].unsqueeze(0).unsqueeze(0)
         '''
         semantic graph
         '''
         # batch = 1
         all_meta_datas = feat['all_meta_datas']
+        frames_conv = {}
         feat_global_graph = []
         feat_current_state_graph = []
         feat_history_changed_nodes_graph = []
@@ -91,7 +92,8 @@ class Module(seq2seq_im_moca_semantic):
             b_store_state = all_meta_datas[env_index]
             global_graph_importent_features, current_state_graph_importent_features, history_changed_nodes_graph_importent_features, priori_importent_features,\
                 global_graph_dict_objectIds_to_score, current_state_dict_objectIds_to_score, history_changed_dict_objectIds_to_score, priori_dict_dict_objectIds_to_score =\
-                self.dec.store_and_get_graph_feature(b_store_state, feat, 0, env_index, self.r_state['weighted_lang_t_goal'], self.r_state['weighted_lang_t_instr'])
+                self.dec.store_and_get_graph_feature(
+                    b_store_state, feat, 0, env_index, self.r_state['weighted_lang_t_goal'], self.r_state['weighted_lang_t_instr'], frames_conv)
             feat_global_graph.append(global_graph_importent_features)
             feat_current_state_graph.append(current_state_graph_importent_features)
             feat_history_changed_nodes_graph.append(history_changed_nodes_graph_importent_features)
@@ -107,7 +109,7 @@ class Module(seq2seq_im_moca_semantic):
             self.dec.step(
                 self.r_state['enc_lang_goal'],
                 self.r_state['enc_lang_instr'],
-                {k: v[:, 0] for k, v in feat.items() if 'frames' in k}, # feat['frames'][:, 0],
+                {k: torch.cat(v, dim=0).to(device=self.args.gpu_id) for k, v in frames_conv.items()},
                 e_t,
                 self.r_state['state_t_goal'],
                 self.r_state['state_t_instr'],
@@ -322,9 +324,9 @@ class Module(seq2seq_im_moca_semantic):
         def _load_with_pt():
             frames_depth = torch.load(path_pt)
             return frames_depth
-        # if os.path.isfile(path_pt):
-        #     frames_depth = _load_with_pt()
-        # else:
-        #     frames_depth = _load_with_path()
-        frames_depth = _load_with_path()
+        if os.path.isfile(path_pt):
+            frames_depth = _load_with_pt()
+        else:
+            frames_depth = _load_with_path()
+        # frames_depth = _load_with_path()
         return frames_depth
