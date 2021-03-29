@@ -469,6 +469,8 @@ class MOCAGRAPHMAP(nn.Module):
                 1, self.IMPORTENT_NDOES_FEATURE).to(state_t_goal[0].device)
             priori_importent_features = torch.zeros(
                 1, self.IMPORTENT_NDOES_FEATURE).to(state_t_goal[0].device)
+            graph_map_importent_features = torch.zeros(
+                1, self.IMPORTENT_NDOES_FEATURE).to(state_t_goal[0].device)
             global_graph_dict_objectIds_to_score, current_state_dict_objectIds_to_score, history_changed_dict_objectIds_to_score, priori_dict_dict_objectIds_to_score, graph_map_dict_objectIds_to_score =\
                 {}, {}, {}, {}, {}
         return global_graph_importent_features, current_state_graph_importent_features,\
