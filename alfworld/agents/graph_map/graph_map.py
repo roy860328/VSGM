@@ -235,8 +235,8 @@ class GraphMap(BasicGraphMap):
         labels = labels.astype(int)
         coors = x + self.S * z + self.S * self.S * labels
         activate_node = np.unique(coors).tolist()
-        self.map.activate_nodes.extend(activate_node)
-        self.map.activate_nodes = list(set(self.map.activate_nodes))
+        # self.map.activate_nodes.extend(activate_node)
+        # self.map.activate_nodes = list(set(self.map.activate_nodes))
         # ic(self.map.activate_nodes)
         # ic(len(self.map.activate_nodes))
 
