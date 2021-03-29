@@ -240,6 +240,7 @@ class Eval(object):
         meta_data = {
             "rgb_image": image_feature,
             "sgg_meta_data": env.last_event.metadata['objects'],
+            "agent_meta_data": env.last_event.metadata['agent'],
         }
         meta_datas = {
             "sgg_meta_data": meta_data,

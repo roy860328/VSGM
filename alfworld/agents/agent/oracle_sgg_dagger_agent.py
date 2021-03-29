@@ -20,6 +20,7 @@ from agents.utils import tensorboard
 sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents', 'semantic_graph'))
 import pdb
 from semantic_graph import SceneGraph
+from graph_map.graph_map import GraphMap
 from sgg import alfred_data_format, sgg
 from icecream import ic
 
@@ -56,6 +57,7 @@ class SemanticGraphImplement(torch.nn.Module):
         self.trans_MetaData = alfred_data_format.TransMetaData(
             self.cfg_semantic)
         self.scene_graphs = []
+        self.graph_maps = []
         for i in range(config['general']['training']['batch_size']):
             scene_graph = SceneGraph(
                 self.cfg_semantic,
@@ -63,7 +65,14 @@ class SemanticGraphImplement(torch.nn.Module):
                 self.cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE,
                 device=device,
                 )
+            graph_map = GraphMap(
+                self.cfg_semantic,
+                scene_graph.priori_features,
+                self.cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE,
+                device=device,
+                )
             self.scene_graphs.append(scene_graph)
+            self.graph_maps.append(graph_map)
         # initialize model
         if not self.isORACLE:
             self.cfg_sgg = config['sgg_cfg']
@@ -96,6 +105,8 @@ class SemanticGraphImplement(torch.nn.Module):
                     )
                 )
             scene_graph.init_graph_data()
+        for graph_map in self.graph_maps:
+            graph_map.reset_graph_map()
         if self.PRINT_DEBUG:
             # [(26, 13, 0), (80, 10, 2), (72, 4, 2), (25, 7, 1), (30, 5, 3), (27, 5, 1), (59, 14, 4), (30, 9, 1), (31, 6, 3), (61, 6, 0), (32, 4, 2), (36, 5, 2), (44, 14, 1), (19, 2, 2), (73, 15, 1), (77, 8, 4), (56, 9, 2), (59, 10, 4), (72, 5, 1), (16, 3, 0), (40, 13, 2), (22, 4, 3), (61, 9, 1), (23, 11, 1), (29, 6, 2), (90, 5, 1), (26, 13, 1), (93, 4, 3), (23, 14, 3), (37, 4, 2), (27, 7, 1), (69, 2, 6), (54, 1, 0), (34, 12, 3), (71, 21, 4), (95, 17, 1), (19, 7, 1), (25, 12, 1), (53, 6, 3), (28, 6, 3), (18, 9, 3), (44, 4, 1), (36, 5, 4), (34, 9, 0), (31, 3, 1), (29, 7, 1), (33, 5, 1), (59, 3, 2), (27, 8, 2), (13, 5, 1), (29, 15, 1), (32, 5, 1), (37, 10, 3), (65, 8, 2), (18, 13, 0), (75, 11, 0), (28, 4, 2), (58, 3, 0), (40, 5, 1), (29, 2, 1), (60, 9, 2), (27, 7, 3), (31, 14, 2), (32, 3, 3)]
             print("WARNING For DEBUG. \nglobal_graph nodes numbers result: \n", global_graphs)
@@ -116,25 +127,29 @@ class SemanticGraphImplement(torch.nn.Module):
     def store_data_to_graph(self, thor=None, store_state=None, env_index=None, reset_current_graph=True, agent_meta=None, horizontal_view_angle=0, sgg_results=None):
         if thor is not None:
             store_state = self.get_env_last_event_data(thor)
-        if store_state is None:
+        if store_state is None and self.isORACLE:
             raise NotImplementedError()
 
         scene_graph = self.scene_graphs[env_index]
-        rgb_image = store_state["rgb_image"]
-        # mask_image = store_state["mask_image"][i]
-        # color_to_obj_id_type = {}
-        # for color, object_id in env.last_event.color_to_object_id.items():
-        #     color_to_obj_id_type[str(color)] = object_id
         if self.isORACLE:
+            rgb_image = store_state["rgb_image"]
             sgg_meta_data = store_state["sgg_meta_data"]
             target = self.trans_MetaData.trans_object_meta_data_to_relation_and_attribute(sgg_meta_data, agent_meta=agent_meta, horizontal_view_angle=horizontal_view_angle)
             scene_graph.add_oracle_local_graph_to_global_graph(rgb_image, target, reset_current_graph=reset_current_graph)
         else:
-            # rgb_image = rgb_image.unsqueeze(0)
-            # results = self.detector(rgb_image)
-            # result = results[0]
             sgg_result = sgg_results[0]
-            scene_graph.add_local_graph_to_global_graph(rgb_image, sgg_result, reset_current_graph=reset_current_graph)
+            scene_graph.add_local_graph_to_global_graph(None, sgg_result, reset_current_graph=reset_current_graph)
+
+    def update_graph_map(self, env_index, depth_image, agent_meta, sgg_results):
+        graph_map = self.graph_maps[env_index]
+        target = {
+            "bbox": sgg_results[0]["bbox"],
+            "labels": sgg_results[0]["labels"],
+        }
+        graph_map.update_graph_map(
+            np.array(depth_image.cpu().view(300, 300, 3)),
+            agent_meta,
+            target)
 
     def get_priori_feature(self, env_index, hidden_state):
         raise NotImplementedError
@@ -199,6 +214,12 @@ class SemanticGraphImplement(torch.nn.Module):
             priori_graph = scene_graph.get_priori_graph()
             importent_node_feature, dict_objectIds_to_score = self.graph_embed_model.chose_importent_node(
                 priori_graph,
+                hidden_state,
+            )
+        elif chose_type == "GRAPH_MAP":
+            graph_map = self.graph_maps[env_index]
+            importent_node_feature, dict_objectIds_to_score = self.graph_embed_model.chose_importent_node_graph_map(
+                graph_map.map,
                 hidden_state,
             )
         else:

@@ -131,7 +131,7 @@ class TransMetaData():
             mask,
             color_to_object,
             object_classes,
-            data_obj_relation_attribute
+            data_obj_relation_attribute,
         )
         dict_obj_rel_attr = self.trans_object_meta_data_to_relation_and_attribute(
             data_obj_relation_attribute,
@@ -266,6 +266,8 @@ class AlfredDataset(Dataset):
         target = target.clip_to_image(remove_empty=False)
 
         return img, target, idx, Image.open(self.imgs[idx]).convert("RGB")
+        # sgg graph training
+        return img, target, idx
 
     def get_img_info(self, img_id):
         # w, h = self.im_sizes[img_id, :]
@@ -286,6 +288,9 @@ def main(cfgs):
     import time
     cfg = cfgs['semantic_cfg']
     alfred_dataset = AlfredDataset(cfg, FOR_SGG_TRAIN_LABEL=False)
+    if True:
+        test(alfred_dataset)
+        return
     if 'sgg_cfg' in cfgs:
         extractor = get_sgg_model(cfgs, alfred_dataset.trans_meta_data)
     else:
@@ -434,6 +439,21 @@ def main(cfgs):
     object_not_save = [i for i in range(len(alfred_dataset.SGG_result_ind_to_classes))]
     # gen_object_rgb_feature()
     gen_object_SGG_feature()
+
+
+def test(alfred_dataset):
+    indices = list(range(len(alfred_dataset)))
+    count = 0
+    for i in indices:
+        img, target, idx, rgb_img = alfred_dataset[i]
+        dict_target = {
+            "labels": target.extra_fields["labels"],
+            "obj_relations": target.extra_fields["pred_labels"],
+            "relation_labels": target.extra_fields["relation_labels"],
+            "attributes": target.extra_fields["attributes"],
+            "objectIds": target.extra_fields["objectIds"],
+        }
+        import pdb; pdb.set_trace()
 
 
 def get_resnet_model(cfg):

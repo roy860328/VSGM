@@ -2,7 +2,7 @@ import os
 import cv2
 import torch
 import numpy as np
-import nn.vnn5_sgg as vnn
+import nn.vnn5_graph_map as vnn
 import collections
 from torch import nn
 from torch.nn import functional as F
@@ -12,6 +12,8 @@ import gen.constants as constants
 # # 1 background + 108 object + 10
 classes = [0] + constants.OBJECTS + ['AppleSliced', 'ShowerCurtain', 'TomatoSliced', 'LettuceSliced', 'Lamp', 'ShowerHead', 'EggCracked', 'BreadSliced', 'PotatoSliced', 'Faucet']
 from PIL import Image
+import json
+import glob
 
 
 class Module(seq2seq_im_moca_semantic):
@@ -22,8 +24,8 @@ class Module(seq2seq_im_moca_semantic):
         '''
         super().__init__(args, vocab, importent_nodes=True)
         IMPORTENT_NDOES_FEATURE = self.config['semantic_cfg'].SCENE_GRAPH.EMBED_FEATURE_SIZE
-        if self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskDepthGraph_V5":
-            decoder = vnn.MOCAMaskDepthGraph_V5
+        if self.config['semantic_cfg'].GENERAL.DECODER == "MOCAGRAPHMAP":
+            decoder = vnn.MOCAGRAPHMAP
         else:
             print("self.config['semantic_cfg'].GENERAL.DECODER not found\n", self.config['semantic_cfg'].GENERAL.DECODER)
             return
@@ -74,10 +76,8 @@ class Module(seq2seq_im_moca_semantic):
             self.r_state['weighted_lang_t_goal'] = self.r_state['cont_lang_goal'], torch.zeros_like(self.r_state['cont_lang_goal'])
             self.r_state['weighted_lang_t_instr'] = self.r_state['cont_lang_instr'], torch.zeros_like(self.r_state['cont_lang_instr'])
 
-        feat["frames_instance"] = \
-            self.semantic_graph_implement.trans_MetaData.transforms(feat["frame_instance"], None)[0].unsqueeze(0).unsqueeze(0)
-        feat["frames_depth"] = \
-            self.semantic_graph_implement.trans_MetaData.transforms(feat["frame_depth"], None)[0].unsqueeze(0).unsqueeze(0)
+        feat["frames_instance"] = feat["frame_instance"].unsqueeze(0).unsqueeze(0)
+        feat["frames_depth"] = feat["frame_depth"].unsqueeze(0).unsqueeze(0)
         '''
         semantic graph
         '''
@@ -88,20 +88,23 @@ class Module(seq2seq_im_moca_semantic):
         feat_current_state_graph = []
         feat_history_changed_nodes_graph = []
         feat_priori_graph = []
+        feat_graph_map = []
         for env_index in range(len(all_meta_datas)):
             b_store_state = all_meta_datas[env_index]
-            global_graph_importent_features, current_state_graph_importent_features, history_changed_nodes_graph_importent_features, priori_importent_features,\
-                global_graph_dict_objectIds_to_score, current_state_dict_objectIds_to_score, history_changed_dict_objectIds_to_score, priori_dict_dict_objectIds_to_score =\
+            global_graph_importent_features, current_state_graph_importent_features, history_changed_nodes_graph_importent_features, priori_importent_features, feat_graph_map, graph_map_importent_features,\
+                global_graph_dict_objectIds_to_score, current_state_dict_objectIds_to_score, history_changed_dict_objectIds_to_score, priori_dict_dict_objectIds_to_score, graph_map_dict_objectIds_to_score =\
                 self.dec.store_and_get_graph_feature(
                     b_store_state, feat, 0, env_index, self.r_state['weighted_lang_t_goal'], self.r_state['weighted_lang_t_instr'], frames_conv)
             feat_global_graph.append(global_graph_importent_features)
             feat_current_state_graph.append(current_state_graph_importent_features)
             feat_history_changed_nodes_graph.append(history_changed_nodes_graph_importent_features)
             feat_priori_graph.append(priori_importent_features)
+            feat_graph_map.append(graph_map_importent_features)
         feat_global_graph = torch.cat(feat_global_graph, dim=0)
         feat_current_state_graph = torch.cat(feat_current_state_graph, dim=0)
         feat_history_changed_nodes_graph = torch.cat(feat_history_changed_nodes_graph, dim=0)
         feat_priori_graph = torch.cat(feat_priori_graph, dim=0)
+        feat_graph_map = torch.cat(feat_graph_map, dim=0)
 
         # decode and save embedding and hidden states
         out_action_low, out_action_low_mask, state_t_goal, state_t_instr, \
@@ -116,7 +119,8 @@ class Module(seq2seq_im_moca_semantic):
                 feat_global_graph,
                 feat_current_state_graph,
                 feat_history_changed_nodes_graph,
-                feat_priori_graph
+                feat_priori_graph,
+                feat_graph_map
             )
 
         # save states
@@ -309,8 +313,9 @@ class Module(seq2seq_im_moca_semantic):
                     img_depth = Image.open(frame_path).convert("RGB")
                 else:
                     print("file is not exist: {}".format(frame_path))
-                img_depth = \
-                    self.semantic_graph_implement.trans_MetaData.transforms(img_depth, None)[0]
+                # img_depth = \
+                #     self.semantic_graph_implement.trans_MetaData.transforms(img_depth, None)[0]
+                img_depth = torch.tensor(np.array(img_depth))
                 img_depth = img_depth.unsqueeze(0)
 
                 if frames_depth is None:
@@ -330,3 +335,56 @@ class Module(seq2seq_im_moca_semantic):
             frames_depth = _load_with_path()
         # frames_depth = _load_with_path()
         return frames_depth
+
+    def _load_meta_data(self, root, list_img_traj, device):
+        def sequences_to_one():
+            print("_load with path", root)
+            meta_datas = {
+                "sgg_meta_data": [],
+                "exploration_sgg_meta_data": [],
+            }
+            low_idx = -1
+            for i, dict_frame in enumerate(list_img_traj):
+                # 60 actions need 61 frames
+                if low_idx != dict_frame["low_idx"]:
+                    low_idx = dict_frame["low_idx"]
+                else:
+                    continue
+                name_frame = dict_frame["image_name"].split(".")[0]
+                file_path = os.path.join(root, "sgg_meta", name_frame + ".json")
+                file_agent_path = os.path.join(root, "agent_meta", name_frame + ".json")
+                if os.path.isfile(file_path) and os.path.isfile(file_agent_path):
+                    with open(file_path, 'r') as f:
+                        meta_data = json.load(f)
+                    with open(file_agent_path, 'r') as f:
+                        agent_meta_data = json.load(f)
+                    meta_data = {
+                        "rgb_image": [],
+                        "sgg_meta_data": meta_data,
+                        "agent_meta_data": agent_meta_data,
+                    }
+                    meta_datas["sgg_meta_data"].append(meta_data)
+                else:
+                    print("file is not exist: {}".format(file_path))
+            meta_datas["sgg_meta_data"].append(meta_data)
+            exploration_path = os.path.join(root, "exploration_meta", "*.json")
+            exploration_file_paths = glob.glob(exploration_path)
+            for exploration_file_path in exploration_file_paths:
+                with open(exploration_file_path, 'r') as f:
+                    meta_data = json.load(f)
+                meta_data = {
+                    "exploration_sgg_meta_data": meta_data,
+                }
+                meta_datas["exploration_sgg_meta_data"].append(meta_data)
+            return meta_datas
+        all_meta_data_path = os.path.join(root, "all_meta_data.json")
+        if os.path.isfile(all_meta_data_path):
+            with open(all_meta_data_path, 'r') as f:
+                all_meta_data = json.load(f)
+        else:
+            all_meta_data = sequences_to_one()
+            with open(all_meta_data_path, 'w') as f:
+                json.dump(all_meta_data, f)
+        exporlation_ims = torch.load(os.path.join(root, self.feat_exploration_pt)).to(device)
+        all_meta_data["exploration_imgs"] = exporlation_ims
+        return all_meta_data

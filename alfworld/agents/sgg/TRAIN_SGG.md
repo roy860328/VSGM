@@ -138,6 +138,9 @@ $GRAPH_RCNN_ROOT/configs/attribute.yaml
 '''
 cd /home/alfworld/agents
 python sgg/alfred_data_format.py config/test_base.yaml --semantic_config_file config/semantic_graph.yaml --sgg_config_file $GRAPH_RCNN_ROOT/configs/attribute.yaml
+
+// windows
+python sgg/alfred_data_format.py config/test_base.yaml --semantic_config_file config/semant ic_graph.yaml --sgg_config_file sgg/graph-rcnn.pytorch/configs/attribute.yaml
 '''
 
 ### Check oracle scene graph is ok

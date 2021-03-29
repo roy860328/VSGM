@@ -33,6 +33,11 @@ SET ALFWORLD_ROOT=D:\alfred\alfworld
 SET GRAPH_ANALYSIS=D:\alfred\graph_analysis
 SET GRAPH_RCNN_ROOT=D:\alfred\alfworld\agents\sgg\graph-rcnn.pytorch
 ```
+```
+cd alfred
+python3 scripts/startx.py
+```
+
 
 ## gen data
 1. raw_images, sgg_meta, exploration_meta

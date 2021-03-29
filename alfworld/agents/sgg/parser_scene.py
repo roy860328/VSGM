@@ -139,6 +139,7 @@ def transfer_mask_semantic_to_bbox_label(mask, color_to_object, object_classes, 
 
                 masks.append(smask)
                 boxes.append([xmin, ymin, xmax, ymax])
+                # import pdb; pdb.set_trace()
                 labels.append(class_idx)
                 boxes_id.append(object_id)
 

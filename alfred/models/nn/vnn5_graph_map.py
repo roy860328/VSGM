@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 import numpy as np
+from PIL import Image
 
 class SelfAttn(nn.Module):
     '''
@@ -194,8 +195,7 @@ class DynamicNodeLayer(nn.Module):
         return attention_map
 ######################################################################################################################
 
-
-class MOCAMaskDepthGraph_V5(nn.Module):
+class MOCAGRAPHMAP(nn.Module):
     '''
     action decoder with subgoal and progress monitoring
     '''
@@ -214,8 +214,8 @@ class MOCAMaskDepthGraph_V5(nn.Module):
         self.emb = emb
         self.pframe = pframe
         self.dhid = dhid
-        self.cell_goal = nn.LSTMCell(dhid+dframe+demb+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE, dhid)
-        self.cell_instr = nn.LSTMCell(dhid+dframe+demb+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE, dhid)
+        self.cell_goal = nn.LSTMCell(dhid+dframe+demb+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE, dhid)
+        self.cell_instr = nn.LSTMCell(dhid+dframe+demb+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE, dhid)
         print("self.cell_instr: ", dhid+dframe+demb)
         self.attn = DotAttn()
         self.input_dropout = nn.Dropout(input_dropout)
@@ -251,7 +251,8 @@ class MOCAMaskDepthGraph_V5(nn.Module):
             feat_global_graph,
             feat_current_state_graph,
             feat_history_changed_nodes_graph,
-            feat_priori_graph):
+            feat_priori_graph,
+            feat_graph_map):
         for k, v in frames.items():
             frames[k] = self.vis_dropout(v)
         # previous decoder hidden state (goal, instr decoder)
@@ -275,11 +276,11 @@ class MOCAMaskDepthGraph_V5(nn.Module):
         vis_feat_t_instr = torch.cat([vis_feat_t_instr_instance, vis_feat_t_instr_frames_depth], dim=1)
 
         # concat visual feats, weight lang, and previous action embedding (goal decoder)
-        inp_t_goal = torch.cat([vis_feat_t_goal, weighted_lang_t_goal, e_t, feat_current_state_graph, feat_priori_graph, feat_global_graph], dim=1)
+        inp_t_goal = torch.cat([vis_feat_t_goal, weighted_lang_t_goal, e_t, feat_current_state_graph, feat_priori_graph, feat_global_graph, feat_graph_map], dim=1)
         inp_t_goal = self.input_dropout(inp_t_goal)
         
         # concat visual feats, weight lang, and previous action embedding (instr decoder)
-        inp_t_instr = torch.cat([vis_feat_t_instr, weighted_lang_t_instr, e_t, feat_current_state_graph, feat_priori_graph, feat_global_graph], dim=1)
+        inp_t_instr = torch.cat([vis_feat_t_instr, weighted_lang_t_instr, e_t, feat_current_state_graph, feat_priori_graph, feat_global_graph, feat_graph_map], dim=1)
         inp_t_instr = self.input_dropout(inp_t_instr)
 
         # update hidden state (goal decoder)
@@ -328,18 +329,21 @@ class MOCAMaskDepthGraph_V5(nn.Module):
             feat_current_state_graph = []
             feat_history_changed_nodes_graph = []
             feat_priori_graph = []
+            feat_graph_map = []
             for env_index in range(len(all_meta_datas)):
                 b_store_state = all_meta_datas[env_index]
-                global_graph_importent_features, current_state_graph_importent_features, history_changed_nodes_graph_importent_features, priori_importent_features, *_ =\
+                global_graph_importent_features, current_state_graph_importent_features, history_changed_nodes_graph_importent_features, priori_importent_features, graph_map_importent_features, *_ =\
                     self.store_and_get_graph_feature(b_store_state, frames, t, env_index, state_t_goal, state_t_instr, frames_conv)
                 feat_global_graph.append(global_graph_importent_features)
                 feat_current_state_graph.append(current_state_graph_importent_features)
                 feat_history_changed_nodes_graph.append(history_changed_nodes_graph_importent_features)
                 feat_priori_graph.append(priori_importent_features)
+                feat_graph_map.append(graph_map_importent_features)
             feat_global_graph = torch.cat(feat_global_graph, dim=0)
             feat_current_state_graph = torch.cat(feat_current_state_graph, dim=0)
             feat_history_changed_nodes_graph = torch.cat(feat_history_changed_nodes_graph, dim=0)
             feat_priori_graph = torch.cat(feat_priori_graph, dim=0)
+            feat_graph_map = torch.cat(feat_graph_map, dim=0)
 
             action_t, mask_t, state_t_goal, state_t_instr, attn_score_t_goal, attn_score_t_instr, subgoal_t, progress_t = \
                 self.step(
@@ -352,7 +356,8 @@ class MOCAMaskDepthGraph_V5(nn.Module):
                     feat_global_graph,
                     feat_current_state_graph,
                     feat_history_changed_nodes_graph,
-                    feat_priori_graph)
+                    feat_priori_graph,
+                    feat_graph_map,)
             masks.append(mask_t)
             actions.append(action_t)
             attn_scores_goal.append(attn_score_t_goal[0])
@@ -388,8 +393,14 @@ class MOCAMaskDepthGraph_V5(nn.Module):
         sgg_results[0]
         sgg_depth_results[0]
         '''
-        sgg_results = self.semantic_graph_implement.detector(frames["frames_instance"][env_index, t])
-        sgg_depth_results = self.semantic_graph_implement.detector(frames["frames_depth"][env_index, t])
+        frames_instance = Image.fromarray(np.uint8(frames["frames_instance"][env_index, t].cpu()))
+        frames_depth = Image.fromarray(np.uint8(frames["frames_depth"][env_index, t].cpu()))
+        frames_instance = \
+            self.semantic_graph_implement.trans_MetaData.transforms(frames_instance, None)[0]
+        frames_depth = \
+            self.semantic_graph_implement.trans_MetaData.transforms(frames_depth, None)[0]
+        sgg_results = self.semantic_graph_implement.detector(frames_instance)
+        sgg_depth_results = self.semantic_graph_implement.detector(frames_depth)
         if "frames_instance_conv" not in frames_conv:
             frames_conv["frames_instance_conv"] = [sgg_results[0]["backbone"]]
             frames_conv["frames_depth_conv"] = [sgg_depth_results[0]["backbone"]]
@@ -400,14 +411,12 @@ class MOCAMaskDepthGraph_V5(nn.Module):
             # train
             if type(b_store_state["sgg_meta_data"]) == list:
                 t_store_state = b_store_state["sgg_meta_data"][t]
+                t_agent_store_state = b_store_state["sgg_meta_data"][t]["agent_meta_data"]
             # eval (eval moca b_store_state["sgg_meta_data"] type is dict)
             else:
                 t_store_state = b_store_state["sgg_meta_data"]
-            t_store_state["rgb_image"] = frames["frames_instance"][env_index, t]
-            if "all_meta_data" in t_store_state:
-                t_store_state = t_store_state["all_meta_data"]
+                t_agent_store_state = b_store_state["sgg_meta_data"]["agent_meta_data"]
             self.semantic_graph_implement.store_data_to_graph(
-                store_state=t_store_state,
                 env_index=env_index,
                 sgg_results=sgg_results
             )
@@ -435,6 +444,22 @@ class MOCAMaskDepthGraph_V5(nn.Module):
                     env_index=env_index,
                     hidden_state=state_t_instr[0][env_index:env_index+1],
                     )
+
+            '''
+            graph_map update
+            '''
+            self.semantic_graph_implement.update_graph_map(
+                env_index,
+                frames["frames_depth"][env_index, t],
+                t_agent_store_state,
+                sgg_results,
+                )
+            graph_map_importent_features, graph_map_dict_objectIds_to_score = \
+                self.semantic_graph_implement.chose_importent_node_feature(
+                    chose_type="GRAPH_MAP",
+                    env_index=env_index,
+                    hidden_state=state_t_instr[0][env_index:env_index+1],
+                    )
         else:
             global_graph_importent_features = torch.zeros(
                 1, self.IMPORTENT_NDOES_FEATURE).to(state_t_goal[0].device)
@@ -444,9 +469,11 @@ class MOCAMaskDepthGraph_V5(nn.Module):
                 1, self.IMPORTENT_NDOES_FEATURE).to(state_t_goal[0].device)
             priori_importent_features = torch.zeros(
                 1, self.IMPORTENT_NDOES_FEATURE).to(state_t_goal[0].device)
-            global_graph_dict_objectIds_to_score, current_state_dict_objectIds_to_score, history_changed_dict_objectIds_to_score, priori_dict_dict_objectIds_to_score =\
-                {}, {}, {}, {}
+            global_graph_dict_objectIds_to_score, current_state_dict_objectIds_to_score, history_changed_dict_objectIds_to_score, priori_dict_dict_objectIds_to_score, graph_map_dict_objectIds_to_score =\
+                {}, {}, {}, {}, {}
         return global_graph_importent_features, current_state_graph_importent_features,\
                history_changed_nodes_graph_importent_features, priori_importent_features,\
+               graph_map_importent_features,\
                global_graph_dict_objectIds_to_score, current_state_dict_objectIds_to_score,\
-               history_changed_dict_objectIds_to_score, priori_dict_dict_objectIds_to_score
+               history_changed_dict_objectIds_to_score, priori_dict_dict_objectIds_to_score,\
+               graph_map_dict_objectIds_to_score,\

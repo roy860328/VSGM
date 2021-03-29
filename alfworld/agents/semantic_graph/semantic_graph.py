@@ -265,6 +265,9 @@ class HeteGraphData(GraphData):
         raise NotImplementedError
 
 
+'''
+For store the node & relation of global_graph, current_state_graph, history_changed_nodes_graph, priori_graph
+'''
 class SceneGraph(object):
     """docstring for SceneGraph"""
 
@@ -342,18 +345,18 @@ class SceneGraph(object):
             rgb_features = json.load(f)
         with open(path_object_attribute, 'r') as f:
             attributes = json.load(f)
-        obj_cls_name_to_features = self._get_obj_cls_name_to_features(path_object_embedding, _background=True)
-        self.priori_graph = self.graphdata_type(obj_cls_name_to_features, self.GPU, self.dim_rgb_feature, device=self.device)
+        priori_obj_cls_name_to_features = self._get_obj_cls_name_to_features(path_object_embedding, _background=True)
+        self.priori_graph = self.graphdata_type(priori_obj_cls_name_to_features, self.GPU, self.dim_rgb_feature, device=self.device)
 
         ic("Prior visual feature: ", len(rgb_features["0"]))
         ic("NODE_INPUT_RGB_FEATURE_SIZE: ", self.dim_rgb_feature)
         assert len(rgb_features["0"]) == self.dim_rgb_feature, "shape must be same, else Graph Net downsample would have error"
         # node word feature
-        for k, word_feature in obj_cls_name_to_features.items():
+        for k, word_feature in priori_obj_cls_name_to_features.items():
             '''
             rgb_features: "0"~"105"
             attributes: "0"~"105"
-            k: "1"~"105"
+            k: 1~105 (avoid background=True)
             word_feature: shape = [300]
             self.priori_graph.x index from 0~104
             '''
@@ -368,13 +371,18 @@ class SceneGraph(object):
                 )
         # node relation
         # import pdb; pdb.set_trace()
-        assert len(obj_cls_name_to_features) == len(self.adj)-1
+        assert len(priori_obj_cls_name_to_features) == len(self.adj)-1
         adj = self.adj
         for src in range(1, len(adj)):
             for dst in range(1, len(adj)):
                 if adj[src, dst] > 0:
                     self.priori_graph.update_relation(src-1, dst-1, 0)
         print("need to check word & rgb feature & relation is ok")
+        self.priori_features = dict(
+            priori_obj_cls_name_to_features=priori_obj_cls_name_to_features,
+            rgb_features=rgb_features,
+            attributes=attributes,
+            )
 
     def init_current_state_data(self):
         self.current_state_graph = self.graphdata_type(self.obj_cls_name_to_features, self.GPU, self.dim_rgb_feature, device=self.device)
