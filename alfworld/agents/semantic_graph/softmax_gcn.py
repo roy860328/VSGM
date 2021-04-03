@@ -260,6 +260,8 @@ def subgraph(subset, edge_index, edge_attr=None, relabel_nodes=False,
 
     device = edge_index.device
     #  0: Sizes of tensors must match except in dimension 1. Got 2 and 43444 in dimension 0
+    if isinstance(subset, set):
+        subset = list(subset)
     if isinstance(subset, list) or isinstance(subset, tuple):
         subset = torch.tensor(subset, dtype=torch.long)
 

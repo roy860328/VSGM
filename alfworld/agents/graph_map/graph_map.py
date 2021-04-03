@@ -18,7 +18,7 @@ from PIL import Image
 import imageio
 sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT']))
 from agents.graph_map.utils_graph_map import *#intrinsic_from_fov, load_extrinsic, load_intrinsic, pixel_coord_np, grid, get_cam_coords
-
+from collections import defaultdict
 
 class BasicGraphMap(torch.nn.Module):
     def __init__(self, cfg):
@@ -93,6 +93,157 @@ class BasicGraphMap(torch.nn.Module):
             plt.pause(1.0)
 
 
+# class GraphMap(BasicGraphMap):
+#     def __init__(self, cfg, priori_features, dim_rgb_feature, device="cuda"):
+#         '''
+#         priori_features: dict. priori_obj_cls_name_to_features, rgb_features, attributes
+#         '''
+#         super().__init__(cfg)
+#         '''
+#         Graph Type
+#         '''
+#         self.device = device
+#         self.priori_features = priori_features
+#         self.GPU = cfg.SCENE_GRAPH.GPU
+#         self.dim_rgb_feature = dim_rgb_feature
+#         self.graphdata_type = getattr(
+#             importlib.import_module(
+#                 'agents.semantic_graph.semantic_graph'),
+#             self.cfg.SCENE_GRAPH.GraphData
+#             )
+#         self._set_label_to_features()
+#         '''
+#         CLASSES
+#         '''
+#         self.CLASSES = len(self.label_to_features)
+#         print("self.CLASSES = cfg.GRAPH_MAP.GRAPH_MAP_CLASSES would not be use")
+
+#         self.init_graph_map()
+
+#     def _set_label_to_features(self):
+#         '''
+#         word & rgb & attributes features
+#         '''
+#         features = []
+#         attributes = []
+#         # background
+#         features.append(
+#             torch.zeros([self.cfg.SCENE_GRAPH.NODE_INPUT_WORD_EMBED_SIZE + self.cfg.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE]))
+#         attributes.append(
+#             torch.zeros([self.cfg.SCENE_GRAPH.ATTRIBUTE_FEATURE_SIZE]))
+#         # objects
+#         for k, word_feature in self.priori_features["priori_obj_cls_name_to_features"].items():
+#             rgb_feature = torch.tensor(self.priori_features["rgb_features"][str(k)]).float()
+#             feature = torch.cat([word_feature, rgb_feature])
+#             # [0] is _append_unique_obj_index_to_attribute
+#             attribute = torch.tensor(self.priori_features["attributes"][str(k)] + [0]).float()
+#             features.append(feature)
+#             attributes.append(attribute)
+#         self.label_to_features = torch.stack(features).to(device=self.device, dtype=torch.float)
+#         self.label_to_attributes = torch.stack(attributes).to(device=self.device, dtype=torch.float)
+#         assert len(self.label_to_features) == len(self.priori_features["rgb_features"].keys()), "len diff error"
+#         assert self.label_to_attributes.shape[-1] == self.cfg.SCENE_GRAPH.ATTRIBUTE_FEATURE_SIZE, "len diff error"
+
+#     def init_graph_map(self):
+#         self.map = self.graphdata_type(
+#             self.priori_features["priori_obj_cls_name_to_features"],
+#             self.GPU,
+#             self.dim_rgb_feature,
+#             device=self.device
+#             )
+#         '''
+#         Create graph map node space
+#         '''
+#         feature_size = self.cfg.SCENE_GRAPH.NODE_INPUT_WORD_EMBED_SIZE + self.cfg.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE
+#         attribute_size = self.cfg.SCENE_GRAPH.ATTRIBUTE_FEATURE_SIZE
+#         self.map.x = torch.zeros([self.S * self.S * self.CLASSES, feature_size], device=self.device, dtype=torch.float)
+#         self.map.attributes = torch.zeros([self.S * self.S * self.CLASSES, attribute_size], device=self.device, dtype=torch.float)
+#         for x in range(self.S):
+#             for z in range(self.S):
+#                 for label in range(self.CLASSES):
+#                     target_node_index = x + self.S * z + self.S * self.S * label
+#                     self.map.x[target_node_index] = self.label_to_features[label]
+#                     self.map.attributes[target_node_index] = self.label_to_attributes[label]
+#         self.map.activate_nodes = list(range(self.S * self.S))
+#         '''
+#         graph map node relation
+#         '''
+#         edges = []
+#         '''
+#         most top grid connect together
+#         would be square grid
+#         '''
+#         for x in range(self.S):
+#             for z in range(self.S):
+#                 if x < self.S-1 and z < self.S-1:
+#                     top_map = x + self.S * z
+#                     # right edges
+#                     edge = torch.tensor(
+#                         [top_map, top_map+1],
+#                         device=self.device,
+#                         dtype=torch.long).contiguous()
+#                     edges.append(edge)
+#                     edge = torch.tensor(
+#                         [top_map+1, top_map],
+#                         device=self.device,
+#                         dtype=torch.long).contiguous()
+#                     edges.append(edge)
+#                     edge = torch.tensor(
+#                         [top_map, top_map+self.S * (z+1)],
+#                         device=self.device,
+#                         dtype=torch.long).contiguous()
+#                     edges.append(edge)
+#                     edge = torch.tensor(
+#                         [top_map+self.S * (z+1), top_map],
+#                         device=self.device,
+#                         dtype=torch.long).contiguous()
+#                     edges.append(edge)
+#         '''
+#         depth node connect to top grid node
+#         '''
+#         for x in range(self.S):
+#             for z in range(self.S):
+#                 '''
+#                 layer
+#                 '''
+#                 top_map = x + self.S * z
+#                 for label in range(1, self.CLASSES):
+#                     src = top_map + self.S * self.S * label
+#                     dst = top_map
+#                     edge = torch.tensor([src, dst], device=self.device, dtype=torch.long).contiguous()
+#                     edges.append(edge)
+#         self.map.edge_obj_to_obj = torch.stack(edges).reshape(2, -1)
+
+#     def reset_graph_map(self):
+#         self.map.activate_nodes = list(range(self.S * self.S))
+#         '''
+#         visualize
+#         '''
+#         with imageio.get_writer('./graph_map.gif', mode='I') as writer:
+#             for buf_file in self.buffer_plt:
+#                 plt_img = np.array(Image.open(buf_file))
+#                 writer.append_data(plt_img)
+#         self.buffer_plt = []
+
+#     def put_label_to_map(self, cam_coords):
+#         max_index = self.S-1
+#         x, y, z, labels = cam_coords
+#         x = np.round(x / self.R).astype(int) + self.SHIFT_COORDS_HALF_S_TO_MAP
+#         x[x > max_index] = max_index
+#         z = np.round(z / self.R).astype(int) + self.SHIFT_COORDS_HALF_S_TO_MAP
+#         z[z > max_index] = max_index
+#         labels = labels.astype(int)
+#         coors = x + self.S * z + self.S * self.S * labels
+#         activate_node = np.unique(coors).tolist()
+#         self.map.activate_nodes.extend(activate_node)
+#         self.map.activate_nodes = list(set(self.map.activate_nodes))
+#         # ic(self.map.activate_nodes)
+#         # ic(len(self.map.activate_nodes))
+
+#     def visualize_graph_map(self, KEEP_DISPLAY=False):
+#         print("visualize_graph_map not implement")
+
+
 class GraphMap(BasicGraphMap):
     def __init__(self, cfg, priori_features, dim_rgb_feature, device="cuda"):
         '''
@@ -112,12 +263,6 @@ class GraphMap(BasicGraphMap):
             self.cfg.SCENE_GRAPH.GraphData
             )
         self._set_label_to_features()
-        '''
-        CLASSES
-        '''
-        self.CLASSES = len(self.label_to_features)
-        print("self.CLASSES = cfg.GRAPH_MAP.GRAPH_MAP_CLASSES would not be use")
-
         self.init_graph_map()
 
     def _set_label_to_features(self):
@@ -164,7 +309,8 @@ class GraphMap(BasicGraphMap):
                     target_node_index = x + self.S * z + self.S * self.S * label
                     self.map.x[target_node_index] = self.label_to_features[label]
                     self.map.attributes[target_node_index] = self.label_to_attributes[label]
-        self.map.activate_nodes = list(range(self.S * self.S))
+        self.map.activate_nodes = set(range(self.S * self.S))
+        self.map.queue_depth = [0] * self.S * self.S
         '''
         graph map node relation
         '''
@@ -215,7 +361,8 @@ class GraphMap(BasicGraphMap):
         self.map.edge_obj_to_obj = torch.stack(edges).reshape(2, -1)
 
     def reset_graph_map(self):
-        self.map.activate_nodes = list(range(self.S * self.S))
+        self.map.activate_nodes = set(range(self.S * self.S))
+        self.map.queue_depth = [0] * self.S * self.S
         '''
         visualize
         '''
@@ -233,15 +380,54 @@ class GraphMap(BasicGraphMap):
         z = np.round(z / self.R).astype(int) + self.SHIFT_COORDS_HALF_S_TO_MAP
         z[z > max_index] = max_index
         labels = labels.astype(int)
-        coors = x + self.S * z + self.S * self.S * labels
-        activate_node = np.unique(coors).tolist()
-        self.map.activate_nodes.extend(activate_node)
-        self.map.activate_nodes = list(set(self.map.activate_nodes))
-        # ic(self.map.activate_nodes)
-        # ic(len(self.map.activate_nodes))
+        coors = x + self.S * z
+        queue_grid_depths = self.coors_to_nodes_depth(coors)
+        two_dim_to_one = self.S * self.S
+        node_indexs = coors + [two_dim_to_one*queue_grid_depth for queue_grid_depth in queue_grid_depths]
+        self.map.activate_nodes.update(node_indexs)
+        self.map.x[node_indexs] = self.label_to_features[labels]
+        self.map.attributes[node_indexs] = self.label_to_attributes[labels]
+        # import pdb; pdb.set_trace()
+        # raise
+        # (Pdb) labels.shape # array([27, 27, 27, ..., 74, 74, 74])
+        # (163053,)
+        # (Pdb) len(node_indexs) # array([ 27, 127, 227, ..., 937,  37, 137])
+        # 163053
+        # (Pdb) self.map.x.shape
+        # torch.Size([1000, 2348])
+
+    # [0, 1, 0, 3, 5, 6, 10, 20, 10, 30, 2, ...]. coors will be < self.S * self.S
+    # coors = x + self.S * z
+    # len(self.map.queue_depth) = [0] * self.S * self.S (when grid depth=0)
+    def coors_to_nodes_depth(self, coors):
+        queue_grid_depth = []
+        for coor in coors:
+            # [0~self.CLASSES)
+            depth = self.map.queue_depth[coor]
+            queue_grid_depth.append(depth)
+            self.map.queue_depth[coor] = (self.map.queue_depth[coor] + 1) % self.CLASSES
+        # (Pdb) queue_grid_depth[:5]
+        # [0, 1, 2, 0, 1]
+        # (Pdb) coors[:5]
+        # array([27, 27, 27, 37, 37])
+        return queue_grid_depth
+
+        # increase_when_same_coors_occur = defaultdict(int)
+        # # accumulate same coor to increase
+        # # [0, 1, 0, 3, 5, 6, 10, 20, 10, 30, 2, 0, ...] coors
+        # # ->
+        # # [0, 0, 1, 0, 0, 0,  0,  0,  1,  0, 0, 2, ....] each_coor_depth
+        # each_coor_depth = [0]*len(coors)
+        # for i in range(len(coors)):
+        #     each_coor_depth[i] = increase_when_same_coors_occur[coors[i]]
+        #     increase_when_same_coors_occur[coors[i]] = (increase_when_same_coors_occur[coors[i]] + 1) % self.CLASSES
+        # grid_depth = (self.map.queue_depth[coors] + each_coor_depth) % self.CLASSES
+        # self.map.queue_depth[coors] = grid_depth
+        # return grid_depth
 
     def visualize_graph_map(self, KEEP_DISPLAY=False):
         print("visualize_graph_map not implement")
+
 
 '''
 test
