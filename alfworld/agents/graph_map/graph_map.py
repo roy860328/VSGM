@@ -10,20 +10,25 @@ import io
 import cv2
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+from mpl_toolkits import mplot3d
+import matplotlib.patches as mpatches
 import numpy as np
 import json
 from icecream import ic
 import importlib
-from PIL import Image
+from PIL import Image, ImageDraw
 import imageio
 sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT']))
 from agents.graph_map.utils_graph_map import *#intrinsic_from_fov, load_extrinsic, load_intrinsic, pixel_coord_np, grid, get_cam_coords
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
+import glob
+
 
 class BasicGraphMap(torch.nn.Module):
-    def __init__(self, cfg):
+    def __init__(self, cfg, object_classes_index_to_name):
         super().__init__()
         self.cfg = cfg
+        self.object_classes_index_to_name = object_classes_index_to_name
         '''
         Camera Para
         '''
@@ -45,9 +50,12 @@ class BasicGraphMap(torch.nn.Module):
         '''
         visualize
         '''
-        with imageio.get_writer('./graph_map_.gif', mode='I') as writer:
-            for buf_file in self.buffer_plt:
-                plt_img = np.array(Image.open(buf_file))
+        with imageio.get_writer('./graph_map_BasicGraphMap_{}_{}_{}.gif'.format(self.S, self.CLASSES, self.R), mode='I', fps=3) as writer:
+            for i, buf_file in enumerate(self.buffer_plt):
+                pil_img = Image.open(buf_file)
+                draw = ImageDraw.Draw(pil_img)
+                draw.text((0, 0), str(i), (0, 0, 0))
+                plt_img = np.array(pil_img)
                 writer.append_data(plt_img)
         self.buffer_plt = []
 
@@ -63,26 +71,53 @@ class BasicGraphMap(torch.nn.Module):
         return cam_coords
 
     def put_label_to_map(self, cam_coords):
+        max_index = self.S-1
         x, y, z, labels = cam_coords
         x = np.round(x / self.R).astype(int) + self.SHIFT_COORDS_HALF_S_TO_MAP
         z = np.round(z / self.R).astype(int) + self.SHIFT_COORDS_HALF_S_TO_MAP
+        x[x > max_index] = max_index
+        z[z > max_index] = max_index
         labels = labels.astype(int)
         self.map[x, z, labels] = labels
 
     def visualize_graph_map(self, KEEP_DISPLAY=False):
         colors = cm.rainbow(np.linspace(0, 1, self.CLASSES))
         Is, Js, Ks = np.where(self.map != 0)
-        label_color = []
+        label_color, legend_color_to_objectId = [], {}
         for i, j, k in zip(Is, Js, Ks):
             label_color.append(colors[self.map[i, j, k]])
+            if self.object_classes_index_to_name[self.map[i, j, k]] not in legend_color_to_objectId:
+                legend_color_to_objectId[self.object_classes_index_to_name[self.map[i, j, k]]] = \
+                    mpatches.Patch(color=colors[self.map[i, j, k]], label=self.object_classes_index_to_name[self.map[i, j, k]])
+        # plt.cla()
+        # plt.gcf().canvas.mpl_connect('key_release_event',
+        #         lambda event: [plt.close() if event.key == 'escape' else None])
+        # plt.scatter(Is, Js, s=70, c=label_color, cmap="Set2")
+        # plt.plot(self.S//2, self.S//2, "ob")
+        # plt.gca().set_xticks(np.arange(0, self.S, 1))
+        # plt.gca().set_yticks(np.arange(0, self.S, 1))
+        # plt.grid(True)
+        # buf = io.BytesIO()
+        # plt.savefig(buf, format='png')
+        # self.buffer_plt.append(buf)
+        # # import pdb; pdb.set_trace()
+        # if KEEP_DISPLAY:
+        #     plt.show()
+        # else:
+        #     plt.pause(1.0)
         plt.cla()
         plt.gcf().canvas.mpl_connect('key_release_event',
                 lambda event: [plt.close() if event.key == 'escape' else None])
-        plt.scatter(Is, Js, s=70, c=label_color, cmap="Set2")
-        plt.plot(self.S//2, self.S//2, "ob")
+        plt.axes(projection='3d').plot3D(self.S//2, self.S//2, self.CLASSES, "ob")
+        # plt.axes(projection='3d').scatter3D(Is, Js, Ks, s=70, c=label_color, cmap="Set2")
+        plt.axes(projection='3d').scatter3D(Is, Js, Ks, s=70, c=label_color, cmap="Set2")
         plt.gca().set_xticks(np.arange(0, self.S, 1))
         plt.gca().set_yticks(np.arange(0, self.S, 1))
+        plt.gca().set_zticks(np.arange(0, self.CLASSES, 1))
         plt.grid(True)
+        # legend
+        plt.legend(handles=legend_color_to_objectId.values(), scatterpoints=1, loc='lower center', ncol=5, fontsize=8)
+        # store
         buf = io.BytesIO()
         plt.savefig(buf, format='png')
         self.buffer_plt.append(buf)
@@ -93,44 +128,14 @@ class BasicGraphMap(torch.nn.Module):
             plt.pause(1.0)
 
 
-# 10x10x108 (SGG predict label size)
-class GraphMap_SXSXLABLE(GraphMap):
-    def __init__(self, cfg, priori_features, dim_rgb_feature, device="cuda"):
-        '''
-        priori_features: dict. priori_obj_cls_name_to_features, rgb_features, attributes
-        '''
-        super().__init__(cfg, priori_features, dim_rgb_feature)
-        '''
-        CLASSES
-        '''
-        self.CLASSES = len(self.label_to_features)
-        print("self.CLASSES = cfg.GRAPH_MAP.GRAPH_MAP_CLASSES would not be use")
-
-        self.init_graph_map()
-
-    def put_label_to_map(self, cam_coords):
-        max_index = self.S-1
-        x, y, z, labels = cam_coords
-        x = np.round(x / self.R).astype(int) + self.SHIFT_COORDS_HALF_S_TO_MAP
-        x[x > max_index] = max_index
-        z = np.round(z / self.R).astype(int) + self.SHIFT_COORDS_HALF_S_TO_MAP
-        z[z > max_index] = max_index
-        labels = labels.astype(int)
-        coors = x + self.S * z + self.S * self.S * labels
-        activate_node = np.unique(coors).tolist()
-        self.map.activate_nodes.extend(activate_node)
-        self.map.activate_nodes = list(set(self.map.activate_nodes))
-        # ic(self.map.activate_nodes)
-        # ic(len(self.map.activate_nodes))
-
-
 # 10x10xcfg.GRAPH_MAP.GRAPH_MAP_SIZE_S
+# self.map.activate_nodes = set()
 class GraphMap(BasicGraphMap):
-    def __init__(self, cfg, priori_features, dim_rgb_feature, device="cuda"):
+    def __init__(self, cfg, priori_features, dim_rgb_feature, device="cuda", object_classes_index_to_name=None):
         '''
         priori_features: dict. priori_obj_cls_name_to_features, rgb_features, attributes
         '''
-        super().__init__(cfg)
+        super().__init__(cfg, object_classes_index_to_name)
         '''
         Graph Type
         '''
@@ -188,8 +193,13 @@ class GraphMap(BasicGraphMap):
             for z in range(self.S):
                 for label in range(self.CLASSES):
                     target_node_index = x + self.S * z + self.S * self.S * label
-                    self.map.x[target_node_index] = self.label_to_features[label]
-                    self.map.attributes[target_node_index] = self.label_to_attributes[label]
+                    if label < len(self.label_to_features):
+                        self.map.x[target_node_index] = self.label_to_features[label]
+                        self.map.attributes[target_node_index] = self.label_to_attributes[label]
+                    else:
+                        print("label out of bounds: {}. Carefully if sgg predict label out of bounds also".format(label))
+                        self.map.x[target_node_index] = self.label_to_features[0]
+                        self.map.attributes[target_node_index] = self.label_to_attributes[0]
         self.map.activate_nodes = set(range(self.S * self.S))
         self.map.queue_grid_layer = [0] * self.S * self.S
         '''
@@ -204,22 +214,25 @@ class GraphMap(BasicGraphMap):
             for z in range(self.S):
                 if x < self.S-1 and z < self.S-1:
                     top_map = x + self.S * z
-                    # right edges
+                    # right edge a -> b
                     edge = torch.tensor(
                         [top_map, top_map+1],
                         device=self.device,
                         dtype=torch.long).contiguous()
                     edges.append(edge)
+                    # left edge b -> a
                     edge = torch.tensor(
                         [top_map+1, top_map],
                         device=self.device,
                         dtype=torch.long).contiguous()
                     edges.append(edge)
+                    # down edge a -> c
                     edge = torch.tensor(
                         [top_map, top_map+self.S * (z+1)],
                         device=self.device,
                         dtype=torch.long).contiguous()
                     edges.append(edge)
+                    # up edge c -> a
                     edge = torch.tensor(
                         [top_map+self.S * (z+1), top_map],
                         device=self.device,
@@ -231,7 +244,7 @@ class GraphMap(BasicGraphMap):
         for x in range(self.S):
             for z in range(self.S):
                 '''
-                layer
+                layer ? (src) to top layer (dst)
                 '''
                 top_map = x + self.S * z
                 for label in range(1, self.CLASSES):
@@ -247,9 +260,12 @@ class GraphMap(BasicGraphMap):
         '''
         visualize
         '''
-        with imageio.get_writer('./graph_map.gif', mode='I') as writer:
-            for buf_file in self.buffer_plt:
-                plt_img = np.array(Image.open(buf_file))
+        with imageio.get_writer('./graph_map_GraphMap_{}_{}_{}.gif'.format(self.S, self.CLASSES, self.R), mode='I', fps=3) as writer:
+            for i, buf_file in enumerate(self.buffer_plt):
+                pil_img = Image.open(buf_file)
+                draw = ImageDraw.Draw(pil_img)
+                draw.text((0, 0), str(i), (0, 0, 0))
+                plt_img = np.array(pil_img)
                 writer.append_data(plt_img)
         self.buffer_plt = []
 
@@ -258,8 +274,10 @@ class GraphMap(BasicGraphMap):
         x, y, z, labels = cam_coords
         x = np.round(x / self.R).astype(int) + self.SHIFT_COORDS_HALF_S_TO_MAP
         x[x > max_index] = max_index
+        x[x < -max_index] = -max_index
         z = np.round(z / self.R).astype(int) + self.SHIFT_COORDS_HALF_S_TO_MAP
         z[z > max_index] = max_index
+        z[z < -max_index] = -max_index
         # labels.shape (163053,) # array([27, 27, 27, ..., 74, 74, 74])
         labels = labels.astype(int)
         coors = x + self.S * z
@@ -306,15 +324,17 @@ class GraphMap(BasicGraphMap):
         return grid_layer
         '''
 
-    def visualize_graph_map(self, KEEP_DISPLAY=False):
+    def visualize_graph_map(self):
         print("Didn't implement visualize_graph_mapis")
 
+
+# self.map.activate_nodes = dict()
 class GraphMapV2(GraphMap):
-    def __init__(self, cfg, priori_features, dim_rgb_feature, device="cuda"):
+    def __init__(self, cfg, priori_features, dim_rgb_feature, device="cuda", object_classes_index_to_name=None):
         '''
         priori_features: dict. priori_obj_cls_name_to_features, rgb_features, attributes
         '''
-        super().__init__(cfg, priori_features, dim_rgb_feature, device)
+        super().__init__(cfg, priori_features, dim_rgb_feature, device, object_classes_index_to_name)
 
     def init_graph_map(self):
         super().init_graph_map()
@@ -333,8 +353,10 @@ class GraphMapV2(GraphMap):
         x, y, z, labels = cam_coords
         x = np.round(x / self.R).astype(int) + self.SHIFT_COORDS_HALF_S_TO_MAP
         x[x > max_index] = max_index
+        x[x < -max_index] = -max_index
         z = np.round(z / self.R).astype(int) + self.SHIFT_COORDS_HALF_S_TO_MAP
         z[z > max_index] = max_index
+        z[z < -max_index] = -max_index
         # labels.shape (163053,) # array([27, 27, 27, ..., 74, 74, 74])
         labels = labels.astype(int)
         coors = x + self.S * z
@@ -351,36 +373,87 @@ class GraphMapV2(GraphMap):
 
         self.visualize_graph_map()
 
-    def visualize_graph_map(self, KEEP_DISPLAY=False):
+    def visualize_graph_map(self, THREE_DIM_DISPLAY=True):
         CLASSES = 108
         colors = cm.rainbow(np.linspace(0, 1, CLASSES))
-        label_color = []
-        Is, Js = [], []
-        three_dim_to_one = self.S * self.S
-        for one_dim_coor, label in self.map.activate_nodes:
+        label_color, legend_color_to_objectId = [], {}
+        Is, Js, Ks = [], [], []
+        two_dim_size = self.S * self.S
+        for one_dim_coor, label in self.map.activate_nodes.items():
+            # if label == 0:
+            #     continue
             # one_dim_coor = x + self.S * z + self.S * self.S * labels
-            one_dim_coor = one_dim_coor % three_dim_to_one
-            i, j = one_dim_coor % self.S, one_dim_coor // self.S
+            k = one_dim_coor // two_dim_size
+            two_dim_coor = one_dim_coor % two_dim_size
+            i, j = two_dim_coor % self.S, two_dim_coor // self.S
             label_color.append(colors[label])
             Is.append(i)
             Js.append(j)
+            Ks.append(k)
+            # https://moonbooks.org/Articles/How-to-add-a-legend-for-a-scatter-plot-in-matplotlib-/
+            if self.object_classes_index_to_name[label] not in legend_color_to_objectId:
+                objectId = self.object_classes_index_to_name[label]
+                # UserWarning: The handle <matplotlib.patches.Patch object at 0x7fe96198bc18> has a label of '__background__' which cannot be automatically added to the legend.  plt.legend(handles=legend_color_to_objectId.values(), scatterpoints=1, loc='lower center', ncol=5, fontsize=8)
+                if objectId == '__background__':
+                    objectId = 'background'
+                legend_color_to_objectId[self.object_classes_index_to_name[label]] = \
+                    mpatches.Patch(color=colors[label], label=objectId)
         plt.cla()
-        plt.gcf().canvas.mpl_connect('key_release_event',
-                lambda event: [plt.close() if event.key == 'escape' else None])
-        plt.scatter(Is, Js, s=70, c=label_color, cmap="Set2")
-        plt.plot(self.S//2, self.S//2, "ob")
+        plt.gcf().canvas.mpl_connect(
+            'key_release_event',
+            lambda event: [plt.close() if event.key == 'escape' else None])
+        if THREE_DIM_DISPLAY:
+            plt.axes(projection='3d').plot3D(self.S//2, self.S//2, self.CLASSES, "ob")
+            plt.axes(projection='3d').scatter3D(Is, Js, Ks, s=70, c=label_color, cmap="Set2")
+        else:
+            plt.plot(self.S//2, self.S//2, "ob")
+            plt.scatter(Is, Js, s=70, c=label_color, cmap="Set2")
         plt.gca().set_xticks(np.arange(0, self.S, 1))
         plt.gca().set_yticks(np.arange(0, self.S, 1))
+        if THREE_DIM_DISPLAY:
+            plt.gca().set_zticks(np.arange(0, self.CLASSES, 1))
         plt.grid(True)
+        # legend
+        plt.legend(handles=legend_color_to_objectId.values(), scatterpoints=1, loc='lower center', ncol=5, fontsize=8)
         buf = io.BytesIO()
         plt.savefig(buf, format='png')
         self.buffer_plt.append(buf)
+
+# 10x10x108 (SGG predict label size)
+class GraphMap_SXSXLABLE(GraphMap):
+    def __init__(self, cfg, priori_features, dim_rgb_feature, device="cuda", object_classes_index_to_name=None):
+        '''
+        priori_features: dict. priori_obj_cls_name_to_features, rgb_features, attributes
+        '''
+        super().__init__(cfg, priori_features, dim_rgb_feature, device, object_classes_index_to_name)
+        '''
+        CLASSES
+        '''
+        self.CLASSES = len(self.label_to_features)
+        print("self.CLASSES = cfg.GRAPH_MAP.GRAPH_MAP_CLASSES would not be use")
+
+        self.init_graph_map()
+
+    def put_label_to_map(self, cam_coords):
+        max_index = self.S-1
+        x, y, z, labels = cam_coords
+        x = np.round(x / self.R).astype(int) + self.SHIFT_COORDS_HALF_S_TO_MAP
+        x[x > max_index] = max_index
+        z = np.round(z / self.R).astype(int) + self.SHIFT_COORDS_HALF_S_TO_MAP
+        z[z > max_index] = max_index
+        labels = labels.astype(int)
+        coors = x + self.S * z + self.S * self.S * labels
+        activate_node = np.unique(coors).tolist()
+        self.map.activate_nodes.extend(activate_node)
+        self.map.activate_nodes = list(set(self.map.activate_nodes))
+        # ic(self.map.activate_nodes)
+        # ic(len(self.map.activate_nodes))
 
 
 '''
 test
 '''
-def test_load_img(path, list_img_traj, type_image=".png"):
+def test_load_img(path, list_img_traj, transforms, type_image=".png"):
     def _load_with_path():
         frames_depth = None
         low_idx = -1
@@ -394,9 +467,13 @@ def test_load_img(path, list_img_traj, type_image=".png"):
             frame_path = os.path.join(path, name_frame + type_image)
             if os.path.isfile(frame_path):
                 img_depth = Image.open(frame_path).convert("RGB")
+                if transforms is not None:
+                    img_depth = \
+                        transforms(img_depth, None)[0]
+                else:
+                    img_depth = torch.tensor(np.array(img_depth), dtype=torch.float)
             else:
                 print("file is not exist: {}".format(frame_path))
-            img_depth = torch.tensor(np.array(img_depth))
             img_depth = img_depth.unsqueeze(0)
 
             if frames_depth is None:
@@ -436,10 +513,13 @@ def test_load_meta_data(root, list_img_traj):
             else:
                 print("file is not exist: {}".format(file_path))
         all_meta_data["agent_sgg_meta_data"].append(meta_data)
-        n_meta_gap = len(all_meta_data["agent_sgg_meta_data"])-len_meta_data
-        for _ in range(n_meta_gap):
-            print("{}.gap num {}".format(root, n_meta_gap))
-            all_meta_data["agent_sgg_meta_data"].append(meta_data)
+        if len_meta_data != -1:
+            n_meta_gap = len(all_meta_data["agent_sgg_meta_data"])-len_meta_data
+            for _ in range(n_meta_gap):
+                if _ == 0:
+                    print("{}. gap num {}".format(root, n_meta_gap))
+                    print("meta len should be ", len_meta_data)
+                all_meta_data["agent_sgg_meta_data"].append(meta_data)
         exploration_path = os.path.join(root, EXPLORATION_META, "*.json")
         exploration_file_paths = glob.glob(exploration_path)
         for exploration_file_path in exploration_file_paths:
@@ -455,70 +535,58 @@ def test_load_meta_data(root, list_img_traj):
     return agent_meta_data
 
 
-if __name__ == '__main__':
+def main():
     import yaml
     import glob
     import json
     sys.path.insert(0, os.environ['ALFWORLD_ROOT'])
     sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents'))
     from agents.sgg import alfred_data_format
-    from agents.semantic_graph.semantic_graph import SceneGraph
-    from config import cfg
+    from config import cfg as _C
     if sys.platform == "win32":
         root = r"D:\cvml_project\projections\inverse_projection\data\d2\trial_T20190909_100908_040512\\"
         semantic_config_file = r"D:\alfred\alfred\models\config\sgg_without_oracle.yaml"
     else:
+        root = r"/home/alfred/data/full_2.1.0/train/pick_two_obj_and_place-ToiletPaper-None-Drawer-423/trial_T20190907_111226_698552/"
+        root = r"/home/alfred/data/full_2.1.0/train/pick_clean_then_place_in_recep-Kettle-None-Cabinet-5/trial_T20190909_043020_330212/"
         root = r"/home/alfred/data/full_2.1.0/train/pick_and_place_simple-RemoteControl-None-Ottoman-208/trial_T20190909_100908_040512/"
-        semantic_config_file = "/home/alfred/models/config/sgg_without_oracle.yaml"
-
-    config = cfg
-    config.merge_from_file(semantic_config_file)
-    alfred_dataset = alfred_data_format.AlfredDataset(config)
-    if sys.platform == "win32":
-        grap_map = BasicGraphMap(config)
-    else:
-        scene_graph = SceneGraph(
+        semantic_config_file = "/home/alfred/models/config/graph_map.yaml"
+    def win():
+        nonlocal _C
+        config = _C
+        alfred_dataset = alfred_data_format.AlfredDataset(config)
+        grap_map = BasicGraphMap(
             config,
             alfred_dataset.trans_meta_data.SGG_result_ind_to_classes,
-            config.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE,
-            "cuda",
             )
-        grap_map = GraphMap(
-            config,
-            scene_graph.priori_features,
-            config.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE,
-            "cuda",
-            )
+        traj_data_path = root + "traj_data.json"
+        with open(traj_data_path, 'r') as f:
+            traj_data = json.load(f)
+        frames_depth = test_load_img(os.path.join(root, 'depth_images'), traj_data["images"], None).view(-1, 300, 300, 3)
+        agent_meta_data = test_load_meta_data(root, traj_data["images"])
+        cat_cam_coords = np.array([[], [], [], []])
+        for i in range(10):
+            depth_image = frames_depth[i]
+            agent_meta = agent_meta_data['agent_sgg_meta_data'][i]
+            img, target, idx, rgb_img = alfred_dataset[i]
+            bbox = target.bbox
+            bbox[bbox>=300] = 299
+            # import pdb; pdb.set_trace()
+            target = {
+                "bbox": bbox,
+                "labels": target.get_field("labels"),
+            }
+            cam_coords = grap_map.update_graph_map(
+                np.array(depth_image),
+                agent_meta,
+                target)
+            grap_map.visualize_graph_map()
+            cat_cam_coords = np.concatenate([cat_cam_coords, cam_coords], axis=1)
 
-    traj_data_path = root + "traj_data.json"
-    with open(traj_data_path, 'r') as f:
-        traj_data = json.load(f)
-    frames_depth = test_load_img(os.path.join(root, 'depth_images'), traj_data["images"]).view(-1, 300, 300, 3)
-    agent_meta_data = test_load_meta_data(root, traj_data["images"])
-    cat_cam_coords = np.array([[], [], [], []])
-    for i in range(10):
-        depth_image = frames_depth[i]
-        agent_meta = agent_meta_data['agent_sgg_meta_data'][i]
-        img, target, idx, rgb_img = alfred_dataset[i]
-        bbox = target.bbox
-        bbox[bbox>=300] = 299
-        # import pdb; pdb.set_trace()
-        target = {
-            "bbox": bbox,
-            "labels": target.get_field("labels"),
-        }
-        cam_coords = grap_map.update_graph_map(
-            np.array(depth_image),
-            agent_meta,
-            target)
-        grap_map.visualize_graph_map()
-        cat_cam_coords = np.concatenate([cat_cam_coords, cam_coords], axis=1)
+        grap_map.visualize_graph_map(KEEP_DISPLAY=True)
+        grap_map.reset_graph_map()
 
-    grap_map.visualize_graph_map(KEEP_DISPLAY=True)
-    grap_map.reset_graph_map()
-
-    # Visualize
-    if platform == "win32":
+        # Visualize
         pcd_cam = o3d.geometry.PointCloud()
         pcd_cam.points = o3d.utility.Vector3dVector(cat_cam_coords.T[:, :3])
         # Flip it, otherwise the pointcloud will be upside down
@@ -527,4 +595,82 @@ if __name__ == '__main__':
 
         # Do top view projection
         # project_topview(cam_coords)
-        grid(cat_cam_coords, KEEP_DISPLAY=True)
+        # grid(cat_cam_coords, KEEP_DISPLAY=True)
+    def linux():
+        import time
+        start = time.time()
+        from agents.sgg import sgg
+        from agents.semantic_graph.semantic_graph import SceneGraph
+        nonlocal _C
+        config = _C
+        config.merge_from_file(semantic_config_file)
+        config.GRAPH_MAP.GRAPH_MAP_SIZE_S = 20
+        config.GRAPH_MAP.GRID_MIN_SIZE_R = 0.1
+        config.GRAPH_MAP.GRAPH_MAP_CLASSES = 108
+        # sgg model
+        sys.path.insert(0, os.environ['GRAPH_RCNN_ROOT'])
+        from lib.config import cfg
+        cfg.merge_from_file("/home/graph-rcnn.pytorch/configs/attribute.yaml")
+        config['sgg_cfg'] = cfg
+        alfred_dataset = alfred_data_format.AlfredDataset(config)
+        sgg_model = sgg.load_pretrained_model(
+            cfg,
+            alfred_dataset.trans_meta_data.transforms,
+            alfred_dataset.trans_meta_data.SGG_result_ind_to_classes,
+            "cuda:%d" % config.SGG.GPU,
+            )
+        # init class
+        scene_graph = SceneGraph(
+            config,
+            alfred_dataset.trans_meta_data.SGG_result_ind_to_classes,
+            config.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE,
+            "cuda",
+            )
+        # GraphMap(  GraphMapV2(
+        grap_map = GraphMapV2(
+            config,
+            scene_graph.priori_features,
+            config.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE,
+            "cuda",
+            object_classes_index_to_name=scene_graph.object_classes_index_to_name,
+            )
+
+        traj_data_path = root + "traj_data.json"
+        with open(traj_data_path, 'r') as f:
+            traj_data = json.load(f)
+        frames_depth = test_load_img(os.path.join(root, 'depth_images'), traj_data["images"], None).view(-1, 3, 300, 300)
+        frames_rgb = test_load_img(os.path.join(root, 'instance_masks'), traj_data["images"], alfred_dataset.trans_meta_data.transforms).view(-1, 3, 300, 300)
+        agent_meta_data = test_load_meta_data(root, traj_data["images"])
+        cat_cam_coords = np.array([[], [], [], []])
+        for i in range(len(frames_depth)):
+        # for i in range(3):
+            depth_image = frames_depth[i]
+            rgb_image = frames_rgb[i]
+            agent_meta = agent_meta_data['agent_sgg_meta_data'][i]
+            sgg_results = sgg_model.predict(rgb_image, 0)
+            sgg_result = sgg_results[0]
+            # import pdb; pdb.set_trace()
+            target = {
+                "bbox": sgg_result['bbox'],
+                "labels": sgg_result['labels'],
+            }
+            cam_coords = grap_map.update_graph_map(
+                np.array(depth_image.view(300, 300, 3)),
+                agent_meta,
+                target)
+            # grap_map.visualize_graph_map()
+            cat_cam_coords = np.concatenate([cat_cam_coords, cam_coords], axis=1)
+
+        grap_map.visualize_graph_map()
+        grap_map.reset_graph_map()
+        # time
+        end = time.time()
+        print(end - start)
+
+    if sys.platform == "win32":
+        win()
+    else:
+        linux()
+
+if __name__ == '__main__':
+    main()

@@ -78,6 +78,7 @@ object
 ```
 CUDA_VISIBLE_DEVICES=0 python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/memory_semantic_graph.yaml --data data/full_2.1.0/ --model merge_meta_im --dout exp/just_merge_meta --splits data/splits/oct21.json --batch 20 --gpu
 --task_types 1
+(windows: python models/train/train_semantic.py models/config/without_env_base.yaml --semantic_config_file models/config/memory_semantic_graph.yaml --model merge_meta_im --dout exp/just_merge_meta --splits data/splits/oct21.json --batch 20 --task_types 1)
 ```
 
 WARNING: if use "feat_sgg_xxx.pt", config "FEAT_NAME", "NODE_INPUT_RGB_FEATURE_SIZE", "PRIORI_OBJ_RBG_FEATURE_EMBEDDING" need change

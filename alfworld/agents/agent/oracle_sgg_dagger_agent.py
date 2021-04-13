@@ -70,6 +70,7 @@ class SemanticGraphImplement(torch.nn.Module):
                 scene_graph.priori_features,
                 self.cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE,
                 device=device,
+                object_classes_index_to_name=scene_graph.object_classes_index_to_name,
                 )
             self.scene_graphs.append(scene_graph)
             self.graph_maps.append(graph_map)
