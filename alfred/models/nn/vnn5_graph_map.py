@@ -448,7 +448,7 @@ class MOCAGRAPHMAP(nn.Module):
             '''
             graph_map update
             '''
-            self.semantic_graph_implement.update_graph_map(
+            self.semantic_graph_implement.update_map(
                 env_index,
                 frames["frames_depth"][env_index, t],
                 t_agent_store_state,

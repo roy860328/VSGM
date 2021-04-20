@@ -115,3 +115,23 @@ _C.GRAPH_MAP.GRAPH_MAP_CLASSES = 108
 _C.GRAPH_MAP.GRID_COORDS_XY_RANGE_V = 5
 # V/S
 _C.GRAPH_MAP.GRID_MIN_SIZE_R = 0.05
+
+
+#############
+### slam map
+#############
+_C.SLAM_MAP = CN()
+_C.SLAM_MAP.USE_SLAM_MAP = False
+_C.SLAM_MAP.env_frame_width = 300
+_C.SLAM_MAP.env_frame_height = 300
+_C.SLAM_MAP.global_downscaling = 2
+_C.SLAM_MAP.hfov = 90.0
+_C.SLAM_MAP.map_resolution = 5
+_C.SLAM_MAP.map_size_cm = 2400
+_C.SLAM_MAP.agent_min_z = 25
+_C.SLAM_MAP.agent_max_z = 150
+_C.SLAM_MAP.camera_height = 0.9019853
+_C.SLAM_MAP.agent_view_angle = 0
+_C.SLAM_MAP.du_scale = 2
+_C.SLAM_MAP.vision_range = 64 # depth[depth > self.vision_range * self.resolution] = np.NaN
+_C.SLAM_MAP.obs_threshold = 1

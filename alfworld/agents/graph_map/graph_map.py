@@ -24,7 +24,18 @@ from collections import defaultdict, OrderedDict
 import glob
 
 
-class BasicGraphMap(torch.nn.Module):
+class BasicMap(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def reset_map(self):
+        raise NotImplementedError
+
+    def update_map(self):
+        raise NotImplementedError
+
+
+class BasicGraphMap(BasicMap):
     def __init__(self, cfg, object_classes_index_to_name):
         super().__init__()
         self.cfg = cfg
@@ -45,7 +56,7 @@ class BasicGraphMap(torch.nn.Module):
         self.map = np.zeros([self.S, self.S, self.CLASSES]).astype(int)
         self.buffer_plt = []
 
-    def reset_graph_map(self):
+    def reset_map(self):
         self.map = np.zeros([self.S, self.S, self.CLASSES]).astype(int)
         '''
         visualize
@@ -59,7 +70,7 @@ class BasicGraphMap(torch.nn.Module):
                 writer.append_data(plt_img)
         self.buffer_plt = []
 
-    def update_graph_map(self, depth_image, agent_meta, sgg_result):
+    def update_map(self, depth_image, agent_meta, sgg_result):
         bboxs = sgg_result["bbox"]
         labels = sgg_result["labels"]
         cam_coords = get_cam_coords(
@@ -254,7 +265,7 @@ class GraphMap(BasicGraphMap):
                     edges.append(edge)
         self.map.edge_obj_to_obj = torch.stack(edges).reshape(2, -1)
 
-    def reset_graph_map(self):
+    def reset_map(self):
         self.map.activate_nodes = set(range(self.S * self.S))
         self.map.queue_grid_layer = [0] * self.S * self.S
         '''
@@ -342,8 +353,8 @@ class GraphMapV2(GraphMap):
         for i in range(self.S * self.S):
             self.map.activate_nodes[i] = 0
 
-    def reset_graph_map(self):
-        super().reset_graph_map()
+    def reset_map(self):
+        super().reset_map()
         self.map.activate_nodes = dict()
         for i in range(self.S * self.S):
             self.map.activate_nodes[i] = 0
@@ -576,7 +587,7 @@ def main():
                 "bbox": bbox,
                 "labels": target.get_field("labels"),
             }
-            cam_coords = grap_map.update_graph_map(
+            cam_coords = grap_map.update_map(
                 np.array(depth_image),
                 agent_meta,
                 target)
@@ -584,7 +595,7 @@ def main():
             cat_cam_coords = np.concatenate([cat_cam_coords, cam_coords], axis=1)
 
         grap_map.visualize_graph_map(KEEP_DISPLAY=True)
-        grap_map.reset_graph_map()
+        grap_map.reset_map()
 
         # Visualize
         pcd_cam = o3d.geometry.PointCloud()
@@ -654,7 +665,7 @@ def main():
                 "bbox": sgg_result['bbox'],
                 "labels": sgg_result['labels'],
             }
-            cam_coords = grap_map.update_graph_map(
+            cam_coords = grap_map.update_map(
                 np.array(depth_image.view(300, 300, 3)),
                 agent_meta,
                 target)
@@ -662,7 +673,7 @@ def main():
             cat_cam_coords = np.concatenate([cat_cam_coords, cam_coords], axis=1)
 
         grap_map.visualize_graph_map()
-        grap_map.reset_graph_map()
+        grap_map.reset_map()
         # time
         end = time.time()
         print(end - start)

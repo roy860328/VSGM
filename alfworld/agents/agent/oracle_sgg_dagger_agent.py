@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents', 'semantic
 import pdb
 from semantic_graph import SceneGraph
 from graph_map.graph_map import GraphMap
+from graph_map.slam_map import SlamMAP, MapEmbedding
 from sgg import alfred_data_format, sgg
 from icecream import ic
 
@@ -65,13 +66,21 @@ class SemanticGraphImplement(torch.nn.Module):
                 self.cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE,
                 device=device,
                 )
-            graph_map = GraphMap(
-                self.cfg_semantic,
-                scene_graph.priori_features,
-                self.cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE,
-                device=device,
-                object_classes_index_to_name=scene_graph.object_classes_index_to_name,
-                )
+            if "SLAM_MAP" in self.cfg_semantic and self.cfg_semantic.SLAM_MAP.USE_SLAM_MAP:
+                self.net_map_embed = MapEmbedding(
+                    self.cfg_semantic
+                    )
+                graph_map = SlamMAP(
+                    self.cfg_semantic
+                    )
+            else:
+                graph_map = GraphMap(
+                    self.cfg_semantic,
+                    scene_graph.priori_features,
+                    self.cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE,
+                    device=device,
+                    object_classes_index_to_name=scene_graph.object_classes_index_to_name,
+                    )
             self.scene_graphs.append(scene_graph)
             self.graph_maps.append(graph_map)
         # initialize model
@@ -107,7 +116,7 @@ class SemanticGraphImplement(torch.nn.Module):
                 )
             scene_graph.init_graph_data()
         for graph_map in self.graph_maps:
-            graph_map.reset_graph_map()
+            graph_map.reset_map()
         if self.PRINT_DEBUG:
             # [(26, 13, 0), (80, 10, 2), (72, 4, 2), (25, 7, 1), (30, 5, 3), (27, 5, 1), (59, 14, 4), (30, 9, 1), (31, 6, 3), (61, 6, 0), (32, 4, 2), (36, 5, 2), (44, 14, 1), (19, 2, 2), (73, 15, 1), (77, 8, 4), (56, 9, 2), (59, 10, 4), (72, 5, 1), (16, 3, 0), (40, 13, 2), (22, 4, 3), (61, 9, 1), (23, 11, 1), (29, 6, 2), (90, 5, 1), (26, 13, 1), (93, 4, 3), (23, 14, 3), (37, 4, 2), (27, 7, 1), (69, 2, 6), (54, 1, 0), (34, 12, 3), (71, 21, 4), (95, 17, 1), (19, 7, 1), (25, 12, 1), (53, 6, 3), (28, 6, 3), (18, 9, 3), (44, 4, 1), (36, 5, 4), (34, 9, 0), (31, 3, 1), (29, 7, 1), (33, 5, 1), (59, 3, 2), (27, 8, 2), (13, 5, 1), (29, 15, 1), (32, 5, 1), (37, 10, 3), (65, 8, 2), (18, 13, 0), (75, 11, 0), (28, 4, 2), (58, 3, 0), (40, 5, 1), (29, 2, 1), (60, 9, 2), (27, 7, 3), (31, 14, 2), (32, 3, 3)]
             print("WARNING For DEBUG. \nglobal_graph nodes numbers result: \n", global_graphs)
@@ -141,16 +150,32 @@ class SemanticGraphImplement(torch.nn.Module):
             sgg_result = sgg_results[0]
             scene_graph.add_local_graph_to_global_graph(None, sgg_result, reset_current_graph=reset_current_graph)
 
-    def update_graph_map(self, env_index, depth_image, agent_meta, sgg_results):
+    def update_map(self, env_index, depth_image, agent_meta, sgg_results):
         graph_map = self.graph_maps[env_index]
         target = {
             "bbox": sgg_results[0]["bbox"],
             "labels": sgg_results[0]["labels"],
         }
-        graph_map.update_graph_map(
+        graph_map.update_map(
             np.array(depth_image.cpu().view(300, 300, 3)),
             agent_meta,
             target)
+
+    def get_map_feature(self, chose_type, env_index, hidden_state=None):
+        if chose_type == "GRAPH_MAP":
+            graph_map = self.graph_maps[env_index]
+            importent_node_feature, dict_objectIds_to_score = self.graph_embed_model.chose_importent_node_graph_map(
+                graph_map.map,
+                hidden_state,
+            )
+            return importent_node_feature, dict_objectIds_to_score
+        elif chose_type == "SLAM_MAP":
+            graph_map = self.graph_maps[env_index]
+            map_feature = graph_map.get_map()
+            map_feature = self.net_map_embed(map_feature)
+            return map_feature, {}
+        else:
+            raise NotImplementedError
 
     def get_priori_feature(self, env_index, hidden_state):
         raise NotImplementedError
