@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents', 'semantic
 import pdb
 from semantic_graph import SceneGraph
 from graph_map.graph_map import GraphMap
-from graph_map.slam_map import SlamMAP, MapEmbedding
+from graph_map.slam_map import SlamMAP
 from sgg import alfred_data_format, sgg
 from icecream import ic
 
@@ -67,11 +67,9 @@ class SemanticGraphImplement(torch.nn.Module):
                 device=device,
                 )
             if "SLAM_MAP" in self.cfg_semantic and self.cfg_semantic.SLAM_MAP.USE_SLAM_MAP:
-                self.net_map_embed = MapEmbedding(
-                    self.cfg_semantic
-                    )
                 graph_map = SlamMAP(
-                    self.cfg_semantic
+                    self.cfg_semantic,
+                    device=device,
                     )
             else:
                 graph_map = GraphMap(
@@ -161,21 +159,20 @@ class SemanticGraphImplement(torch.nn.Module):
             agent_meta,
             target)
 
-    def get_map_feature(self, chose_type, env_index, hidden_state=None):
-        if chose_type == "GRAPH_MAP":
+    def get_map_feature(self, env_index, hidden_state=None):
+        if "SLAM_MAP" in self.cfg_semantic and self.cfg_semantic.SLAM_MAP.USE_SLAM_MAP:
+            graph_map = self.graph_maps[env_index]
+            map_feature = graph_map.map_feature
+            return map_feature, {}
+        else:
             graph_map = self.graph_maps[env_index]
             importent_node_feature, dict_objectIds_to_score = self.graph_embed_model.chose_importent_node_graph_map(
                 graph_map.map,
                 hidden_state,
             )
             return importent_node_feature, dict_objectIds_to_score
-        elif chose_type == "SLAM_MAP":
-            graph_map = self.graph_maps[env_index]
-            map_feature = graph_map.get_map()
-            map_feature = self.net_map_embed(map_feature)
-            return map_feature, {}
-        else:
-            raise NotImplementedError
+        # else:
+        #     raise NotImplementedError
 
     def get_priori_feature(self, env_index, hidden_state):
         raise NotImplementedError

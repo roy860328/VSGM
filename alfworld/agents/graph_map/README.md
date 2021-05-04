@@ -4,6 +4,7 @@ WARNING: depth image can't be transforms
 ## Test
 ```
 python graph_map/graph_map.py
+python graph_map\slam_map.py
 ```
 1.
 BasicGraphMap

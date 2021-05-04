@@ -6,29 +6,25 @@ else:
     import open3d as o3d
 import sys
 import os
-import io
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
-from mpl_toolkits import mplot3d
-import matplotlib.patches as mpatches
 import numpy as np
-from PIL import Image, ImageDraw
-import imageio
+import matplotlib.pyplot as plt
+import quaternion
+from scipy.spatial.transform import Rotation
 sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT']))
 from agents.graph_map.utils_graph_map import *#intrinsic_from_fov, load_extrinsic, load_intrinsic, pixel_coord_np, grid, get_cam_coords
 from agents.graph_map.graph_map import BasicMap, test_load_img, test_load_meta_data
 '''
 Neural-SLAM
 '''
-from Neural_SLAM.env.habitat.utils import visualizations as vu
-from Neural_SLAM.env.habitat.utils import pose as pu
-import quaternion
+sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT']))
+from agents.graph_map.Neural_SLAM.env.habitat.utils import visualizations as vu
+from agents.graph_map.Neural_SLAM.env.habitat.utils import pose as pu
 
 
 # 10x10xcfg.GRAPH_MAP.GRAPH_MAP_SIZE_S
 # self.map.activate_nodes = set()
 class SlamMAP(BasicMap):
-    def __init__(self, cfg, priori_features, dim_rgb_feature, device="cuda", object_classes_index_to_name=None):
+    def __init__(self, cfg, device="cuda"):
         super().__init__()
         self.cfg = cfg
         self.device = device
@@ -37,20 +33,21 @@ class SlamMAP(BasicMap):
         self.EMBED_FEATURE_SIZE = cfg.SCENE_GRAPH.EMBED_FEATURE_SIZE
         self.count_episode = 0
         self.timestep = 0
-        self._create_map_embedding_model()
         self.mapper = self.build_mapper()
         self.reset_map()
         self.figure, self.ax = plt.subplots(
             1, 2, figsize=(6*16/9, 6),
             facecolor="whitesmoke",
             num="Thread 0")
+        self.net_map_embedding = self._create_map_embedding_model()
+        self.net_map_embedding.to(device)
 
     def build_mapper(self):
-        from Neural_SLAM.env.utils.map_builder import MapBuilder
+        from agents.graph_map.Neural_SLAM.env.utils.map_builder import MapBuilder
         params = {}
         params['frame_width'] = self.cfg.SLAM_MAP.env_frame_width
         params['frame_height'] = self.cfg.SLAM_MAP.env_frame_height
-        params['fov'] =  self.cfg.SLAM_MAP.hfov
+        params['fov'] = self.cfg.SLAM_MAP.hfov
         params['resolution'] = self.cfg.SLAM_MAP.map_resolution
         params['map_size_cm'] = self.cfg.SLAM_MAP.map_size_cm
         params['agent_min_z'] = 25
@@ -59,19 +56,19 @@ class SlamMAP(BasicMap):
         params['agent_view_angle'] = 0
         params['du_scale'] = self.cfg.SLAM_MAP.du_scale
         params['vision_range'] = self.cfg.SLAM_MAP.vision_range
-        params['visualize'] = self.cfg.SLAM_MAP.visualize
+        params['visualize'] = False
         params['obs_threshold'] = self.cfg.SLAM_MAP.obs_threshold
         mapper = MapBuilder(params)
         return mapper
 
     def _create_map_embedding_model(self):
-        from Neural_SLAM.model import Global_Policy
+        from agents.graph_map.Neural_SLAM.model import Global_Policy
         self.global_downscaling = self.cfg.SLAM_MAP.global_downscaling
         map_size = self.cfg.SLAM_MAP.map_size_cm // self.cfg.SLAM_MAP.map_resolution
         full_w, full_h = map_size, map_size
-        local_w, local_h = int(full_w / self.cfg.SLAM_MAP.global_downscaling), \
+        local_w, local_h = int(full_w / self.cfg.SLAM_MAP.global_downscaling),\
             int(full_h / self.cfg.SLAM_MAP.global_downscaling)
-        self.net_map_embedding = Global_Policy((local_w, local_h), out_shape=self.EMBED_FEATURE_SIZE)
+        return Global_Policy((1, local_w, local_h), out_shape=self.EMBED_FEATURE_SIZE)
 
     def reset_map(self):
         self.curr_loc = [self.map_size_cm/100.0/2.0,
@@ -79,10 +76,11 @@ class SlamMAP(BasicMap):
         self.curr_loc_gt = self.curr_loc
         self.last_loc_gt = self.curr_loc_gt
         self.mapper.reset_map(self.map_size_cm)
-        self.collison_map = np.zeros(self.map.shape)
-        self.visited_gt = np.zeros(self.map.shape)
+        self.map = self.mapper.map
+        self.collison_map = np.zeros(self.map.shape[:2])
+        self.visited_gt = np.zeros(self.map.shape[:2])
         full_map_size = self.cfg.SLAM_MAP.map_size_cm//self.cfg.SLAM_MAP.map_resolution
-        self.explorable_map = torch.zeros((full_map_size, full_map_size)).float()
+        self.explorable_map = np.zeros((full_map_size, full_map_size))
         self.count_episode += 1
         self.timestep = 0
         self.last_sim_location = None
@@ -110,24 +108,33 @@ class SlamMAP(BasicMap):
         # Update ground_truth map and explored area
         agent_view_degrees = agent_meta["cameraHorizon"]
         self.mapper.agent_view_angle = agent_view_degrees
+
+        '''
+        depth process
+        '''
+        depth_image = depth_image[:, :, 0]
         fp_proj, self.map, fp_explored, self.explored_map = \
             self.mapper.update_map(depth_image, mapper_gt_pose)
 
-        map_tensor = torch.tensor(self.map, dtype=torch.float).to(device=self.device)
-        map_feature = self.net_map_embedding(map_tensor)
+        # torch.Size([1, 1, 480, 480])
+        map_tensor = torch.tensor([[self.map]], dtype=torch.float).to(device=self.device)
+        self.map_feature = self.net_map_embedding(map_tensor)
 
         '''
         visualize
         '''
-        self.visualize_graph_map(depth_image)
-        return map_feature
+        # self.visualize_graph_map(depth_image)
+        return self.map_feature
 
     def get_sim_location(self, agent_meta):
         x, z, y = \
             agent_meta['position']['x'], agent_meta['position']['y'], agent_meta['position']['z']
         rotation_x, rotation_y, rotation_z = \
             agent_meta["rotation"]["x"], agent_meta["rotation"]["z"], agent_meta["rotation"]["y"]
-        rotation = (rotation_x, rotation_y, rotation_z)
+        # rotation = np.quaternion(0.999916136264801, 0, 0.0132847428321838, 0)
+        quat = Rotation.from_euler('xyz', [rotation_x, rotation_y, rotation_z], degrees=True)
+        # import pdb ;pdb.set_trace()
+        rotation = np.quaternion(*quat.as_quat())
 
         axis = quaternion.as_euler_angles(rotation)[0]
         if (axis % (2*np.pi)) < 0.1 or (axis % (2*np.pi)) > 2*np.pi - 0.1:
@@ -219,7 +226,7 @@ class SlamMAP(BasicMap):
             (start_x_gt, start_y_gt, start_o_gt),
             (start_x_gt, start_y_gt, start_o_gt),
             dump_dir, self.count_episode, self.timestep,
-            visualize=True, print_images=True, vis_type=0)
+            visualize=True, print_images=True, vis_style=0)
 
 def main():
     import yaml
@@ -241,15 +248,13 @@ def main():
         alfred_dataset = alfred_data_format.AlfredDataset(config)
         grap_map = SlamMAP(
             config,
-            alfred_dataset.trans_meta_data.SGG_result_ind_to_classes,
             )
         traj_data_path = root + "traj_data.json"
         with open(traj_data_path, 'r') as f:
             traj_data = json.load(f)
         frames_depth = test_load_img(os.path.join(root, 'depth_images'), traj_data["images"], None).view(-1, 300, 300, 3)
         agent_meta_data = test_load_meta_data(root, traj_data["images"])
-        cat_cam_coords = np.array([[], [], [], []])
-        for i in range(10):
+        for i in range(len(frames_depth)):
             depth_image = frames_depth[i]
             agent_meta = agent_meta_data['agent_sgg_meta_data'][i]
             img, target, idx, rgb_img = alfred_dataset[i]
@@ -260,35 +265,20 @@ def main():
                 "bbox": bbox,
                 "labels": target.get_field("labels"),
             }
-            cam_coords = grap_map.update_map(
+            feature = grap_map.update_map(
                 np.array(depth_image),
                 agent_meta,
                 target)
-            grap_map.visualize_graph_map()
-            cat_cam_coords = np.concatenate([cat_cam_coords, cam_coords], axis=1)
+            grap_map.visualize_graph_map(depth_image)
 
-        grap_map.visualize_graph_map(KEEP_DISPLAY=True)
         grap_map.reset_map()
 
-        # Visualize
-        pcd_cam = o3d.geometry.PointCloud()
-        pcd_cam.points = o3d.utility.Vector3dVector(cat_cam_coords.T[:, :3])
-        # Flip it, otherwise the pointcloud will be upside down
-        pcd_cam.transform([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
-        # o3d.visualization.draw_geometries([pcd_cam])
-
-        # Do top view projection
-        # project_topview(cam_coords)
-        # grid(cat_cam_coords, KEEP_DISPLAY=True)
     def linux():
         import time
         start = time.time()
         nonlocal _C
         config = _C
         config.merge_from_file(semantic_config_file)
-        config.GRAPH_MAP.GRAPH_MAP_SIZE_S = 20
-        config.GRAPH_MAP.GRID_MIN_SIZE_R = 0.1
-        config.GRAPH_MAP.GRAPH_MAP_CLASSES = 108
         # sgg model
         sys.path.insert(0, os.environ['GRAPH_RCNN_ROOT'])
         from lib.config import cfg
@@ -296,6 +286,7 @@ def main():
         config['sgg_cfg'] = cfg
         alfred_dataset = alfred_data_format.AlfredDataset(config)
         grap_map = SlamMAP(
+            config,
             )
 
         traj_data_path = root + "traj_data.json"
@@ -304,21 +295,17 @@ def main():
         frames_depth = test_load_img(os.path.join(root, 'depth_images'), traj_data["images"], None).view(-1, 3, 300, 300)
         frames_rgb = test_load_img(os.path.join(root, 'instance_masks'), traj_data["images"], alfred_dataset.trans_meta_data.transforms).view(-1, 3, 300, 300)
         agent_meta_data = test_load_meta_data(root, traj_data["images"])
-        cat_cam_coords = np.array([[], [], [], []])
         for i in range(len(frames_depth)):
-        # for i in range(3):
             depth_image = frames_depth[i]
             rgb_image = frames_rgb[i]
             agent_meta = agent_meta_data['agent_sgg_meta_data'][i]
             # import pdb; pdb.set_trace()
-            cam_coords = grap_map.update_map(
+            feature = grap_map.update_map(
                 np.array(depth_image.view(300, 300, 3)),
                 agent_meta,
                 )
-            # grap_map.visualize_graph_map()
-            cat_cam_coords = np.concatenate([cat_cam_coords, cam_coords], axis=1)
+            grap_map.visualize_graph_map(depth_image)
 
-        grap_map.visualize_graph_map()
         grap_map.reset_map()
         # time
         end = time.time()

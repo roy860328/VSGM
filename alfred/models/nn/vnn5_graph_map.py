@@ -455,8 +455,7 @@ class MOCAGRAPHMAP(nn.Module):
                 sgg_results,
                 )
             graph_map_importent_features, graph_map_dict_objectIds_to_score = \
-                self.semantic_graph_implement.chose_importent_node_feature(
-                    chose_type="GRAPH_MAP",
+                self.semantic_graph_implement.get_map_feature(
                     env_index=env_index,
                     hidden_state=state_t_instr[0][env_index:env_index+1],
                     )
