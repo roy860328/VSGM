@@ -34,6 +34,7 @@ class Eval(object):
         # M = import_module(self.args.model)
         M = import_module('model.{}'.format(args.model))
         self.model, optimizer = M.Module.load(self.args.model_path)
+        # self.model, optimizer = M.Module.load(self.args.model_path, args.config_file['sgg_cfg'])
         self.model.share_memory()
         self.model.eval()
         self.model.test_mode = True
@@ -55,8 +56,10 @@ class Eval(object):
         # gpu
         if self.args.gpu:
             self.model = self.model.to(torch.device('cuda'))
+            # self.resnet = Resnet(args, device='cuda', eval=True, share_memory=True, use_conv_feat=False)
             self.resnet = Resnet(args, device='cuda', eval=True, share_memory=True, use_conv_feat=True)
         else:
+            # self.resnet = Resnet(args, device='cpu', eval=True, share_memory=True, use_conv_feat=False)
             self.resnet = Resnet(args, device='cpu', eval=True, share_memory=True, use_conv_feat=True)
         if args.sgg_config_file is not None:
             self.model.to(self.model.args.gpu_id)
@@ -90,32 +93,36 @@ class Eval(object):
         if self.args.fast_epoch:
             files = files[:16]
 
-        '''
-        new code
-        '''
-        TASK_TYPES = {"1": "pick_and_place_simple",
-                      "2": "look_at_obj_in_light",
-                      "3": "pick_clean_then_place_in_recep",
-                      "4": "pick_heat_then_place_in_recep",
-                      "5": "pick_cool_then_place_in_recep",
-                      "6": "pick_two_obj_and_place"}
-        task_types = []
-        for tt_id in self.args.task_types.split(','):
-            if tt_id in TASK_TYPES:
-                task_types.append(TASK_TYPES[tt_id])
-
-        if self.args.shuffle:
-            random.shuffle(files)
-        for traj in files:
+        if self.args.eval_split == "tests_seen" or self.args.eval_split == "tests_unseen":
+            for traj in files:
+                task_queue.put(traj)
+        else:
             '''
             new code
-            task_queue.qsize()
             '''
-            for task_type in task_types:
-                if task_type in traj['task']:
-                    task_queue.put(traj)
-                    break
-        print("task_queue: ", task_queue.qsize())
+            TASK_TYPES = {"1": "pick_and_place_simple",
+                          "2": "look_at_obj_in_light",
+                          "3": "pick_clean_then_place_in_recep",
+                          "4": "pick_heat_then_place_in_recep",
+                          "5": "pick_cool_then_place_in_recep",
+                          "6": "pick_two_obj_and_place"}
+            task_types = []
+            for tt_id in self.args.task_types.split(','):
+                if tt_id in TASK_TYPES:
+                    task_types.append(TASK_TYPES[tt_id])
+
+            if self.args.shuffle:
+                random.shuffle(files)
+            for traj in files:
+                '''
+                new code
+                task_queue.qsize()
+                '''
+                for task_type in task_types:
+                    if task_type in traj['task']:
+                        task_queue.put(traj)
+                        break
+            print("task_queue: ", task_queue.qsize())
         return task_queue
 
     def spawn_threads(self):

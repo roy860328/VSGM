@@ -214,9 +214,9 @@ class AlfredDataset(Dataset):
 
     def __getitem__(self, idx):
         # load images ad masks
-        img_path = self.imgs[idx]
         # print("care for img_path = self.masks[idx]")
         img_path = self.masks[idx]
+        img_path = self.imgs[idx]
         mask_path = self.masks[idx]
         meta_path = self.metas[idx]
         sgg_meta_path = self.sgg_metas[idx]
@@ -228,7 +228,7 @@ class AlfredDataset(Dataset):
         with open(sgg_meta_path, 'r') as f:
             data_obj_relation_attribute = json.load(f)
 
-        img = Image.open(img_path).convert("RGB")
+        img = Image.open(img_path)#.convert("RGB")
         # note that we haven't converted the mask to RGB,
         #
         # because each color corresponds to a different instance
@@ -265,8 +265,8 @@ class AlfredDataset(Dataset):
         target.add_field("angle_of_views", angle_of_views)
         target = target.clip_to_image(remove_empty=False)
 
-        return img, target, idx, Image.open(self.imgs[idx]).convert("RGB")
         # sgg graph training
+        return img, target, idx, Image.open(self.imgs[idx]).convert("RGB")
         return img, target, idx
 
     def get_img_info(self, img_id):

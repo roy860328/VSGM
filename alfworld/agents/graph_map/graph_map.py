@@ -91,7 +91,7 @@ class BasicGraphMap(BasicMap):
         labels = labels.astype(int)
         self.map[x, z, labels] = labels
 
-    def visualize_graph_map(self, KEEP_DISPLAY=False):
+    def visualize_graph_map(self, rgb_img, depth_img, KEEP_DISPLAY=False):
         colors = cm.rainbow(np.linspace(0, 1, self.CLASSES))
         Is, Js, Ks = np.where(self.map != 0)
         label_color, legend_color_to_objectId = [], {}
@@ -117,6 +117,8 @@ class BasicGraphMap(BasicMap):
         # else:
         #     plt.pause(1.0)
         plt.cla()
+        plt.clf()
+        plt.close()
         plt.gcf().canvas.mpl_connect('key_release_event',
                 lambda event: [plt.close() if event.key == 'escape' else None])
         plt.axes(projection='3d').plot3D(self.S//2, self.S//2, self.CLASSES, "ob")
@@ -137,7 +139,15 @@ class BasicGraphMap(BasicMap):
             plt.show()
         else:
             plt.pause(1.0)
-
+        self.figure, self.ax = plt.subplots(
+            3, 1, figsize=(4, 6*16/9),
+            facecolor="whitesmoke",
+            num="Thread 0")
+        ax = self.ax
+        ax[0].imshow(rgb_img/255)
+        ax[1].imshow(depth_img/255)
+        pil_img = Image.open(buf)
+        ax[2].imshow(pil_img)
 
 # 10x10xcfg.GRAPH_MAP.GRAPH_MAP_SIZE_S
 # self.map.activate_nodes = set()
@@ -382,9 +392,9 @@ class GraphMapV2(GraphMap):
         self.map.x[node_indexs] = self.label_to_features[labels]
         self.map.attributes[node_indexs] = self.label_to_attributes[labels]
 
-        self.visualize_graph_map()
+        # self.visualize_graph_map()
 
-    def visualize_graph_map(self, THREE_DIM_DISPLAY=True):
+    def visualize_graph_map(self, rgb_img, depth_img, THREE_DIM_DISPLAY=True):
         CLASSES = 108
         colors = cm.rainbow(np.linspace(0, 1, CLASSES))
         label_color, legend_color_to_objectId = [], {}
@@ -410,6 +420,8 @@ class GraphMapV2(GraphMap):
                 legend_color_to_objectId[self.object_classes_index_to_name[label]] = \
                     mpatches.Patch(color=colors[label], label=objectId)
         plt.cla()
+        plt.clf()
+        plt.close()
         plt.gcf().canvas.mpl_connect(
             'key_release_event',
             lambda event: [plt.close() if event.key == 'escape' else None])
@@ -429,6 +441,22 @@ class GraphMapV2(GraphMap):
         buf = io.BytesIO()
         plt.savefig(buf, format='png')
         self.buffer_plt.append(buf)
+
+        self.figure, self.ax = plt.subplots(
+            3, 1, figsize=(4, 6*16/9),
+            facecolor="whitesmoke",
+            num="Thread 0")
+        ax = self.ax
+        # for i in range(3):
+        #     ax[i].clear()
+        #     ax[i].set_yticks([])
+        #     ax[i].set_xticks([])
+        #     ax[i].set_yticklabels([])
+        #     ax[i].set_xticklabels([])
+        ax[0].imshow(rgb_img/255)
+        ax[1].imshow(depth_img/255)
+        pil_img = Image.open(buf)
+        ax[2].imshow(pil_img)
 
 # 10x10x108 (SGG predict label size)
 class GraphMap_SXSXLABLE(GraphMap):
@@ -624,6 +652,7 @@ def main():
         cfg.merge_from_file("/home/graph-rcnn.pytorch/configs/attribute.yaml")
         config['sgg_cfg'] = cfg
         alfred_dataset = alfred_data_format.AlfredDataset(config)
+        cfg.MODEL.SAVE_SGG_RESULT = True
         sgg_model = sgg.load_pretrained_model(
             cfg,
             alfred_dataset.trans_meta_data.transforms,
@@ -645,6 +674,10 @@ def main():
             "cuda",
             object_classes_index_to_name=scene_graph.object_classes_index_to_name,
             )
+        grap_map = BasicGraphMap(
+            config,
+            alfred_dataset.trans_meta_data.SGG_result_ind_to_classes,
+            )
 
         traj_data_path = root + "traj_data.json"
         with open(traj_data_path, 'r') as f:
@@ -652,7 +685,6 @@ def main():
         frames_depth = test_load_img(os.path.join(root, 'depth_images'), traj_data["images"], None).view(-1, 3, 300, 300)
         frames_rgb = test_load_img(os.path.join(root, 'instance_masks'), traj_data["images"], alfred_dataset.trans_meta_data.transforms).view(-1, 3, 300, 300)
         agent_meta_data = test_load_meta_data(root, traj_data["images"])
-        cat_cam_coords = np.array([[], [], [], []])
         for i in range(len(frames_depth)):
         # for i in range(3):
             depth_image = frames_depth[i]
@@ -665,14 +697,22 @@ def main():
                 "bbox": sgg_result['bbox'],
                 "labels": sgg_result['labels'],
             }
+            # .view(-1, 300, 300, 3)
             cam_coords = grap_map.update_map(
                 np.array(depth_image.view(300, 300, 3)),
                 agent_meta,
                 target)
-            # grap_map.visualize_graph_map()
-            cat_cam_coords = np.concatenate([cat_cam_coords, cam_coords], axis=1)
+            # import pdb; pdb.set_trace()
+            grap_map.visualize_graph_map( np.array( sgg_result["write_img"] ), np.array(depth_image.view(300, 300, 3)))
 
-        grap_map.visualize_graph_map()
+            save_dir = "../visual_grap_map"
+            if not os.path.exists(save_dir):
+                os.makedirs(save_dir)
+            fn = save_dir + '/{}.png'.format(
+                i)
+            plt.savefig(fn)
+
+        # grap_map.visualize_graph_map()
         grap_map.reset_map()
         # time
         end = time.time()

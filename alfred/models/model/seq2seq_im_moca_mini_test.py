@@ -77,9 +77,9 @@ class Module(seq2seq_im_moca_semantic):
         for env_index in range(len(all_meta_datas)):
             b_store_state = all_meta_datas[env_index]
             # get_meta_datas(cls, env, resnet):
-            t_store_state = b_store_state["sgg_meta_data"]
+            t_store_state = b_store_state#["sgg_meta_data"]
             # cls.resnet.featurize([curr_image], batch=1).unsqueeze(0)
-            t_store_state["rgb_image"] = feat['frames_instance_conv'][env_index, 0]
+            # t_store_state["rgb_image"] = feat['frames_instance_conv'][env_index, 0]
             global_graph_importent_features, current_state_graph_importent_features, history_changed_nodes_graph_importent_features, priori_importent_features,\
                 global_graph_dict_objectIds_to_score, current_state_dict_objectIds_to_score, history_changed_dict_objectIds_to_score, priori_dict_dict_objectIds_to_score =\
                 self.dec.store_and_get_graph_feature(t_store_state, env_index, self.r_state['state_t_goal'], self.r_state['state_t_instr'])

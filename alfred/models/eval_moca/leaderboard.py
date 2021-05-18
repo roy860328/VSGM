@@ -18,6 +18,9 @@ import constants
 import torch.nn.functional as F
 from torchvision.transforms.functional import to_tensor
 from torchvision.models.detection import maskrcnn_resnet50_fpn
+from icecream import ic
+from models.utils.eval_debug import EvalDebug
+eval_debug = EvalDebug()
 
 classes = ['0'] + constants.OBJECTS + ['AppleSliced', 'ShowerCurtain', 'TomatoSliced', 'LettuceSliced', 'Lamp', 'ShowerHead', 'EggCracked', 'BreadSliced', 'PotatoSliced', 'Faucet']
 
@@ -64,10 +67,12 @@ class Leaderboard(EvalTask):
         cls.setup_scene(env, traj_data, r_idx, args)
 
         # extract language features
-        feat = model.featurize([(traj_data, False)], load_mask=False)
+        feat = model.featurize([traj_data], load_mask=False)
 
         # goal instr
         goal_instr = traj_data['turk_annotations']['anns'][r_idx]['task_desc']
+        step_instr = traj_data['turk_annotations']['anns'][r_idx]['high_descs']
+        current_high_descs = 0
 
         maskrcnn = maskrcnn_resnet50_fpn(num_classes=119)
         maskrcnn.eval()
@@ -79,9 +84,11 @@ class Leaderboard(EvalTask):
         nav_actions = ['MoveAhead_25', 'RotateLeft_90', 'RotateRight_90', 'LookDown_15', 'LookUp_15']
         
         prev_class = 0
+        pred_class = 0
         prev_center = torch.zeros(2)
 
         done, success = False, False
+        err = ""
         actions = list()
         fails = 0
         t = 0
@@ -92,42 +99,48 @@ class Leaderboard(EvalTask):
 
             # extract visual features
             curr_image = Image.fromarray(np.uint8(env.last_event.frame))
-            feat['frames'] = resnet.featurize([curr_image], batch=1).unsqueeze(0)
-
+            curr_depth_image = env.last_event.depth_frame * (255 / 10000)
+            curr_depth_image = curr_depth_image.astype(np.uint8)
+            curr_instance = Image.fromarray(np.uint8(env.last_event.instance_segmentation_frame))
+            feat = cls.get_frame_feat(cls, env, resnet, feat)
+            feat['frames'] = feat['frames_conv']
+            feat['all_meta_datas'] = cls.get_meta_datas(cls, env, resnet)
             # forward model
             m_out = model.step(feat)
-            m_pred = model.extract_preds(m_out, [(traj_data, False)], feat, clean_special_tokens=False)
+            m_pred = model.extract_preds(m_out, [traj_data], feat, clean_special_tokens=False)
             m_pred = list(m_pred.values())[0]
 
-            # get action and mask
+            # action prediction
             action = m_pred['action_low']
             if prev_image == curr_image and prev_action == action and prev_action in nav_actions and action in nav_actions and action == 'MoveAhead_25':
                 dist_action = m_out['out_action_low'][0][0].detach().cpu()
-                idx_rotateR = model.vocab['action_low'].word2index('RotateRight_90')
-                idx_rotateL = model.vocab['action_low'].word2index('RotateLeft_90')
+                try:
+                    idx_rotateR = model.vocab['action_low'].word2index('RotateRight_90')
+                    idx_rotateL = model.vocab['action_low'].word2index('RotateLeft_90')
+                except Exception as e:
+                    idx_rotateR = model.action_low_word_to_index['RotateRight_90']
+                    idx_rotateL = model.action_low_word_to_index['RotateLeft_90']
                 action = 'RotateLeft_90' if dist_action[idx_rotateL] > dist_action[idx_rotateR] else 'RotateRight_90'
-                    
-            # check if <<stop>> was predicted
-            if m_pred['action_low'] == cls.STOP_TOKEN:
-                print("\tpredicted STOP")
-                break
-                
+
+            # mask prediction
             mask = None
             if model.has_interaction(action):
-                class_dist = m_pred['action_low_mask'][0]
+                class_dist = m_pred['action_low_mask_label'][0]
                 pred_class = np.argmax(class_dist)
 
+                # mask generation
                 with torch.no_grad():
                     out = maskrcnn([to_tensor(curr_image).cuda()])[0]
                     for k in out:
                         out[k] = out[k].detach().cpu()
 
                 if sum(out['labels'] == pred_class) == 0:
-                    mask = np.zeros((300,300))
+                    mask = np.zeros((constants.SCREEN_WIDTH, constants.SCREEN_HEIGHT))
                 else:
                     masks = out['masks'][out['labels'] == pred_class].detach().cpu()
                     scores = out['scores'][out['labels'] == pred_class].detach().cpu()
-                    
+
+                    # Instance selection based on the minimum distance between the prev. and cur. instance of a same class.
                     if prev_class != pred_class:
                         scores, indices = scores.sort(descending=True)
                         masks = masks[indices]
@@ -141,6 +154,40 @@ class Leaderboard(EvalTask):
                         prev_center = cur_centers[0]
 
                     mask = np.squeeze(masks[0].numpy(), axis=0)
+
+            '''
+            eval_debug.add_data
+            '''
+            try:
+                dict_action = {
+                    # action
+                    'action_low': m_pred["action_low"],
+                    'action_navi_low': m_pred["action_navi_low"],
+                    'action_operation_low': m_pred["action_operation_low"],
+                    'action_navi_or_operation': m_pred["action_navi_or_operation"],
+                    # goal
+                    'subgoal_t': m_out["out_subgoal_t"],
+                    'progress_t': m_out["out_progress_t"],
+                    # ANALYZE_GRAPH
+                    'global_graph_dict_ANALYZE_GRAPH': m_out["global_graph_dict_ANALYZE_GRAPH"],
+                    'current_state_dict_ANALYZE_GRAPH': m_out["current_state_dict_ANALYZE_GRAPH"],
+                    'history_changed_dict_ANALYZE_GRAPH': m_out["history_changed_dict_ANALYZE_GRAPH"],
+                    'priori_dict_ANALYZE_GRAPH': m_out["priori_dict_ANALYZE_GRAPH"],
+                    # mask
+                    "mask": mask,
+                    "pred_class": pred_class,
+                    "object": classes[pred_class]
+                }
+            except Exception as e:
+                ic(pred_class)
+                ic(len(classes))
+
+            eval_debug.add_data(t, curr_image, curr_depth_image, dict_action, "step_instr[current_high_descs]", err)
+
+            if action == cls.STOP_TOKEN:
+                print("\tpredicted STOP")
+                break
+
 
             # use predicted action and mask (if available) to interact with the env
             t_success, _, _, err, api_action = env.va_interact(action, interact_mask=mask, smooth_nav=False)
@@ -160,6 +207,10 @@ class Leaderboard(EvalTask):
 
             prev_image = curr_image
             prev_action = action
+            pred_class = 0
+
+        # check if goal was satisfied
+        # eval_debug.record(model.args.dout, traj_data, goal_instr, step_instr, err, success)
 
         # actseq
         seen_ids = [t['task'] for t in splits['tests_seen']]
@@ -223,14 +274,16 @@ class Leaderboard(EvalTask):
         threads = []
         lock = self.manager.Lock()
         self.model.test_mode = True
-        for n in range(self.args.num_threads):
-            thread = mp.Process(target=self.run, args=(self.model, self.resnet, task_queue, self.args, lock,
-                                                       self.splits, self.seen_actseqs, self.unseen_actseqs))
-            thread.start()
-            threads.append(thread)
 
-        for t in threads:
-            t.join()
+        self.run(self.model, self.resnet, task_queue, self.args, lock, self.splits, self.seen_actseqs, self.unseen_actseqs)
+        # for n in range(self.args.num_threads):
+        #     thread = mp.Process(target=self.run, args=(self.model, self.resnet, task_queue, self.args, lock,
+        #                                                self.splits, self.seen_actseqs, self.unseen_actseqs))
+        #     thread.start()
+        #     threads.append(thread)
+
+        # for t in threads:
+        #     t.join()
 
         # save
         self.save_results()
@@ -254,6 +307,39 @@ class Leaderboard(EvalTask):
             json.dump(results, r, indent=4, sort_keys=True)
 
 
+def load_config(args):
+    import yaml
+    import glob
+    assert os.path.exists(args.config_file), "Invalid config file "
+    with open(args.config_file) as reader:
+        config = yaml.safe_load(reader)
+    # Parse overriden params.
+    for param in args.params:
+        fqn_key, value = param.split("=")
+        entry_to_change = config
+        keys = fqn_key.split(".")
+        for k in keys[:-1]:
+            entry_to_change = entry_to_change[k]
+        entry_to_change[keys[-1]] = yaml.load(value)
+
+    ### other ###
+    if args.semantic_config_file is not None:
+        sys.path.insert(0, os.path.join(os.environ['ALFWORLD_ROOT'], 'agents'))
+        from config import cfg
+        cfg.merge_from_file(args.semantic_config_file)
+        cfg.GENERAL.save_path = cfg.GENERAL.save_path + sys.argv[0].split("/")[-1] + "_"
+        config['semantic_cfg'] = cfg
+        config["general"]["save_path"] = cfg.GENERAL.save_path
+        config["vision_dagger"]["use_exploration_frame_feats"] = cfg.GENERAL.use_exploration_frame_feats
+    if args.sgg_config_file is not None:
+        sys.path.insert(0, os.environ['GRAPH_RCNN_ROOT'])
+        from lib.config import cfg
+        cfg.merge_from_file(args.sgg_config_file)
+        config['sgg_cfg'] = cfg
+    # print(config)
+
+    return config
+
 if __name__ == '__main__':
     # multiprocessing settings
     mp.set_start_method('spawn')
@@ -262,6 +348,26 @@ if __name__ == '__main__':
     # parser
     parser = argparse.ArgumentParser()
 
+    '''
+    Semantic graph map
+    '''
+    import os
+    import sys
+    sys.path.append(os.path.join(os.environ['ALFRED_ROOT']))
+    sys.path.append(os.path.join(os.environ['ALFRED_ROOT'], 'gen'))
+    sys.path.append(os.path.join(os.environ['ALFRED_ROOT'], 'models'))
+    sys.path.append(os.path.join(os.environ['ALFWORLD_ROOT'], 'agents'))
+
+    parser.add_argument("config_file", default="models/config/without_env_base.yaml", help="path to config file")
+    parser.add_argument("--semantic_config_file", default="models/config/mini_moca_graph_softmaxgcn.yaml", help="path to config file")
+    parser.add_argument("--sgg_config_file", default=None, help="path to config file $GRAPH_RCNN_ROOT/configs/attribute.yaml")
+    parser.add_argument('--gpu_id', help='use gpu 0/1', default=1, type=int)
+    parser.add_argument("-p", "--params", nargs="+", metavar="my.setting=value", default=[],
+                        help="override params of the config file,"
+                             " e.g. -p 'training.gamma=0.95'")
+    '''
+    Semantic graph map
+    '''
     # settings
     parser.add_argument('--splits', type=str, default="data/splits/oct21.json")
     parser.add_argument('--data', type=str, default="data/json_feat_2.1.0")
@@ -271,8 +377,14 @@ if __name__ == '__main__':
     parser.add_argument('--gpu', dest='gpu', action='store_true', default=True)
     parser.add_argument('--num_threads', type=int, default=4)
 
-    # parse arguments
+
     args = parser.parse_args()
+
+    config = load_config(args)
+    args.config_file = config
+
+
+    # parse arguments
 
     # fixed settings (DO NOT CHANGE)
     args.max_steps = 1000

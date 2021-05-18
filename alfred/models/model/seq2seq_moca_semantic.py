@@ -381,10 +381,13 @@ class Module(nn.Module):
 
     @classmethod
     def load(cls, fsave):
+    # def load(cls, fsave, sgg_config_file):
         '''
         load pth model from disk
         '''
         save = torch.load(fsave)
+        #
+        # save['args'].config_file['sgg_cfg'] = sgg_config_file
         model = cls(save['args'], save['vocab'])
         model.load_state_dict(save['model'])
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)

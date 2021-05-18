@@ -108,6 +108,8 @@ class SGG:
                 "obj_relations_idx_pairs": detection_pairs[i].get_field("idx_pairs"),
                 "obj_relations_scores": detection_pairs[i].get_field("scores"),
             }
+            if self.SAVE_SGG_RESULT:
+                result["write_img"] = detections[i].write_img
             b_results.append(result)
         return b_results
 
@@ -121,6 +123,7 @@ class SGG:
             ### RuntimeError: expected device cuda:0 but got device cpu
             result = overlay_boxes(result, top_prediction)
             result = overlay_class_names(result, top_prediction, self.SGG_result_ind_to_classes)
+            detections[i].write_img = result
             cv2.imwrite(os.path.join(self.SAVE_SGG_RESULT_PATH, "detection_{}.jpg".format(img_ids)), result)
 
     def _backbone_feat(self, transform_images, GAP_Pooling, targets=None):

@@ -2,7 +2,7 @@ import os
 import cv2
 import torch
 import numpy as np
-import nn.vnn2 as vnn
+import nn.vnn2 as VNN
 import collections
 from torch import nn
 from torch.nn import functional as F
@@ -20,15 +20,15 @@ class Module(seq2seq_im_moca_semantic):
         IMPORTENT_NDOES_FEATURE = self.config['semantic_cfg'].SCENE_GRAPH.EMBED_FEATURE_SIZE
         args_scene_graph = self.config['semantic_cfg'].SCENE_GRAPH
         if self.config['semantic_cfg'].SCENE_GRAPH.MODEL == "hete_gan":
-            decoder = vnn.GANDec
+            decoder = VNN.GANDec
         elif "DECODER" in self.config['semantic_cfg'].GENERAL and self.config['semantic_cfg'].GENERAL.DECODER == "softmax_gcn_Dec":
-            decoder = vnn.softmax_gcn_Dec
+            decoder = VNN.softmax_gcn_Dec
         elif self.config['semantic_cfg'].GENERAL.DECODER == "PRIORI":
-            decoder = vnn.PrioriDec
+            decoder = VNN.PrioriDec
         elif self.config['semantic_cfg'].GENERAL.DECODER == "FeatWithoutFrame":
-            decoder = vnn.FeatWithoutFrame
+            decoder = VNN.FeatWithoutFrame
         elif self.config['semantic_cfg'].GENERAL.DECODER == "FeatWithoutFrameV2":
-            decoder = vnn.FeatWithoutFrameV2
+            decoder = VNN.FeatWithoutFrameV2
         elif self.config['semantic_cfg'].GENERAL.DECODER == "Mini_MOCA_GRAPH":
             import nn.vnn5 as vnn
             decoder = vnn.Mini_MOCA_GRAPH

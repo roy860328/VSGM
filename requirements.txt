@@ -13,4 +13,5 @@ tensorboardX==1.8
 ai2thor==2.1.0
 gensim
 open3d
+matplotlib==3.4
 quaternion (conda)

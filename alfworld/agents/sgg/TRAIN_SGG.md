@@ -181,7 +181,10 @@ Change $GRAPH_RCNN_ROOT/configs/attribute.yaml parameter
 MODEL.SAVE_SGG_RESULT_PATH (測試產生visualize的照片儲存位置)
 ```
 ```
-CUDA_VISIBLE_DEVICES=1 python main.py --config-file configs/attribute.yaml --inference --resume 123456 --visualize --instance 10
+CUDA_VISIBLE_DEVICES=1 python main.py --config-file configs/attribute.yaml --inference --resume 179999 --visualize --instance 10
+# store image in 
+        visualize_folder = "visualize"
+        if not os.path.exists(visualize_folder):
 ```
 
 #### CUDA out of memory

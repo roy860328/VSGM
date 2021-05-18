@@ -9,7 +9,7 @@ pip install pytorch-nlp
 pip install imageio
 pip install icecream
 pip install imageio-ffmpeg
-
+pip install adjustText
 from icecream import ic
 ic(1)
 

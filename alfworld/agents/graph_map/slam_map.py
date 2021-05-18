@@ -36,7 +36,7 @@ class SlamMAP(BasicMap):
         self.mapper = self.build_mapper()
         self.reset_map()
         self.figure, self.ax = plt.subplots(
-            1, 2, figsize=(6*16/9, 6),
+            3, 1, figsize=(4, 6*16/9),
             facecolor="whitesmoke",
             num="Thread 0")
         self.net_map_embedding = self._create_map_embedding_model()
@@ -200,7 +200,7 @@ class SlamMAP(BasicMap):
             y = int(last_start[1] + (start_gt[1] - last_start[1]) * (i+1) / steps)
             self.visited_gt[x, y] = 1
 
-    def visualize_graph_map(self, depth_image):
+    def visualize_graph_map(self, rgb_img, depth_image):
         self._get_short_term_goal()
         dump_dir = "./slam_dump/"
         ep_dir = '{}/{}/'.format(
@@ -222,7 +222,7 @@ class SlamMAP(BasicMap):
             self.map*self.explored_map)
         vis_grid = np.flipud(vis_grid)
         vu.visualize(
-            self.figure, self.ax, depth_image, vis_grid[:, :, ::-1],
+            self.figure, self.ax, rgb_img, depth_image, vis_grid[:, :, ::-1],
             (start_x_gt, start_y_gt, start_o_gt),
             (start_x_gt, start_y_gt, start_o_gt),
             dump_dir, self.count_episode, self.timestep,
@@ -237,6 +237,7 @@ def main():
     from agents.sgg import alfred_data_format
     from config import cfg as _C
     if sys.platform == "win32":
+        root = r"D:\cvml_project\projections\inverse_projection\data\d2\trial_T20190909_075955_678702\\"
         root = r"D:\cvml_project\projections\inverse_projection\data\d2\trial_T20190909_100908_040512\\"
         semantic_config_file = r"D:\alfred\alfred\models\config\sgg_without_oracle.yaml"
     else:
@@ -245,6 +246,12 @@ def main():
     def win():
         nonlocal _C
         config = _C
+        config.SLAM_MAP.map_resolution = 5
+        config.SLAM_MAP.map_size_cm = 2400
+        config.SLAM_MAP.map_size_cm = 800
+        config.SLAM_MAP.agent_max_z = 200
+        config.SLAM_MAP.vision_range = 64
+        # config.SLAM_MAP.vision_range = 128
         alfred_dataset = alfred_data_format.AlfredDataset(config)
         grap_map = SlamMAP(
             config,
@@ -253,23 +260,19 @@ def main():
         with open(traj_data_path, 'r') as f:
             traj_data = json.load(f)
         frames_depth = test_load_img(os.path.join(root, 'depth_images'), traj_data["images"], None).view(-1, 300, 300, 3)
+        frames_rgb = test_load_img(os.path.join(root, 'raw_images'), traj_data["images"], None, type_image=".jpg").view(-1, 300, 300, 3)
         agent_meta_data = test_load_meta_data(root, traj_data["images"])
         for i in range(len(frames_depth)):
             depth_image = frames_depth[i]
+            rgb_img = frames_rgb[i]
             agent_meta = agent_meta_data['agent_sgg_meta_data'][i]
-            img, target, idx, rgb_img = alfred_dataset[i]
-            bbox = target.bbox
-            bbox[bbox>=300] = 299
             # import pdb; pdb.set_trace()
-            target = {
-                "bbox": bbox,
-                "labels": target.get_field("labels"),
-            }
+            target = None
             feature = grap_map.update_map(
                 np.array(depth_image),
                 agent_meta,
                 target)
-            grap_map.visualize_graph_map(depth_image)
+            grap_map.visualize_graph_map(rgb_img, depth_image)
 
         grap_map.reset_map()
 

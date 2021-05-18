@@ -66,32 +66,36 @@ class SemanticGraphImplement(torch.nn.Module):
                 self.cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE,
                 device=device,
                 )
-            if "SLAM_MAP" in self.cfg_semantic and self.cfg_semantic.SLAM_MAP.USE_SLAM_MAP:
-                graph_map = SlamMAP(
-                    self.cfg_semantic,
-                    device=device,
-                    )
-            else:
-                graph_map = GraphMap(
-                    self.cfg_semantic,
-                    scene_graph.priori_features,
-                    self.cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE,
-                    device=device,
-                    object_classes_index_to_name=scene_graph.object_classes_index_to_name,
-                    )
             self.scene_graphs.append(scene_graph)
-            self.graph_maps.append(graph_map)
+            if "GRAPH_MAP" in self.cfg_semantic:
+                if "SLAM_MAP" in self.cfg_semantic and self.cfg_semantic.SLAM_MAP.USE_SLAM_MAP:
+                    graph_map = SlamMAP(
+                        self.cfg_semantic,
+                        device=device,
+                        )
+                else:
+                    graph_map = GraphMap(
+                        self.cfg_semantic,
+                        scene_graph.priori_features,
+                        self.cfg_semantic.SCENE_GRAPH.NODE_INPUT_RGB_FEATURE_SIZE,
+                        device=device,
+                        object_classes_index_to_name=scene_graph.object_classes_index_to_name,
+                        )
+                self.graph_maps.append(graph_map)
         # initialize model
-        if not self.isORACLE:
+        # if not self.isORACLE:
+        if not self.isORACLE or ("FEAT_NAME" in self.cfg_semantic.GENERAL and self.cfg_semantic.GENERAL.FEAT_NAME == "feat_sgg_depth_instance_test.pt"):
             self.cfg_sgg = config['sgg_cfg']
+            # gpu = self.cfg_semantic.SGG.GPU
+            gpu = self.cfg_semantic.SGG.GPU if "SGG" in self.cfg_semantic else 0
             self.detector = sgg.load_pretrained_model(
                 self.cfg_sgg,
                 self.trans_MetaData.transforms,
                 self.trans_MetaData.SGG_result_ind_to_classes,
-                "cuda:%d" % self.cfg_semantic.SGG.GPU,
+                "cuda:%d" % gpu,
                 )
             self.detector.eval()
-            self.detector.to(device="cuda:%d" % self.cfg_semantic.SGG.GPU)
+            self.detector.to(device="cuda:%d" % gpu)
         self.use_gpu = config['general']['use_cuda']
 
     def reset_all_scene_graph(self):
@@ -155,7 +159,7 @@ class SemanticGraphImplement(torch.nn.Module):
             "labels": sgg_results[0]["labels"],
         }
         graph_map.update_map(
-            np.array(depth_image.cpu().view(300, 300, 3)),
+            np.array(depth_image.cpu().view(300, 300, 3)).astype(float),
             agent_meta,
             target)
 

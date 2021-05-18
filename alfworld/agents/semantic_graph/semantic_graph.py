@@ -279,15 +279,15 @@ class SceneGraph(object):
         self.isORACLE = cfg.SCENE_GRAPH.ORACLE
         self.GPU = cfg.SCENE_GRAPH.GPU
         self.GRAPH_RESULT_PATH = cfg.SCENE_GRAPH.GRAPH_RESULT_PATH
-        self.RELATION_MODE = cfg.SCENE_GRAPH.RELATION_MODE
-        self.ANGLE_OF_VIEWS = cfg.SCENE_GRAPH.ANGLE_OF_VIEWS
+        self.RELATION_MODE = cfg.SCENE_GRAPH.RELATION_MODE if "RELATION_MODE" in cfg.SCENE_GRAPH else 0.7
+        self.ANGLE_OF_VIEWS = cfg.SCENE_GRAPH.ANGLE_OF_VIEWS if "ANGLE_OF_VIEWS" in cfg.SCENE_GRAPH else False
         '''
         # SGG vision
         '''
         self.SAME_VISION_FEATURE_THRESHOLD = cfg.SGG.SAME_VISION_FEATURE_THRESHOLD\
-            if "SAME_VISION_FEATURE_THRESHOLD" in cfg.SGG else cfg.SCENE_GRAPH.SAME_VISION_FEATURE_THRESHOLD
+            if "SGG" in cfg and "SAME_VISION_FEATURE_THRESHOLD" in cfg.SGG else cfg.SCENE_GRAPH.SAME_VISION_FEATURE_THRESHOLD
         self.SEARCH_EXISTING_NODE_METHOD = cfg.SGG.SEARCH_EXISTING_NODE_METHOD\
-            if "SEARCH_EXISTING_NODE_METHOD" in cfg.SGG else "BASIC"
+            if "SGG" in cfg and "SEARCH_EXISTING_NODE_METHOD" in cfg.SGG else "BASIC"
         # object class name
         self.object_classes_index_to_name = object_classes_index_to_name
 
@@ -443,7 +443,7 @@ class SceneGraph(object):
             for i, nodes_index in enumerate(dict_ANALYZE_GRAPH["sort_nodes_index"]):
                 obj_cls = graph.list_node_obj_cls[nodes_index]
                 obj_name = self.object_classes_index_to_name[obj_cls]
-                score = np.round(dict_ANALYZE_GRAPH["score"][i], decimals=2)
+                score = np.round(dict_ANALYZE_GRAPH["score"][i], decimals=5)
                 dict_objectIds_to_score[obj_name] = score
         except Exception as e:
             pass
