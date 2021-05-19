@@ -9,17 +9,21 @@ cd lib/scene_parser/rcnn
 python setup.py build develop
 ```
 
-You have to change $GRAPH_RCNN_ROOT/configs/attribute.yaml parameters
+## Notice
+1. You have to change $GRAPH_RCNN_ROOT/configs/attribute.yaml parameters
 ROI_BOX_HEAD.NUM_CLASSES : len(gen.constants.OBJECTS_DETECTOR) + 1 (background)
 ROI_RELATION_HEAD.NUM_CLASSES : 1 (if object has parentReceptacle) + 1 (background) + 2 (Assertion t >= 0 && t < n_classes failed, https://github.com/facebookresearch/maskrcnn-benchmark/pull/1214)
 ROI_ATTRIBUTE_HEAD.NUM_ATTRIBUTES : ? (visible, isToggled ...)
 
-SGG train transformers would .convert("RGB")/255
+2. SGG train transformers would .convert("RGB")/255
 
+3.
+self.config['general']['model']['block_hidden_dim'] = 2 x args.dhid
+graph_embed_model -> bert_hidden_size = config['general']['model']['block_hidden_dim']
 
 ## 1.preload ALFWORLD images, masks, meta, sgg_meta
-/home/alfworld/agents/sgg/alfred_data_format.py
-/home/alfworld/agents/sgg/parser_scene.py
+$ALFWORLD_ROOT/agents/sgg/alfred_data_format.py
+$ALFWORLD_ROOT/agents/sgg/parser_scene.py
 
 
 ## 2.generate images, masks, meta, sgg_meta
@@ -136,7 +140,7 @@ bathroom 5257 bedroom 6060 kitchen 41775 living 6331
 ### Check alfred detector data is ok 
 $GRAPH_RCNN_ROOT/configs/attribute.yaml
 '''
-cd /home/alfworld/agents
+cd $ALFWORLD_ROOT/agents
 python sgg/alfred_data_format.py config/test_base.yaml --semantic_config_file config/semantic_graph.yaml --sgg_config_file $GRAPH_RCNN_ROOT/configs/attribute.yaml
 
 // windows
@@ -145,7 +149,7 @@ python sgg/alfred_data_format.py config/test_base.yaml --semantic_config_file co
 
 ### Check oracle scene graph is ok
 '''
-cd /home/alfworld/agents
+cd $ALFWORLD_ROOT/agents
 python semantic_graph/semantic_graph.py config/semantic_graph_base.yaml --semantic_config_file config/semantic_graph.yaml
 '''
 

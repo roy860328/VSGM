@@ -266,8 +266,8 @@ class AlfredDataset(Dataset):
         target = target.clip_to_image(remove_empty=False)
 
         # sgg graph training
-        return img, target, idx, Image.open(self.imgs[idx]).convert("RGB")
         return img, target, idx
+        return img, target, idx, Image.open(self.imgs[idx]).convert("RGB")
 
     def get_img_info(self, img_id):
         # w, h = self.im_sizes[img_id, :]
