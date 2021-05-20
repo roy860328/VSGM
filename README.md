@@ -87,12 +87,11 @@ python models/eval_moca/eval_semantic.py models/config/without_env_base.yaml --m
 ```
 Semantic Graph •* + SLAM
 ```
-
+python models/eval_moca/eval_semantic.py models/config/without_env_base.yaml --model_path exp/graph_map_slam_04-05-2021_09-18-22/best_seen.pth --sgg_config_file $GRAPH_RCNN_ROOT/configs/attribute.yaml --model seq2seq_im_moca_graph_map --data data/full_2.1.0/ --eval_split tests_seen --gpu --gpu_id 1 --task_types 1 --subgoals all
 ```
 Semantic Graph •*
 ```
 CUDA_VISIBLE_DEVICES=1 python models/eval_moca/eval_semantic.py models/config/without_env_base.yaml --model_path exp/sgg_feat_mini_moca_test_mask_depth_graph_v5_22-02-2021_15-43-23/best_seen.pth --model seq2seq_im_moca_mini_mask_depth --data data/full_2.1.0/ --eval_split valid_seen --gpu  --task_types 1 --subgoals all --sgg_config_file $GRAPH_RCNN_ROOT/configs/attribute.yaml
-
 ```
 Oracle Semantic Graph •
 ```
@@ -138,15 +137,16 @@ Please check `Evaluation code`
 ## Other
 
 ### Scene Graph Generation
-Read $ALFWORLD_ROOT/agents/sgg/TRAIN_SGG.md
-Read $GRAPH_RCNN_ROOT/README.md
+Read `$ALFWORLD_ROOT/agents/sgg/TRAIN_SGG.md`
+Read `$GRAPH_RCNN_ROOT/README.md`
 
 ### Semantic Graph & Pytorch-Geometric
-Read $ALFWORLD_ROOT/agents/semantic_graph/README.md
+Read `$ALFWORLD_ROOT/agents/semantic_graph/README.md`
 
 ### Spatial Semantic Map
-Read $ALFWORLD_ROOT/agents/graph_map/README.md
+Read `$ALFWORLD_ROOT/agents/graph_map/README.md`
 
 ## Citation
 If you find VSGM useful in your research work, please consider citing:
+	Coming Soon
 	

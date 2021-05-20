@@ -136,7 +136,7 @@ bathroom 5257 bedroom 6060 kitchen 41775 living 6331
 },
 ```
 
-## 3.Test
+## 3.Test dataset
 ### Check alfred detector data is ok 
 $GRAPH_RCNN_ROOT/configs/attribute.yaml
 '''
