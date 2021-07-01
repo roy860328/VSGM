@@ -124,7 +124,7 @@ class SGG:
             result = overlay_boxes(result, top_prediction)
             result = overlay_class_names(result, top_prediction, self.SGG_result_ind_to_classes)
             detections[i].write_img = result
-            cv2.imwrite(os.path.join(self.SAVE_SGG_RESULT_PATH, "detection_{}.jpg".format(img_ids)), result)
+            cv2.imwrite(os.path.join(self.SAVE_SGG_RESULT_PATH, "detection_{}.jpg".format(img_ids)), result[:,:,::-1])
 
     def _backbone_feat(self, transform_images, GAP_Pooling, targets=None):
         # torch.Size([32, 1024, 19, 19])

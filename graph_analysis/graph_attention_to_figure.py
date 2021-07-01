@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
 import random
-global_ = {'Shelf':0.44,'Cabinet':0.06,'CounterTop':0.12}
-current_ = {'Cabinet':0.12,'CounterTop':0.22}
-priori_ = {'Mug':0.02,'Cup':0.02,'WineBottle':0.02,'Laptop':0.02,'Bowl':0.02,'Box':0.02,'Kettle':0.01,'Pot':0.01,'Fridge':0.01,'Bed':0.01}
+global_ = {'KeyChain':0.19,'CreditCard':0.09,'SideTable':0.08,'Sofa':0.07,'DiningTable':0.07}
+current_ = {'CreditCard':0.36,'RemoteControl':0.35,'Laptop':0.29,'Sofa':0.0,'ArmChair':0.0}
+priori_ = {'Safe':0.01,'LaundryHamperLid':0.01,'LaundryHamper':0.01,'ShowerDoor':0.01,'WateringCan':0.01,'BaseballBat':0.01,'PaintingHanger':0.01}
 
 def method1():
     # https://stackoverflow.com/questions/28418988/how-to-make-a-histogram-from-a-list-of-strings-in-python

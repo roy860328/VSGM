@@ -28,7 +28,7 @@ class Module(seq2seq_im_moca_semantic):
             decoder = vnn.MOCAGRAPHMAP
         else:
             print("self.config['semantic_cfg'].GENERAL.DECODER not found\n", self.config['semantic_cfg'].GENERAL.DECODER)
-            return
+            raise
         # else:
         #     decoder = vnn.ImportentNodes
         self.dec = decoder(self.emb_action_low, args.dframe, 2*args.dhid,
@@ -73,6 +73,8 @@ class Module(seq2seq_im_moca_semantic):
         e_t = self.embed_action(prev_action) if prev_action is not None else self.r_state['e_t']
 
         feat["frames_instance"] = torch.tensor(np.array(feat["frame_instance"])).unsqueeze(0).unsqueeze(0)
+        if "RGB_FEAT" in self.config['semantic_cfg'].GENERAL and self.config['semantic_cfg'].GENERAL.RGB_FEAT:
+            feat["frames_instance"] = torch.tensor(np.array(feat["frames_rgb"])).unsqueeze(0).unsqueeze(0)
         feat["frames_depth"] = torch.tensor(np.array(feat["frame_depth"])).unsqueeze(0).unsqueeze(0)
         '''
         semantic graph
@@ -217,6 +219,8 @@ class Module(seq2seq_im_moca_semantic):
                 feat['all_meta_datas'].append(all_meta_data)  # add stop frame
 
                 images = self._load_img(os.path.join(root, 'instance_masks'), ex["images"], name_pt="feat_instance_tranform.pt", type_image=".png")
+                if "RGB_FEAT" in self.config['semantic_cfg'].GENERAL and self.config['semantic_cfg'].GENERAL.RGB_FEAT:
+                    images = self._load_img(os.path.join(root, 'raw_images'), ex["images"], name_pt="feat_conv.pt", type_image=".jpg")
                 images_depth = self._load_img(os.path.join(root, 'depth_images'), ex["images"], name_pt="feat_depth_tranform.pt", type_image=".png")
 
                 feat['frames_instance'].append(images)  # add stop frame

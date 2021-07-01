@@ -20,6 +20,12 @@ def rgb():
     return SAVE_PATH, OBJECT_RGB_FEATURE
 
 
+def rgb_2048():
+    SAVE_PATH = os.path.join(os.getcwd(), "semantic_graph/rgb_feature_2048")
+    OBJECT_RGB_FEATURE = "object_rgb_feature_2048.json"
+    return SAVE_PATH, OBJECT_RGB_FEATURE
+
+
 def mask():
     SAVE_PATH = os.path.join(os.getcwd(), "semantic_graph/mask_feature")
     OBJECT_RGB_FEATURE = "object_mask_feature.json"
@@ -41,6 +47,7 @@ SAVE_PATH, OBJECT_RGB_FEATURE = rgb()
 SAVE_PATH, OBJECT_RGB_FEATURE = mask()
 SAVE_PATH, OBJECT_RGB_FEATURE = sgg_mask()
 SAVE_PATH, OBJECT_RGB_FEATURE = sgg_mask_2048()
+SAVE_PATH, OBJECT_RGB_FEATURE = rgb_2048()
 OBJECT_ATTRIBUTE = "object_attribute.json"
 
 

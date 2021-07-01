@@ -47,6 +47,7 @@ _C.GENERAL.use_exploration_frame_feats = False
 _C.GENERAL.save_path = "."
 _C.GENERAL.DECODER = "DecomposeDec"
 _C.GENERAL.FEAT_NAME = "feat_conv.pt"
+_C.GENERAL.RGB_FEAT = False
 
 #############
 ###

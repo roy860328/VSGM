@@ -239,6 +239,7 @@ def main():
     if sys.platform == "win32":
         root = r"D:\cvml_project\projections\inverse_projection\data\d2\trial_T20190909_075955_678702\\"
         root = r"D:\cvml_project\projections\inverse_projection\data\d2\trial_T20190909_100908_040512\\"
+        root = r"D:\meetingppt\alfred\trial_T20190909_043020_330212\\"
         semantic_config_file = r"D:\alfred\alfred\models\config\sgg_without_oracle.yaml"
     else:
         root = r"/home/alfred/data/full_2.1.0/train/pick_and_place_simple-RemoteControl-None-Ottoman-208/trial_T20190909_100908_040512/"

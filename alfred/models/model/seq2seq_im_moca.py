@@ -64,7 +64,7 @@ class Module(Base):
         # paths
         self.root_path = os.getcwd()
         self.feat_pt = 'feat_conv.pt'
-        self.feat_pt = 'feat_third_party_img_and_exploration.pt'
+        # self.feat_pt = 'feat_third_party_img_and_exploration.pt'
 
         # params
         self.max_subgoals = 25
@@ -147,7 +147,8 @@ class Module(Base):
 
                 try:
                     im = torch.load(os.path.join(root, self.feat_pt))
-                    im = im["feat_conv"]
+                    # im = im["feat_conv"]
+                    im = im
                 except Exception as e:
                     print(os.path.join(root, self.feat_pt))
                     raise e

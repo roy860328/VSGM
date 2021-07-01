@@ -263,8 +263,11 @@ class Eval(object):
         return feat
 
     def process_image(cls, feat, resnet, frames, frames_instance, frames_depth):
+        frames_rgb = frames
         frames = Image.fromarray(np.uint8(frames))
         frames = resnet.featurize([frames], batch=1).unsqueeze(0)
+        frames_rgb = Image.fromarray(np.uint8(frames_rgb)).convert("RGB")
+        feat["frames_rgb"] = frames_rgb
         frames_instance = Image.fromarray(np.uint8(frames_instance)).convert("RGB")
         feat["frame_instance"] = frames_instance
         frames_instance = resnet.featurize([frames_instance], batch=1).unsqueeze(0)

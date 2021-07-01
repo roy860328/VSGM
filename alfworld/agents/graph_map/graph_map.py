@@ -100,37 +100,17 @@ class BasicGraphMap(BasicMap):
             if self.object_classes_index_to_name[self.map[i, j, k]] not in legend_color_to_objectId:
                 legend_color_to_objectId[self.object_classes_index_to_name[self.map[i, j, k]]] = \
                     mpatches.Patch(color=colors[self.map[i, j, k]], label=self.object_classes_index_to_name[self.map[i, j, k]])
-        # plt.cla()
-        # plt.gcf().canvas.mpl_connect('key_release_event',
-        #         lambda event: [plt.close() if event.key == 'escape' else None])
-        # plt.scatter(Is, Js, s=70, c=label_color, cmap="Set2")
-        # plt.plot(self.S//2, self.S//2, "ob")
-        # plt.gca().set_xticks(np.arange(0, self.S, 1))
-        # plt.gca().set_yticks(np.arange(0, self.S, 1))
-        # plt.grid(True)
-        # buf = io.BytesIO()
-        # plt.savefig(buf, format='png')
-        # self.buffer_plt.append(buf)
-        # # import pdb; pdb.set_trace()
-        # if KEEP_DISPLAY:
-        #     plt.show()
-        # else:
-        #     plt.pause(1.0)
+        
+        # 2D
+        print("2D map figure")
         plt.cla()
-        plt.clf()
-        plt.close()
         plt.gcf().canvas.mpl_connect('key_release_event',
                 lambda event: [plt.close() if event.key == 'escape' else None])
-        plt.axes(projection='3d').plot3D(self.S//2, self.S//2, self.CLASSES, "ob")
-        # plt.axes(projection='3d').scatter3D(Is, Js, Ks, s=70, c=label_color, cmap="Set2")
-        plt.axes(projection='3d').scatter3D(Is, Js, Ks, s=70, c=label_color, cmap="Set2")
+        plt.scatter(Is, Js, s=70, c=label_color, cmap="Set2")
+        plt.plot(self.S//2, self.S//2, "ob")
         plt.gca().set_xticks(np.arange(0, self.S, 1))
         plt.gca().set_yticks(np.arange(0, self.S, 1))
-        plt.gca().set_zticks(np.arange(0, self.CLASSES, 1))
         plt.grid(True)
-        # legend
-        plt.legend(handles=legend_color_to_objectId.values(), scatterpoints=1, loc='lower center', ncol=5, fontsize=8)
-        # store
         buf = io.BytesIO()
         plt.savefig(buf, format='png')
         self.buffer_plt.append(buf)
@@ -139,15 +119,40 @@ class BasicGraphMap(BasicMap):
             plt.show()
         else:
             plt.pause(1.0)
-        self.figure, self.ax = plt.subplots(
-            3, 1, figsize=(4, 6*16/9),
-            facecolor="whitesmoke",
-            num="Thread 0")
-        ax = self.ax
-        ax[0].imshow(rgb_img/255)
-        ax[1].imshow(depth_img/255)
-        pil_img = Image.open(buf)
-        ax[2].imshow(pil_img)
+
+        # 3D
+        # plt.cla()
+        # plt.clf()
+        # plt.close()
+        # plt.gcf().canvas.mpl_connect('key_release_event',
+        #         lambda event: [plt.close() if event.key == 'escape' else None])
+        # plt.axes(projection='3d').plot3D(self.S//2, self.S//2, self.CLASSES, "ob")
+        # # plt.axes(projection='3d').scatter3D(Is, Js, Ks, s=70, c=label_color, cmap="Set2")
+        # plt.axes(projection='3d').scatter3D(Is, Js, Ks, s=70, c=label_color, cmap="Set2")
+        # plt.gca().set_xticks(np.arange(0, self.S, 1))
+        # plt.gca().set_yticks(np.arange(0, self.S, 1))
+        # plt.gca().set_zticks(np.arange(0, self.CLASSES, 1))
+        # plt.grid(True)
+        # # legend
+        # plt.legend(handles=legend_color_to_objectId.values(), scatterpoints=1, loc='lower center', ncol=5, fontsize=8)
+        # # store
+        # buf = io.BytesIO()
+        # plt.savefig(buf, format='png')
+        # self.buffer_plt.append(buf)
+        # # import pdb; pdb.set_trace()
+        # if KEEP_DISPLAY:
+        #     plt.show()
+        # else:
+        #     plt.pause(1.0)
+        # self.figure, self.ax = plt.subplots(
+        #     3, 1, figsize=(4, 6*16/9),
+        #     facecolor="whitesmoke",
+        #     num="Thread 0")
+        # ax = self.ax
+        # ax[0].imshow(rgb_img/255)
+        # ax[1].imshow(depth_img/255)
+        # pil_img = Image.open(buf)
+        # ax[2].imshow(pil_img)
 
 # 10x10xcfg.GRAPH_MAP.GRAPH_MAP_SIZE_S
 # self.map.activate_nodes = set()
@@ -587,8 +592,9 @@ def main():
         semantic_config_file = r"D:\alfred\alfred\models\config\sgg_without_oracle.yaml"
     else:
         root = r"/home/alfred/data/full_2.1.0/train/pick_two_obj_and_place-ToiletPaper-None-Drawer-423/trial_T20190907_111226_698552/"
-        root = r"/home/alfred/data/full_2.1.0/train/pick_clean_then_place_in_recep-Kettle-None-Cabinet-5/trial_T20190909_043020_330212/"
         root = r"/home/alfred/data/full_2.1.0/train/pick_and_place_simple-RemoteControl-None-Ottoman-208/trial_T20190909_100908_040512/"
+        root = r"/home/alfred/data/full_2.1.0/train/pick_clean_then_place_in_recep-Kettle-None-Cabinet-5/trial_T20190909_043020_330212/"
+        root = r"/home/alfred/data/full_2.1.0/valid_seen/pick_and_place_simple-CreditCard-None-ArmChair-201/trial_T20190908_124340_258012/"
         semantic_config_file = "/home/alfred/models/config/graph_map.yaml"
     def win():
         nonlocal _C
@@ -684,7 +690,27 @@ def main():
             traj_data = json.load(f)
         frames_depth = test_load_img(os.path.join(root, 'depth_images'), traj_data["images"], None).view(-1, 3, 300, 300)
         frames_rgb = test_load_img(os.path.join(root, 'instance_masks'), traj_data["images"], alfred_dataset.trans_meta_data.transforms).view(-1, 3, 300, 300)
+        frames_rgb = test_load_img(os.path.join(root, 'raw_images'), traj_data["images"], alfred_dataset.trans_meta_data.transforms, type_image=".jpg").view(-1, 3, 300, 300)
         agent_meta_data = test_load_meta_data(root, traj_data["images"])
+        # for paper figure
+        # grap_map.S = 30
+        # grap_map.R = 0.05
+        # with open('./graph_map/000000027_a.json', 'r') as f:
+        #     meta_data = json.load(f)
+        # img_depth = Image.open('./graph_map/000000027_d.png').convert("RGB")
+        # img_depth = \
+        #     alfred_dataset.trans_meta_data.transforms(img_depth, None)[0]
+        # img_depth = img_depth.unsqueeze(0).view(-1, 3, 300, 300)
+        # img_rgb = Image.open('./graph_map/000000027_r.png').convert("RGB")
+        # img_rgb = \
+        #     alfred_dataset.trans_meta_data.transforms(img_rgb, None)[0]
+        # img_rgb = img_rgb.unsqueeze(0).view(-1, 3, 300, 300)
+        # frames_depth = img_depth
+        # frames_rgb = img_rgb
+        # agent_meta_data = {'agent_sgg_meta_data': [meta_data]}
+        # # SAVE_SGG_RESULT_PATH: "/home/alfworld/sgg_detector/"
+        # sgg_model.SAVE_SGG_RESULT = True
+        ###
         for i in range(len(frames_depth)):
         # for i in range(3):
             depth_image = frames_depth[i]
