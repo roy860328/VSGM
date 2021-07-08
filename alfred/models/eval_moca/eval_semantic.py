@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use('Agg')
 import os
 import sys
 sys.path.append(os.path.join(os.environ['ALFRED_ROOT']))

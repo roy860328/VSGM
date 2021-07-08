@@ -102,7 +102,7 @@ class BasicGraphMap(BasicMap):
                     mpatches.Patch(color=colors[self.map[i, j, k]], label=self.object_classes_index_to_name[self.map[i, j, k]])
         
         # 2D
-        print("2D map figure")
+        # print("2D map figure")
         plt.cla()
         plt.gcf().canvas.mpl_connect('key_release_event',
                 lambda event: [plt.close() if event.key == 'escape' else None])
@@ -118,7 +118,8 @@ class BasicGraphMap(BasicMap):
         if KEEP_DISPLAY:
             plt.show()
         else:
-            plt.pause(1.0)
+            pass
+            # plt.pause(1.0)
 
         # 3D
         # plt.cla()

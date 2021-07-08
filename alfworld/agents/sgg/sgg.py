@@ -24,11 +24,11 @@ class SGG:
         if self.SAVE_SGG_RESULT and not os.path.exists(self.SAVE_SGG_RESULT_PATH):
             os.mkdir(self.SAVE_SGG_RESULT_PATH)
 
-    def __call__(self, imgs):
-        b_results = self.predict(imgs)
+    def __call__(self, imgs, ret_detection_img=False):
+        b_results = self.predict(imgs, ret_detection_img)
         return b_results
 
-    def predict(self, imgs, img_ids=0):
+    def predict(self, imgs, img_ids=0, ret_detection_img=False):
         '''
             imgs: torch.Size([n, 3, 800, 800])
 
@@ -81,6 +81,8 @@ class SGG:
             if self.SAVE_SGG_RESULT:
                 self._save_detect_result(imgs, detections, img_ids)
             b_results = self._parser_sgg_result(detections_backbone, detections, detection_pairs, detection_attrs)
+            if ret_detection_img:
+                return self._write_detection(imgs, detections, img_ids)
         return b_results
 
     def _parser_sgg_result(self, detections_backbone, detections, detection_pairs, detection_attrs):
@@ -112,6 +114,18 @@ class SGG:
                 result["write_img"] = detections[i].write_img
             b_results.append(result)
         return b_results
+
+    def _write_detection(self, imgs, detections, img_ids=0):
+        # graph-rcnn visualize_detection
+        for i, prediction in enumerate(detections):
+            top_prediction = select_top_predictions(prediction)
+            img = F.to_pil_image(imgs[i].contiguous().cpu())
+            img = np.array(img)
+            result = img.copy()
+            ### RuntimeError: expected device cuda:0 but got device cpu
+            result = overlay_boxes(result, top_prediction)
+            result = overlay_class_names(result, top_prediction, self.SGG_result_ind_to_classes)
+            return result
 
     def _save_detect_result(self, imgs, detections, img_ids=0):
         # graph-rcnn visualize_detection

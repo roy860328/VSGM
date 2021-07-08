@@ -67,6 +67,7 @@ class EvalTask(Eval):
     def evaluate(cls, env, model, r_idx, resnet, traj_data, args, lock, successes, failures, results):
         # reset model
         model.reset()
+        eval_debug.set_graph_map(model)
 
         # setup scene
         reward_type = 'dense'
@@ -192,6 +193,8 @@ class EvalTask(Eval):
                 current_ground_action = traj_data['plan']['low_actions'][t]
                 current_high_descs = current_ground_action['high_idx'] if current_ground_action['high_idx'] > current_high_descs else current_high_descs
             eval_debug.add_data(t, curr_image, curr_depth_image, dict_action, step_instr[current_high_descs], err)
+            eval_debug.row2_img_detection_graph_graphmap(
+                model, curr_image, curr_depth_image, feat['all_meta_datas'][0]['sgg_meta_data']['agent_meta_data'])
 
             if action == cls.STOP_TOKEN:
                 print("\tpredicted STOP")
