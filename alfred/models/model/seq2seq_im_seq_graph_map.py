@@ -14,6 +14,7 @@ classes = [0] + constants.OBJECTS + ['AppleSliced', 'ShowerCurtain', 'TomatoSlic
 from PIL import Image
 import json
 import glob
+from gen.utils.image_util import decompress_mask
 
 
 class Module(seq2seq_im_moca_semantic):
@@ -219,6 +220,7 @@ class Module(seq2seq_im_moca_semantic):
                             label = a['api_action']['objectId'].split('|')
                         indices.append(classes.index(label[4].split('_')[0] if len(label) >= 5 else label[0]))
                     feat['action_low_mask_label'].append(indices)
+                    feat['action_low_mask'].append([self.decompress_mask(a['mask']) for a in ex['num']['action_low'] if a['mask'] is not None])
 
                 # low-level valid interact
                 feat['action_low_valid_interact'].append([a['valid_interact'] for a in ex['num']['action_low']])
@@ -270,6 +272,14 @@ class Module(seq2seq_im_moca_semantic):
 
         return feat
 
+    def decompress_mask(self, compressed_mask):
+        '''
+        decompress mask from json files
+        '''
+        mask = np.array(decompress_mask(compressed_mask))
+        mask = np.expand_dims(mask, axis=0)
+        return mask
+
     def forward(self, feat, max_decode=300):
         cont_lang, enc_lang = self.encode_lang(feat)
         state_0 = cont_lang, torch.zeros_like(cont_lang)
@@ -305,15 +315,47 @@ class Module(seq2seq_im_moca_semantic):
         '''
         loss function for Seq2Seq agent
         '''
-        # if self.config['semantic_cfg'].GENERAL.DECODER == "MOCAMaskDepthGraph_V5":
-        #     l_alow = feat['action_low'].view(-1)
-        #     print("l_alow ", l_alow)
-        #     print("out_action_low ", out['out_action_low'].view(-1, len(self.vocab['action_low'])))
-        #     print("out_action_low_mask ", out['out_action_low_mask'])
-        #     print("frames_depth_conv ", feat['frames_depth_conv'].shape)
-        #     print("frames_instance_conv ", feat['frames_instance_conv'].shape)
-        #     print("device ", feat['frames_instance_conv'].device)
-        return super().compute_loss(out, batch, feat)
+        losses = dict()
+
+        # GT and predictions
+        p_alow = out['out_action_low'].view(-1, len(self.vocab['action_low']))
+        l_alow = feat['action_low'].view(-1)
+        p_alow_mask = out['out_action_low_mask']
+        valid = feat['action_low_valid_interact']
+
+        # action loss
+        pad_valid = (l_alow != self.pad)
+        alow_loss = F.cross_entropy(p_alow, l_alow, reduction='none')
+        alow_loss *= pad_valid.float()
+        alow_loss = alow_loss.mean()
+        losses['action_low'] = alow_loss * self.args.action_loss_wt
+
+        # mask loss
+        valid_idxs = valid.view(-1).nonzero().view(-1)
+        flat_p_alow_mask = p_alow_mask.view(p_alow_mask.shape[0]*p_alow_mask.shape[1], *p_alow_mask.shape[2:])[valid_idxs]
+        flat_alow_mask = torch.cat(feat['action_low_mask'], dim=0)
+        alow_mask_loss = self.weighted_mask_loss(flat_p_alow_mask, flat_alow_mask)
+        losses['action_low_mask'] = alow_mask_loss * self.args.mask_loss_wt
+
+        # subgoal completion loss
+        if self.args.subgoal_aux_loss_wt > 0:
+            p_subgoal = feat['out_subgoal'].squeeze(2)
+            l_subgoal = feat['subgoals_completed']
+            sg_loss = self.mse_loss(p_subgoal, l_subgoal)
+            sg_loss = sg_loss.view(-1) * pad_valid.float()
+            subgoal_loss = sg_loss.mean()
+            losses['subgoal_aux'] = self.args.subgoal_aux_loss_wt * subgoal_loss
+
+        # progress monitoring loss
+        if self.args.pm_aux_loss_wt > 0:
+            p_progress = feat['out_progress'].squeeze(2)
+            l_progress = feat['subgoal_progress']
+            pg_loss = self.mse_loss(p_progress, l_progress)
+            pg_loss = pg_loss.view(-1) * pad_valid.float()
+            progress_loss = pg_loss.mean()
+            losses['progress_aux'] = self.args.pm_aux_loss_wt * progress_loss
+
+        return losses
 
     def _load_img(self, path, list_img_traj, name_pt=None, type_image=".png"):
         path_pt = os.path.join(path, name_pt)

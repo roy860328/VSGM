@@ -95,7 +95,7 @@ class MaskDecoder(nn.Module):
         x = F.relu(self.bn1(x))
 
         x = self.dconv1(x)
-        x = F.interpolate(x, size=(self.pframe, self.pframe), mode='bilinear')
+        x = F.interpolate(x, size=(self.pframe, self.pframe), mode='nearest')
 
         return x
 
@@ -496,41 +496,35 @@ class SEQGRAPHMAP(nn.Module):
         self.semantic_graph_implement = semantic_graph_implement
         self.IMPORTENT_NDOES_FEATURE = IMPORTENT_NDOES_FEATURE
 
+
         self.emb = emb
         self.pframe = pframe
         self.dhid = dhid
-        self.cell_goal = nn.LSTMCell(dhid+dframe+demb+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE, dhid)
-        self.cell_instr = nn.LSTMCell(dhid+dframe+demb+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE, dhid)
-        print("self.cell_instr: ", dhid+dframe+demb)
+        # (input[i], (hx, cx))
+        self.cell = nn.LSTMCell(dhid+dframe+demb+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE, dhid)
         self.attn = DotAttn()
         self.input_dropout = nn.Dropout(input_dropout)
         self.attn_dropout = nn.Dropout(attn_dropout)
         self.hstate_dropout = nn.Dropout(hstate_dropout)
         self.actor_dropout = nn.Dropout(actor_dropout)
-        self.vis_dropout = nn.Dropout(0.3)
         self.go = nn.Parameter(torch.Tensor(demb))
-        self.actor = nn.Linear(dhid+dhid+dframe+demb, demb)
-        print("self.actor: ", dhid+dhid+dframe+demb)
-        self.mask_dec = nn.Sequential(
-            nn.Linear(dhid, dhid//2), nn.ReLU(),
-            nn.Linear(dhid//2, 119)
-        )
+        self.actor = nn.Linear(dhid+dhid+dframe+demb+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE, demb)
+        self.mask_dec = MaskDecoder(dhid=dhid+dhid+dframe+demb+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE, pframe=self.pframe)
         self.teacher_forcing = teacher_forcing
-        self.h_tm1_fc_goal = nn.Linear(dhid, dhid)
-        self.h_tm1_fc_instr = nn.Linear(dhid, dhid)
+        self.h_tm1_fc = nn.Linear(dhid, dhid)
 
-        self.subgoal = nn.Linear(dhid+dhid+dframe+demb, 1)
-        self.progress = nn.Linear(dhid+dhid+dframe+demb, 1)
+        self.subgoal = nn.Linear(dhid+dhid+dframe+demb+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE, 1)
+        self.progress = nn.Linear(dhid+dhid+dframe+demb+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE+IMPORTENT_NDOES_FEATURE, 1)
 
         nn.init.uniform_(self.go, -0.1, 0.1)
+        self.gpu_id = gpu_id
+        self.vis_dropout = nn.Dropout(0.3)
 
         self.scale_dot_attn = ScaledDotAttn(dhid, 128, dhid, 128)
         dframe_channel = 1024
         self.dynamic_conv = DynamicConvLayer(dhid=dhid, d_out_hid=dframe_channel)
-
         # 1024*18*18 -> 1024*9*9
         self.conv_pool = torch.nn.MaxPool2d(sgg_pool, stride=sgg_pool)
-        self.gpu_id = gpu_id
 
     '''
     __init__ step
@@ -546,9 +540,46 @@ class SEQGRAPHMAP(nn.Module):
             feat_graph_map):
         for k, v in frames.items():
             frames[k] = self.vis_dropout(v)
-        # previous decoder hidden state (goal, instr decoder)
-        h_tm1_goal = state_tm1_goal[0]
-        h_tm1_instr = state_tm1_instr[0]
+        # previous decoder hidden state
+        h_tm1 = state_tm1[0]
+
+        # encode vision and lang feat
+        # [2, 145, 1024]
+        lang_feat_t = enc # language is encoded once at the start
+
+        # attend over language
+        # import pdb; pdb.set_trace()
+        # concat visual feats, weight lang, and previous action embedding
+        weighted_lang_t, lang_attn_t = self.scale_dot_attn(lang_feat_t, h_tm1)
+        vis_feat_t_instance = self.dynamic_conv(self.conv_pool(frames["frames_instance_conv"]), weighted_lang_t)
+        vis_feat_t_frames_depth = self.dynamic_conv(self.conv_pool(frames["frames_depth_conv"]), weighted_lang_t)
+        inp_t = torch.cat([vis_feat_t_instance, vis_feat_t_frames_depth, \
+                weighted_lang_t, e_t, \
+                feat_global_graph, feat_current_state_graph, feat_priori_graph, feat_graph_map], dim=1)
+        inp_t = self.input_dropout(inp_t)
+
+        # update hidden state
+        state_t = self.cell(inp_t, state_tm1)
+        state_t = [self.hstate_dropout(x) for x in state_t]
+        h_t, c_t = state_t[0], state_t[1]
+
+        # decode action and mask
+        # [4, 5160]
+        cont_t = torch.cat([h_t, inp_t], dim=1)
+        # import pdb; pdb.set_trace()
+        # [4, 100]
+        action_emb_t = self.actor(self.actor_dropout(cont_t))
+        # [4, 15]
+        action_t = action_emb_t.mm(self.emb.weight.t())
+
+        mask_t = self.mask_dec(cont_t)
+
+        # predict subgoals completed and task progress
+        subgoal_t = torch.sigmoid(self.subgoal(cont_t))
+        progress_t = torch.sigmoid(self.progress(cont_t))
+
+        return action_t, mask_t, state_t, lang_attn_t, subgoal_t, progress_t
+
 
         # encode vision and lang feat (goal, instr decoder)
         lang_feat_t_goal = enc_goal # language is encoded once at the start
@@ -601,7 +632,6 @@ class SEQGRAPHMAP(nn.Module):
 
         return action_t, mask_t, state_t, [weighted_lang_t_goal], [weighted_lang_t_instr], subgoal_t, progress_t
 
-        return action_t, mask_t, state_t, lang_attn_t, subgoal_t, progress_t
 
     def forward(self, enc, frames, all_meta_datas, gold=None, max_decode=150, state_0=None):
         max_t = gold.size(1) if self.training else min(max_decode, frames["frames_instance"].shape[1])
@@ -650,8 +680,8 @@ class SEQGRAPHMAP(nn.Module):
                     feat_graph_map,)
             masks.append(mask_t)
             actions.append(action_t)
-            attn_scores_goal.append(attn_score_t_goal[0])
-            attn_scores_instr.append(attn_score_t_instr[0])
+            attn_scores_goal.append(attn_score_t[0])
+            attn_scores_instr.append(attn_score_t[0])
             subgoals.append(subgoal_t)
             progresses.append(progress_t)
 

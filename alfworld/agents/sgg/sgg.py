@@ -24,6 +24,8 @@ class SGG:
         if self.SAVE_SGG_RESULT and not os.path.exists(self.SAVE_SGG_RESULT_PATH):
             os.mkdir(self.SAVE_SGG_RESULT_PATH)
 
+        self.confidence_threshold = 0.7
+
     def __call__(self, imgs, ret_detection_img=False):
         b_results = self.predict(imgs, ret_detection_img)
         return b_results
@@ -92,6 +94,10 @@ class SGG:
                         [752.1789, 542.3512, 792.4908, 584.1647],
                         [  0.0000, 775.8300, 481.3463, 797.7077]])
         features: torch.Size([3, 2048, 1, 1])
+        
+        detections[i].extra_fields['scores']
+        torch.tensor([0.9987, 0.9093, 0.7420, 0.4209, 0.3763, 0.3687, 0.2528, 0.2275, 0.1938,
+                      0.1850, 0.1291, 0.1224, 0.1090, 0.0852, 0.0672, 0.0613, 0.0539])
         '''
         b_results = []
         for i in range(len(detections)):
@@ -99,17 +105,44 @@ class SGG:
             # print(detections[i].get_field("features").shape)
             # torch.Size([16])
             # print(detections[i].get_field("scores").shape)
+            # result = {
+            #     "backbone": detections_backbone[i],
+            #     "bbox": detections[i].bbox,
+            #     # torch.Size([16])
+            #     "labels": detections[i].get_field("labels")+1,
+            #     # torch.Size([16, 2048, 1, 1])
+            #     "features": detections[i].get_field("features"),
+            #     "attribute_logits": detection_attrs[i].get_field("attributes"),
+            #     "obj_relations_idx_pairs": detection_pairs[i].get_field("idx_pairs"),
+            #     "obj_relations_scores": detection_pairs[i].get_field("scores"),
+            # }
+            '''
+            threshold confidence
+            '''
+            scores = detections[i].extra_fields['scores']
+            keep = torch.nonzero(scores > self.confidence_threshold).squeeze(1)
+            keep = len(keep)
+            keep = 2 if keep < 2 else keep
+            num_objects = detections[i].bbox.shape[0]
+            index = [i*(num_objects-1) + j for i in range(keep) for j in range(keep-1)]
+
+            bbox = detections[i].bbox[:keep]
+            labels = detections[i].get_field("labels")[:keep]+1
+            features = detections[i].get_field("features")[:keep]
+            attribute_logits = detection_attrs[i].get_field("attributes")[:keep]
+            obj_relations_idx_pairs = detection_pairs[i].get_field("idx_pairs")[index]
+            obj_relations_scores = detection_pairs[i].get_field("scores")[index]
+            # import pdb;pdb.set_trace()
             result = {
                 "backbone": detections_backbone[i],
-                "bbox": detections[i].bbox,
-                # torch.Size([16])
-                "labels": detections[i].get_field("labels")+1,
-                # torch.Size([16, 2048, 1, 1])
-                "features": detections[i].get_field("features"),
-                "attribute_logits": detection_attrs[i].get_field("attributes"),
-                "obj_relations_idx_pairs": detection_pairs[i].get_field("idx_pairs"),
-                "obj_relations_scores": detection_pairs[i].get_field("scores"),
+                "bbox": bbox,
+                "labels": labels,
+                "features": features,
+                "attribute_logits": attribute_logits,
+                "obj_relations_idx_pairs": obj_relations_idx_pairs,
+                "obj_relations_scores": obj_relations_scores,
             }
+            # end
             if self.SAVE_SGG_RESULT:
                 result["write_img"] = detections[i].write_img
             b_results.append(result)
@@ -118,7 +151,7 @@ class SGG:
     def _write_detection(self, imgs, detections, img_ids=0):
         # graph-rcnn visualize_detection
         for i, prediction in enumerate(detections):
-            top_prediction = select_top_predictions(prediction)
+            top_prediction = select_top_predictions(prediction, confidence_threshold=self.confidence_threshold)
             img = F.to_pil_image(imgs[i].contiguous().cpu())
             img = np.array(img)
             result = img.copy()
@@ -130,7 +163,7 @@ class SGG:
     def _save_detect_result(self, imgs, detections, img_ids=0):
         # graph-rcnn visualize_detection
         for i, prediction in enumerate(detections):
-            top_prediction = select_top_predictions(prediction)
+            top_prediction = select_top_predictions(prediction, confidence_threshold=self.confidence_threshold)
             img = F.to_pil_image(imgs[i].contiguous().cpu())
             img = np.array(img)
             result = img.copy()

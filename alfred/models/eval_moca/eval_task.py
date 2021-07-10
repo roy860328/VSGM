@@ -195,6 +195,8 @@ class EvalTask(Eval):
             eval_debug.add_data(t, curr_image, curr_depth_image, dict_action, step_instr[current_high_descs], err)
             eval_debug.row2_img_detection_graph_graphmap(
                 model, curr_image, curr_depth_image, feat['all_meta_datas'][0]['sgg_meta_data']['agent_meta_data'])
+            # if t > 10:
+            #     break
 
             if action == cls.STOP_TOKEN:
                 print("\tpredicted STOP")

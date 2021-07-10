@@ -91,7 +91,7 @@ class SemanticGraphImplement(torch.nn.Module):
             self.detector = sgg.load_pretrained_model(
                 self.cfg_sgg,
                 self.trans_MetaData.transforms,
-                self.trans_MetaData.SGG_result_ind_to_classes,
+                self.trans_MetaData.SGG_train_object_classes,
                 "cuda:%d" % gpu,
                 )
             self.detector.eval()
