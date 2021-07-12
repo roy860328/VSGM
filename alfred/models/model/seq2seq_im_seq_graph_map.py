@@ -62,22 +62,15 @@ class Module(seq2seq_im_moca_semantic):
         forward the model for a single time-step (used for real-time execution during eval)
         '''
 
-        # encode language features (goal)
-        if self.r_state['cont_lang_goal'] is None and self.r_state['enc_lang_goal'] is None:
-            self.r_state['cont_lang_goal'], self.r_state['enc_lang_goal'] = self.encode_lang(feat)
+        # encode language features
+        if self.r_state['cont_lang'] is None and self.r_state['enc_lang'] is None:
+            self.r_state['cont_lang'], self.r_state['enc_lang'] = self.encode_lang(feat)
 
-        # encode language features (instr)
-        if self.r_state['cont_lang_instr'] is None and self.r_state['enc_lang_instr'] is None:
-            self.r_state['cont_lang_instr'], self.r_state['enc_lang_instr'] = self.encode_lang_instr(feat)
+        # initialize embedding and hidden states
+        if self.r_state['e_t'] is None and self.r_state['state_t'] is None:
+            self.r_state['e_t'] = self.dec.go.repeat(self.r_state['enc_lang'].size(0), 1)
+            self.r_state['state_t'] = self.r_state['cont_lang'], torch.zeros_like(self.r_state['cont_lang'])
 
-        # initialize embedding and hidden states (goal)
-        if self.r_state['state_t_goal'] is None:
-            self.r_state['state_t_goal'] = self.r_state['cont_lang_goal'], torch.zeros_like(self.r_state['cont_lang_goal'])
-
-        # initialize embedding and hidden states (instr)
-        if self.r_state['e_t'] is None and self.r_state['state_t_instr'] is None:
-            self.r_state['e_t'] = self.dec.go.repeat(self.r_state['enc_lang_instr'].size(0), 1)
-            self.r_state['state_t_instr'] = self.r_state['cont_lang_instr'], torch.zeros_like(self.r_state['cont_lang_instr'])
 
         # previous action embedding
         e_t = self.embed_action(prev_action) if prev_action is not None else self.r_state['e_t']
@@ -114,26 +107,21 @@ class Module(seq2seq_im_moca_semantic):
         feat_priori_graph = torch.cat(feat_priori_graph, dim=0)
         feat_graph_map = torch.cat(feat_graph_map, dim=0)
 
-        # decode and save embedding and hidden states
-        out_action_low, out_action_low_mask, state_t_goal, state_t_instr, \
-        lang_attn_t_goal, lang_attn_t_instr, subgoal_t, progress_t = \
+        out_action_low, out_action_low_mask, state_t, attn_score_t, subgoal_t, progress_t = \
             self.dec.step(
-                self.r_state['enc_lang_goal'],
-                self.r_state['enc_lang_instr'],
-                {k: torch.cat(v, dim=0).to(device=self.args.gpu_id) for k, v in frames_conv.items()},
+                self.r_state['enc_lang'],
+                {k: torch.cat(v, dim=0).to(device=self.gpu_id) for k, v in frames_conv.items()},# frames[:, t],
                 e_t,
-                self.r_state['state_t_goal'],
-                self.r_state['state_t_instr'],
+                self.r_state['state_t'],
                 feat_global_graph,
                 feat_current_state_graph,
                 feat_history_changed_nodes_graph,
                 feat_priori_graph,
-                feat_graph_map
-            )
+                feat_graph_map,)
+
 
         # save states
-        self.r_state['state_t_goal'] = state_t_goal
-        self.r_state['state_t_instr'] = state_t_instr
+        self.r_state['state_t'] = state_t
         self.r_state['e_t'] = self.dec.emb(out_action_low.max(1)[1])
 
         assert len(all_meta_datas) == 1, "if not the analyze_graph object ind is error"
@@ -155,7 +143,46 @@ class Module(seq2seq_im_moca_semantic):
         feat['current_state_dict_ANALYZE_GRAPH'] = current_state_dict_ANALYZE_GRAPH
         feat['history_changed_dict_ANALYZE_GRAPH'] = history_changed_dict_ANALYZE_GRAPH
         feat['priori_dict_ANALYZE_GRAPH'] = priori_dict_ANALYZE_GRAPH
+
         return feat
+
+    def extract_preds(self, out, batch, feat, clean_special_tokens=True):
+        '''
+        output processing
+        '''
+        pred = {}
+        for ex, alow, alow_mask in zip(batch, feat['out_action_low'].max(2)[1].tolist(), feat['out_action_low_mask']):
+            # remove padding tokens
+            if self.pad in alow:
+                pad_start_idx = alow.index(self.pad)
+                alow = alow[:pad_start_idx]
+                alow_mask = alow_mask[:pad_start_idx]
+
+            if clean_special_tokens:
+                # remove <<stop>> tokens
+                if self.stop_token in alow:
+                    stop_start_idx = alow.index(self.stop_token)
+                    alow = alow[:stop_start_idx]
+                    alow_mask = alow_mask[:stop_start_idx]
+
+            # index to API actions
+            words = self.vocab['action_low'].index2word(alow)
+
+            # sigmoid preds to binary mask
+            alow_mask = F.sigmoid(alow_mask)
+            p_mask = [(alow_mask[t] > 0.5).cpu().numpy() for t in range(alow_mask.shape[0])]
+
+            task_id_ann = self.get_task_and_ann_id(ex)
+            pred[task_id_ann] = {
+                'action_low': ' '.join(words),
+                'action_low_mask': p_mask,
+                'action_low_mask_label': p_mask,
+                'action_navi_low': ".",
+                'action_operation_low': ".",
+                'action_navi_or_operation': [],
+            }
+
+        return pred
 
     def featurize(self, batch, load_mask=True, load_frames=True):
         '''
