@@ -225,8 +225,8 @@ class EvalSubgoals(Eval):
                     ic(len(classes))
 
                 eval_debug.add_data(t, curr_image, curr_depth_image, dict_action, subgoal_instr, err)
-                eval_debug.row2_img_detection_graph_graphmap(
-                    model, curr_image, curr_depth_image, feat['all_meta_datas'][0]['sgg_meta_data']['agent_meta_data'])
+                # eval_debug.row2_img_detection_graph_graphmap(
+                #     model, curr_image, curr_depth_image, feat['all_meta_datas'][0]['sgg_meta_data']['agent_meta_data'])
 
                 if action == cls.STOP_TOKEN:
                     print("\tpredicted STOP")

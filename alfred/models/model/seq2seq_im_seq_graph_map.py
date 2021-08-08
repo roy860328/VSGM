@@ -5,6 +5,7 @@ import numpy as np
 import nn.vnn5_graph_map as vnn
 import collections
 from torch import nn
+import torch
 from torch.nn import functional as F
 from torch.nn.utils.rnn import pad_sequence, pack_padded_sequence, pad_packed_sequence
 from model.seq2seq_im_moca_semantic import Module as seq2seq_im_moca_semantic
@@ -57,6 +58,17 @@ class Module(seq2seq_im_moca_semantic):
         self.device = torch.device(self.args.gpu_id) if self.args.gpu else torch.device('cpu')
         self.to(self.device)
 
+    def reset(self):
+        '''
+        reset internal states (used for real-time execution during eval)
+        '''
+        self.r_state = {
+            'state_t': None,
+            'e_t': None,
+            'cont_lang': None,
+            'enc_lang': None
+        }
+
     def step(self, feat, prev_action=None):
         '''
         forward the model for a single time-step (used for real-time execution during eval)
@@ -95,7 +107,7 @@ class Module(seq2seq_im_moca_semantic):
             global_graph_importent_features, current_state_graph_importent_features, history_changed_nodes_graph_importent_features, priori_importent_features, graph_map_importent_features,\
                 global_graph_dict_objectIds_to_score, current_state_dict_objectIds_to_score, history_changed_dict_objectIds_to_score, priori_dict_dict_objectIds_to_score, graph_map_dict_objectIds_to_score =\
                 self.dec.store_and_get_graph_feature(
-                    b_store_state, feat, 0, env_index, self.r_state['state_t_goal'], self.r_state['state_t_instr'], frames_conv)
+                    b_store_state, feat, 0, env_index, self.r_state['state_t'], frames_conv)
             feat_global_graph.append(global_graph_importent_features)
             feat_current_state_graph.append(current_state_graph_importent_features)
             feat_history_changed_nodes_graph.append(history_changed_nodes_graph_importent_features)
@@ -110,7 +122,7 @@ class Module(seq2seq_im_moca_semantic):
         out_action_low, out_action_low_mask, state_t, attn_score_t, subgoal_t, progress_t = \
             self.dec.step(
                 self.r_state['enc_lang'],
-                {k: torch.cat(v, dim=0).to(device=self.gpu_id) for k, v in frames_conv.items()},# frames[:, t],
+                {k: torch.cat(v, dim=0).to(device=self.args.gpu_id) for k, v in frames_conv.items()},# frames[:, t],
                 e_t,
                 self.r_state['state_t'],
                 feat_global_graph,
@@ -169,7 +181,7 @@ class Module(seq2seq_im_moca_semantic):
             words = self.vocab['action_low'].index2word(alow)
 
             # sigmoid preds to binary mask
-            alow_mask = F.sigmoid(alow_mask)
+            alow_mask = torch.sigmoid(alow_mask)
             p_mask = [(alow_mask[t] > 0.5).cpu().numpy() for t in range(alow_mask.shape[0])]
 
             task_id_ann = self.get_task_and_ann_id(ex)
@@ -307,7 +319,7 @@ class Module(seq2seq_im_moca_semantic):
         mask = np.expand_dims(mask, axis=0)
         return mask
 
-    def forward(self, feat, max_decode=300):
+    def forward(self, feat, max_decode=120):
         cont_lang, enc_lang = self.encode_lang(feat)
         state_0 = cont_lang, torch.zeros_like(cont_lang)
         frames = {}
@@ -315,7 +327,7 @@ class Module(seq2seq_im_moca_semantic):
             if 'frames' in k:
                 # frames[k] = self.vis_dropout(feat[k])
                 frames[k] = feat[k]
-        res = self.dec(enc_lang, frames, feat['all_meta_datas'], max_decode=max_decode, gold=feat['action_low'], state_0=state_0)
+        res = self.dec(enc_lang, frames, feat['all_meta_datas'], max_decode=120, gold=feat['action_low'], state_0=state_0)
         feat.update(res)
         return feat
 

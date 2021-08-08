@@ -10,7 +10,7 @@ from tensorboardX import SummaryWriter
 from tqdm import trange
 from models.utils.metric import AccuracyMetric
 from icecream import ic
-
+import glob
 not_perfect_list = [
     'pick_and_place_simple-SprayBottle-None-Toilet-422/trial_T20190909_124852_071149',
     'pick_heat_then_place_in_recep-PotatoSliced-None-SinkBasin-14/trial_T20190910_120350_730711',
@@ -90,6 +90,13 @@ class Module(nn.Module):
         train = [t for t in train if not t['task'] in not_perfect_list]
         valid_seen = [t for t in valid_seen if not t['task'] in not_perfect_list]
         valid_unseen = [t for t in valid_unseen if not t['task'] in not_perfect_list]
+        # data/full_2.1.0/pick_heat_then_place_in_recep-Cup-None-Cabinet-30/trial_T20190906_200421_362725/pp/ann_2.json
+        # data_t = {'repeat_idx': 2, 'task': 'pick_heat_then_place_in_recep-Cup-None-Cabinet-30/trial_T20190906_200421_362725'}
+        # train = []
+        # train.append(data_t)
+        # train.append(data_t)
+        # train.append(data_t)
+        # import pdb; pdb.set_trace()
 
         # debugging: chose a small fraction of the dataset
         if self.args.dataset_fraction > 0:
@@ -337,6 +344,9 @@ class Module(nn.Module):
         json_path = os.path.join(self.args.data, task['task'], '%s' % self.args.pp_folder, 'ann_%d.json' % task['repeat_idx'])
         with open(json_path) as f:
             data = json.load(f)
+        with open("load_task_json.txt", 'a') as f:
+            f.write(json_path)
+            f.write('\n')
         return data
 
     def get_task_root(self, ex):
@@ -352,8 +362,20 @@ class Module(nn.Module):
         for i in trange(0, len(data), batch_size, desc='batch'):
             tasks = data[i:i+batch_size]
             batch = [self.load_task_json(task) for task in tasks]
+            if not self._check_img_len(batch, tasks):
+                continue
             feat = self.featurize(batch)
             yield batch, feat
+
+    def _check_img_len(self, batch, tasks):
+        for ex, task in zip(batch, tasks):
+            img_path = os.path.join(self.get_task_root(ex), 'raw_images', '*')
+            depth_path = os.path.join(self.get_task_root(ex), 'depth_images', '*')
+            len_img = len(glob.glob(img_path))
+            len_depth = len(glob.glob(depth_path))
+            if len(ex['images']) > len_img or len(ex['images']) > len_depth:
+                return False
+        return True
 
     def zero_input(self, x, keep_end_token=True):
         '''
